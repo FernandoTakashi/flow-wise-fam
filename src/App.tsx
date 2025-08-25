@@ -7,6 +7,11 @@ import { FinanceProvider } from "@/contexts/FinanceContext";
 import { Layout } from "@/components/Layout";
 import Dashboard from "./pages/Dashboard";
 import NewExpense from "./pages/NewExpense";
+import CashManagement from "./pages/CashManagement";
+import CreditCards from "./pages/CreditCards";
+import Reports from "./pages/Reports";
+import Charts from "./pages/Charts";
+import Users from "./pages/Users";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,12 +27,11 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/expenses/new" element={<NewExpense />} />
-              {/* Páginas temporárias - serão implementadas */}
-              <Route path="/cash" element={<div className="p-8 text-center text-muted-foreground">Gestão de Caixa - Em desenvolvimento</div>} />
-              <Route path="/credit-cards" element={<div className="p-8 text-center text-muted-foreground">Cartões de Crédito - Em desenvolvimento</div>} />
-              <Route path="/reports" element={<div className="p-8 text-center text-muted-foreground">Relatórios - Em desenvolvimento</div>} />
-              <Route path="/charts" element={<div className="p-8 text-center text-muted-foreground">Gráficos - Em desenvolvimento</div>} />
-              <Route path="/users" element={<div className="p-8 text-center text-muted-foreground">Usuários - Em desenvolvimento</div>} />
+              <Route path="/cash" element={<CashManagement />} />
+              <Route path="/credit-cards" element={<CreditCards />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/charts" element={<Charts />} />
+              <Route path="/users" element={<Users />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
