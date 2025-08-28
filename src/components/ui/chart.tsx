@@ -3,6 +3,25 @@ import * as RechartsPrimitive from "recharts"
 
 import { cn } from "@/lib/utils"
 
+// Recharts content renderer prop fallbacks (to avoid tight coupling with internal lib types)
+type CustomTooltipProps = Partial<{
+  active: boolean
+  payload: any[]
+  label: any
+  color: string
+  formatter: (...args: any[]) => React.ReactNode
+  labelFormatter: (value: any, payload: any[]) => React.ReactNode
+  labelClassName: string
+}>
+
+type CustomLegendPayloadItem = {
+  value?: string
+  color?: string
+  dataKey?: string
+  payload?: any
+  [key: string]: any
+}
+
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const
 
@@ -102,7 +121,7 @@ const ChartTooltip = RechartsPrimitive.Tooltip
 
 const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
+  CustomTooltipProps &
     React.ComponentProps<"div"> & {
       hideLabel?: boolean
       hideIndicator?: boolean
@@ -258,11 +277,12 @@ const ChartLegend = RechartsPrimitive.Legend
 
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div"> &
-    Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
-      hideIcon?: boolean
-      nameKey?: string
-    }
+  React.ComponentProps<"div"> & {
+    payload?: CustomLegendPayloadItem[]
+    verticalAlign?: "top" | "middle" | "bottom"
+    hideIcon?: boolean
+    nameKey?: string
+  }
 >(
   (
     { className, hideIcon = false, payload, verticalAlign = "bottom", nameKey },
