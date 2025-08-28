@@ -6,11 +6,12 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { FinanceProvider } from "@/contexts/FinanceContext";
 import { Layout } from "@/components/Layout";
 import Dashboard from "./pages/Dashboard";
-import NewExpense from "./pages/NewExpense";
+import FixedExpenses from "./pages/FixedExpenses";
+import VariableExpenses from "./pages/VariableExpenses";
 import CashManagement from "./pages/CashManagement";
 import CreditCards from "./pages/CreditCards";
+import FinancialProjection from "./pages/FinancialProjection";
 import Reports from "./pages/Reports";
-import Charts from "./pages/Charts";
 import Users from "./pages/Users";
 import NotFound from "./pages/NotFound";
 
@@ -26,11 +27,12 @@ const App = () => (
           <Layout>
             <Routes>
               <Route path="/" element={<Dashboard />} />
-              <Route path="/expenses/new" element={<NewExpense />} />
+              <Route path="/fixed-expenses" element={<FixedExpenses />} />
+              <Route path="/variable-expenses" element={<VariableExpenses />} />
               <Route path="/cash" element={<CashManagement />} />
               <Route path="/credit-cards" element={<CreditCards />} />
+              <Route path="/financial-projection" element={<FinancialProjection />} />
               <Route path="/reports" element={<Reports />} />
-              <Route path="/charts" element={<Charts />} />
               <Route path="/users" element={<Users />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

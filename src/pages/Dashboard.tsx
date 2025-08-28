@@ -3,6 +3,7 @@ import { DashboardCard } from '@/components/DashboardCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useNavigate } from 'react-router-dom';
 import {
   Wallet,
   TrendingUp,
@@ -19,6 +20,7 @@ import { ptBR } from 'date-fns/locale';
 
 export default function Dashboard() {
   const { state, getDashboardData } = useFinance();
+  const navigate = useNavigate();
   const dashboardData = getDashboardData();
 
   const formatCurrency = (value: number) => {
@@ -44,7 +46,10 @@ export default function Dashboard() {
             Visão geral das finanças em {format(new Date(), 'MMMM yyyy', { locale: ptBR })}
           </p>
         </div>
-        <Button className="bg-gradient-primary hover:opacity-90">
+        <Button 
+          onClick={() => navigate('/variable-expenses')}
+          className="bg-gradient-primary hover:opacity-90"
+        >
           <Plus className="w-4 h-4 mr-2" />
           Novo Gasto
         </Button>
@@ -91,10 +96,19 @@ export default function Dashboard() {
         {/* Gastos Fixos */}
         <Card className="shadow-card">
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <CheckCircle2 className="w-5 h-5 text-primary" />
-              <span>Gastos Fixos</span>
-            </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center space-x-2">
+                  <CheckCircle2 className="w-5 h-5 text-primary" />
+                  <span>Gastos Fixos</span>
+                </CardTitle>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => navigate('/fixed-expenses')}
+                >
+                  Ver Todos
+                </Button>
+              </div>
             <CardDescription>Status dos gastos fixos do mês</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -130,10 +144,19 @@ export default function Dashboard() {
         {/* Cartões de Crédito */}
         <Card className="shadow-card">
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <CreditCard className="w-5 h-5 text-primary" />
-              <span>Cartões de Crédito</span>
-            </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center space-x-2">
+                  <CreditCard className="w-5 h-5 text-primary" />
+                  <span>Cartões de Crédito</span>
+                </CardTitle>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => navigate('/credit-cards')}
+                >
+                  Ver Todos
+                </Button>
+              </div>
             <CardDescription>Status das faturas dos cartões</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

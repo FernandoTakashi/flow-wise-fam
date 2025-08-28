@@ -10,7 +10,8 @@ import {
   Users,
   Menu,
   X,
-  DollarSign
+  DollarSign,
+  Calendar
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -21,14 +22,14 @@ const navigationItems = [
     icon: LayoutDashboard
   },
   {
-    title: 'Cadastrar Gasto',
-    href: '/expenses/new',
-    icon: PlusCircle
+    title: 'Gastos Fixos',
+    href: '/fixed-expenses',
+    icon: Calendar
   },
   {
-    title: 'Gestão de Caixa',
-    href: '/cash',
-    icon: Wallet
+    title: 'Gastos Variáveis',
+    href: '/variable-expenses',
+    icon: PlusCircle
   },
   {
     title: 'Cartões de Crédito',
@@ -36,14 +37,19 @@ const navigationItems = [
     icon: CreditCard
   },
   {
-    title: 'Relatórios',
-    href: '/reports',
-    icon: BarChart3
+    title: 'Gestão de Caixa',
+    href: '/cash',
+    icon: Wallet
   },
   {
-    title: 'Gráficos',
-    href: '/charts',
+    title: 'Projeção Financeira',
+    href: '/financial-projection',
     icon: TrendingUp
+  },
+  {
+    title: 'Relatórios e Gráficos',
+    href: '/reports',
+    icon: BarChart3
   },
   {
     title: 'Usuários',
