@@ -11,7 +11,9 @@ import {
   Menu,
   X,
   DollarSign,
-  Calendar
+  Calendar,
+  CalendarDays,
+  PiggyBank
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +22,11 @@ const navigationItems = [
     title: 'Dashboard',
     href: '/',
     icon: LayoutDashboard
+  },
+  {
+    title: 'Controle Mensal',
+    href: '/monthly-view',
+    icon: CalendarDays
   },
   {
     title: 'Gastos Fixos',
@@ -38,8 +45,13 @@ const navigationItems = [
   },
   {
     title: 'Gestão de Caixa',
-    href: '/cash',
+    href: '/cash-management',
     icon: Wallet
+  },
+  {
+    title: 'Investimentos',
+    href: '/investments',
+    icon: PiggyBank
   },
   {
     title: 'Projeção Financeira',

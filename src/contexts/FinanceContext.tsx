@@ -6,7 +6,10 @@ import {
   CreditCard, 
   CashMovement, 
   FinancialSettings,
-  DashboardData 
+  DashboardData,
+  Investment,
+  MonthlyFilter,
+  MonthlyData
 } from '@/types';
 
 interface FinanceState {
@@ -15,7 +18,9 @@ interface FinanceState {
   fixedExpenses: FixedExpense[];
   creditCards: CreditCard[];
   cashMovements: CashMovement[];
+  investments: Investment[];
   settings: FinancialSettings;
+  selectedMonth: MonthlyFilter;
 }
 
 type FinanceAction = 
@@ -26,7 +31,9 @@ type FinanceAction =
   | { type: 'ADD_CREDIT_CARD'; payload: CreditCard }
   | { type: 'UPDATE_CREDIT_CARD'; payload: { id: string; updates: Partial<CreditCard> } }
   | { type: 'ADD_CASH_MOVEMENT'; payload: CashMovement }
+  | { type: 'ADD_INVESTMENT'; payload: Investment }
   | { type: 'UPDATE_SETTINGS'; payload: Partial<FinancialSettings> }
+  | { type: 'SET_SELECTED_MONTH'; payload: MonthlyFilter }
   | { type: 'LOAD_DATA'; payload: FinanceState };
 
 const initialState: FinanceState = {
@@ -44,7 +51,8 @@ const initialState: FinanceState = {
       amount: 1200, 
       dueDay: 10, 
       isPaid: false,
-      createdAt: new Date() 
+      createdAt: new Date(),
+      effectiveFrom: new Date(),
     },
     { 
       id: '2', 
@@ -55,7 +63,8 @@ const initialState: FinanceState = {
       isPaid: true,
       paidBy: '1',
       paidAt: new Date(),
-      createdAt: new Date() 
+      createdAt: new Date(),
+      effectiveFrom: new Date(),
     }
   ],
   creditCards: [
@@ -100,9 +109,15 @@ const initialState: FinanceState = {
       createdAt: new Date()
     }
   ],
+  investments: [],
   settings: {
-    monthlyYield: 0.5, // 0.5% ao mês
-    initialBalance: 10000
+    monthlyYield: 0.5, // 0.5% ao mês sobre investimentos
+    initialBalance: 10000,
+    initialInvestment: 0
+  },
+  selectedMonth: {
+    month: new Date().getMonth(),
+    year: new Date().getFullYear()
   }
 };
 
@@ -136,8 +151,12 @@ const financeReducer = (state: FinanceState, action: FinanceAction): FinanceStat
       };
     case 'ADD_CASH_MOVEMENT':
       return { ...state, cashMovements: [...state.cashMovements, action.payload] };
+    case 'ADD_INVESTMENT':
+      return { ...state, investments: [...state.investments, action.payload] };
     case 'UPDATE_SETTINGS':
       return { ...state, settings: { ...state.settings, ...action.payload } };
+    case 'SET_SELECTED_MONTH':
+      return { ...state, selectedMonth: action.payload };
     case 'LOAD_DATA':
       return action.payload;
     default:
@@ -150,6 +169,10 @@ interface FinanceContextType {
   dispatch: React.Dispatch<FinanceAction>;
   getDashboardData: () => DashboardData;
   getCurrentBalance: () => number;
+  getTotalInvestments: () => number;
+  getInvestmentYield: () => number;
+  getMonthlyData: (month: number, year: number) => MonthlyData;
+  getActiveFixedExpenses: (month: number, year: number) => FixedExpense[];
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -186,6 +209,65 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     localStorage.setItem('financeData', JSON.stringify(state));
   }, [state]);
 
+  const getTotalInvestments = (): number => {
+    return state.settings.initialInvestment + 
+           state.investments.reduce((sum, investment) => sum + investment.amount, 0);
+  };
+
+  const getInvestmentYield = (): number => {
+    const totalInvestments = getTotalInvestments();
+    return totalInvestments * (state.settings.monthlyYield / 100);
+  };
+
+  const getActiveFixedExpenses = (month: number, year: number): FixedExpense[] => {
+    const targetDate = new Date(year, month, 1);
+    
+    return state.fixedExpenses.filter(expense => {
+      const effectiveFrom = new Date(expense.effectiveFrom);
+      const effectiveUntil = expense.effectiveUntil ? new Date(expense.effectiveUntil) : null;
+      
+      return effectiveFrom <= targetDate && (!effectiveUntil || effectiveUntil >= targetDate);
+    });
+  };
+
+  const getMonthlyData = (month: number, year: number): MonthlyData => {
+    const fixedExpenses = getActiveFixedExpenses(month, year);
+    
+    const variableExpenses = state.expenses.filter(expense => {
+      const expenseDate = new Date(expense.date);
+      return expenseDate.getMonth() === month && 
+             expenseDate.getFullYear() === year &&
+             (expense.type === 'variavel' || expense.paymentMethod === 'debito' || expense.paymentMethod === 'pix');
+    });
+
+    const creditCardExpenses = state.expenses.filter(expense => {
+      const expenseDate = new Date(expense.date);
+      return expenseDate.getMonth() === month && 
+             expenseDate.getFullYear() === year &&
+             expense.type === 'cartao_credito';
+    });
+
+    const cashMovements = state.cashMovements.filter(movement => {
+      const movementDate = new Date(movement.date);
+      return movementDate.getMonth() === month && movementDate.getFullYear() === year;
+    });
+
+    const investments = state.investments.filter(investment => {
+      const investmentDate = new Date(investment.date);
+      return investmentDate.getMonth() === month && investmentDate.getFullYear() === year;
+    });
+
+    return {
+      month,
+      year,
+      fixedExpenses,
+      variableExpenses,
+      creditCardExpenses,
+      cashMovements,
+      investments
+    };
+  };
+
   const getCurrentBalance = (): number => {
     const totalIncome = state.cashMovements
       .filter(movement => movement.type === 'income')
@@ -211,11 +293,14 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       .reduce((sum, expense) => sum + expense.amount, 0);
 
     const currentBalance = getCurrentBalance();
+    const totalInvestments = getTotalInvestments();
+    const investmentYield = getInvestmentYield();
     
-    // Projeção simples baseada no rendimento
-    const projectedBalance = currentBalance * (1 + state.settings.monthlyYield / 100);
+    // Projeção com rendimento apenas sobre investimentos
+    const projectedBalance = currentBalance + investmentYield;
     
-    const pendingFixedExpenses = state.fixedExpenses.filter(expense => !expense.isPaid).length;
+    const pendingFixedExpenses = getActiveFixedExpenses(currentMonth, currentYear)
+      .filter(expense => !expense.isPaid).length;
     const pendingCreditCards = state.creditCards.filter(card => !card.isPaid).length;
 
     // Top usuários por movimentações
@@ -242,6 +327,8 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       projectedBalance,
       pendingFixedExpenses,
       pendingCreditCards,
+      totalInvestments,
+      investmentYield,
       topUsers: userStats
     };
   };
@@ -250,7 +337,11 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     state,
     dispatch,
     getDashboardData,
-    getCurrentBalance
+    getCurrentBalance,
+    getTotalInvestments,
+    getInvestmentYield,
+    getMonthlyData,
+    getActiveFixedExpenses
   };
 
   return (

@@ -13,6 +13,8 @@ import CreditCards from "./pages/CreditCards";
 import FinancialProjection from "./pages/FinancialProjection";
 import Reports from "./pages/Reports";
 import Users from "./pages/Users";
+import MonthlyView from "./pages/MonthlyView";
+import Investments from "./pages/Investments";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,10 +29,12 @@ const App = () => (
           <Layout>
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/monthly-view" element={<MonthlyView />} />
               <Route path="/fixed-expenses" element={<FixedExpenses />} />
               <Route path="/variable-expenses" element={<VariableExpenses />} />
-              <Route path="/cash" element={<CashManagement />} />
+              <Route path="/cash-management" element={<CashManagement />} />
               <Route path="/credit-cards" element={<CreditCards />} />
+              <Route path="/investments" element={<Investments />} />
               <Route path="/financial-projection" element={<FinancialProjection />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/users" element={<Users />} />

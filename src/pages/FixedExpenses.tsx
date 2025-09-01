@@ -59,7 +59,8 @@ export default function FixedExpenses() {
       amount: parseFloat(formData.amount),
       dueDay: parseInt(formData.dueDay),
       isPaid: false,
-      createdAt: new Date()
+      createdAt: new Date(),
+      effectiveFrom: new Date() // Válido a partir de agora
     };
 
     dispatch({ type: 'ADD_FIXED_EXPENSE', payload: newFixedExpense });

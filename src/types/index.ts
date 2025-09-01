@@ -28,6 +28,9 @@ export interface FixedExpense {
   paidBy?: string;
   paidAt?: Date;
   createdAt: Date;
+  effectiveFrom: Date; // Data a partir da qual essa versão é válida
+  effectiveUntil?: Date; // Data até quando essa versão é válida
+  originalId?: string; // ID original para rastrear versões
 }
 
 export interface CreditCard {
@@ -53,8 +56,23 @@ export interface CashMovement {
 }
 
 export interface FinancialSettings {
-  monthlyYield: number; // Percentual mensal de rendimento
+  monthlyYield: number; // Percentual mensal de rendimento sobre investimentos
   initialBalance: number;
+  initialInvestment: number; // Valor inicial investido
+}
+
+export interface Investment {
+  id: string;
+  description: string;
+  amount: number;
+  date: Date;
+  userId: string;
+  createdAt: Date;
+}
+
+export interface MonthlyFilter {
+  month: number; // 0-11 (Janeiro = 0)
+  year: number;
 }
 
 export type ExpenseCategory = 
@@ -84,10 +102,22 @@ export interface DashboardData {
   projectedBalance: number;
   pendingFixedExpenses: number;
   pendingCreditCards: number;
+  totalInvestments: number;
+  investmentYield: number;
   topUsers: Array<{
     userId: string;
     userName: string;
     totalAmount: number;
     type: 'income' | 'outcome';
   }>;
+}
+
+export interface MonthlyData {
+  month: number;
+  year: number;
+  fixedExpenses: FixedExpense[];
+  variableExpenses: Expense[];
+  creditCardExpenses: Expense[];
+  cashMovements: CashMovement[];
+  investments: Investment[];
 }
