@@ -13,7 +13,8 @@ import {
   DollarSign,
   Calendar,
   CalendarDays,
-  PiggyBank
+  PiggyBank,
+  ArrowUpCircle // Novo ícone para Entradas
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -27,6 +28,11 @@ const navigationItems = [
     title: 'Controle Mensal',
     href: '/monthly-view',
     icon: CalendarDays
+  },
+  {
+    title: 'Entradas Fixas', // <--- NOVO ITEM
+    href: '/fixed-incomes',
+    icon: ArrowUpCircle
   },
   {
     title: 'Gastos Fixos',
@@ -119,7 +125,7 @@ export function Sidebar({ className }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {navigationItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);

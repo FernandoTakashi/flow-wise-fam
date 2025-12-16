@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { ExpenseCategory, PaymentMethod } from '@/types';
-import { Plus, Calendar, DollarSign, User, CreditCard, Banknote } from 'lucide-react';
+import { Plus, Calendar, DollarSign, CreditCard, Banknote, Layers, User } from 'lucide-react';
 
 const categories: { value: ExpenseCategory; label: string }[] = [
   { value: 'alimentacao', label: 'Alimentação' },
@@ -19,13 +19,15 @@ const categories: { value: ExpenseCategory; label: string }[] = [
   { value: 'educacao', label: 'Educação' },
   { value: 'moradia', label: 'Moradia' },
   { value: 'vestuario', label: 'Vestuário' },
+  { value: 'presente', label: 'Presente' },
   { value: 'outros', label: 'Outros' }
 ];
 
 export default function VariableExpenses() {
-  const { state, dispatch } = useFinance();
+  const { state, addExpense, getUserName } = useFinance();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -33,50 +35,54 @@ export default function VariableExpenses() {
     description: '',
     amount: '',
     paymentMethod: '' as PaymentMethod,
-    userId: ''
+    userId: '',
+    installments: '1'
   });
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('pt-BR').format(new Date(date));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Verifica se é cartão de crédito para mostrar o campo de parcelas
+  const isCreditCard = (method: string) => {
+    return !['dinheiro', 'debito', 'pix', ''].includes(method);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.category || !formData.paymentMethod || !formData.userId || !formData.amount) {
-      toast({
-        title: 'Erro',
-        description: 'Preencha todos os campos obrigatórios',
-        variant: 'destructive'
-      });
+      toast({ title: 'Erro', description: 'Preencha todos os campos obrigatórios', variant: 'destructive' });
       return;
     }
 
-    const newExpense = {
-      id: Date.now().toString(),
+    setLoading(true);
+
+    // Se for cartão, muda o tipo para acionar a lógica de parcelamento no Contexto
+    const isCard = isCreditCard(formData.paymentMethod);
+    const expenseType = isCard ? 'cartao_credito' : 'variavel';
+    const numInstallments = isCard ? parseInt(formData.installments) : 1;
+
+    await addExpense({
       date: new Date(formData.date),
       category: formData.category,
-      type: 'variavel' as const,
+      type: expenseType, // <--- Tipo dinâmico
       paymentMethod: formData.paymentMethod,
       description: formData.description,
       amount: parseFloat(formData.amount),
       userId: formData.userId,
-      createdAt: new Date()
-    };
-
-    dispatch({ type: 'ADD_EXPENSE', payload: newExpense });
-
-    toast({
-      title: 'Sucesso!',
-      description: 'Gasto variável cadastrado com sucesso'
+      // <--- Objeto de parcelamento
+      installments: {
+        current: 1,
+        total: numInstallments
+      }
     });
+
+    setLoading(false);
 
     setFormData({
       date: new Date().toISOString().split('T')[0],
@@ -84,7 +90,8 @@ export default function VariableExpenses() {
       description: '',
       amount: '',
       paymentMethod: '' as PaymentMethod,
-      userId: ''
+      userId: '',
+      installments: '1'
     });
     setShowForm(false);
   };
@@ -93,27 +100,17 @@ export default function VariableExpenses() {
     return categories.find(cat => cat.value === category)?.label || category;
   };
 
-  const getUserName = (userId: string) => {
-    return state.users.find(user => user.id === userId)?.name || 'Usuário';
-  };
-
   const getPaymentMethodLabel = (method: PaymentMethod) => {
     switch (method) {
-      case 'dinheiro':
-        return 'Dinheiro';
-      case 'debito':
-        return 'Débito';
-      case 'pix':
-        return 'PIX';
-      default:
-        return method; // Para cartões de crédito, retorna o nome do cartão
+      case 'dinheiro': return 'Dinheiro';
+      case 'debito': return 'Débito';
+      case 'pix': return 'PIX';
+      default: return method;
     }
   };
 
   const getPaymentIcon = (method: PaymentMethod) => {
-    if (['dinheiro', 'debito', 'pix'].includes(method)) {
-      return <Banknote className="w-4 h-4" />;
-    }
+    if (['dinheiro', 'debito', 'pix'].includes(method)) return <Banknote className="w-4 h-4" />;
     return <CreditCard className="w-4 h-4" />;
   };
 
@@ -121,9 +118,9 @@ export default function VariableExpenses() {
     .filter(expense => {
       const expenseDate = new Date(expense.date);
       const currentDate = new Date();
-      return expenseDate.getMonth() === currentDate.getMonth() && 
-             expenseDate.getFullYear() === currentDate.getFullYear() &&
-             expense.type === 'variavel';
+      return expenseDate.getMonth() === currentDate.getMonth() &&
+        expenseDate.getFullYear() === currentDate.getFullYear() &&
+        (expense.type === 'variavel' || expense.type === 'cartao_credito'); // Mostrar ambos
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -134,17 +131,15 @@ export default function VariableExpenses() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Gastos Variáveis</h1>
-          <p className="text-muted-foreground">
-            Registre despesas avulsas e esporádicas
-          </p>
+          <p className="text-muted-foreground">Registre despesas avulsas e compras parceladas</p>
         </div>
         <Button onClick={() => setShowForm(!showForm)} className="bg-gradient-primary hover:opacity-90">
           <Plus className="w-4 h-4 mr-2" />
-          Novo Gasto Variável
+          {showForm ? 'Cancelar' : 'Novo Gasto'}
         </Button>
       </div>
 
-      {/* Resumo do Mês */}
+      {/* Cards de Resumo */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="shadow-card">
           <CardContent className="p-6">
@@ -154,9 +149,7 @@ export default function VariableExpenses() {
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total do Mês</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {formatCurrency(monthlyTotal)}
-                </p>
+                <p className="text-2xl font-bold text-foreground">{formatCurrency(monthlyTotal)}</p>
               </div>
             </div>
           </CardContent>
@@ -170,9 +163,7 @@ export default function VariableExpenses() {
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Gastos Registrados</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {currentMonthExpenses.length}
-                </p>
+                <p className="text-2xl font-bold text-foreground">{currentMonthExpenses.length}</p>
               </div>
             </div>
           </CardContent>
@@ -199,39 +190,25 @@ export default function VariableExpenses() {
       {showForm && (
         <Card className="shadow-card animate-scale-in">
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Plus className="w-5 h-5 text-primary" />
-              <span>Cadastrar Gasto Variável</span>
-            </CardTitle>
-            <CardDescription>
-              Registre despesas esporádicas e avulsas
-            </CardDescription>
+            <CardTitle>Cadastrar Gasto</CardTitle>
+            <CardDescription>Registre despesas ou compras no cartão</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="date">Data *</Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    required
-                  />
+                  <Label htmlFor="date">Data da Compra *</Label>
+                  <Input id="date" type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} required />
                 </div>
-
+                
                 <div className="space-y-2">
-                  <Label htmlFor="amount">Valor *</Label>
-                  <Input
-                    id="amount"
-                    type="number"
-                    step="0.01"
-                    placeholder="0,00"
-                    value={formData.amount}
-                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                    required
-                  />
+                  <Label htmlFor="amount">Valor Total *</Label>
+                  <Input id="amount" type="number" step="0.01" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} required />
+                  {formData.installments !== '1' && formData.amount && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Serão {formData.installments}x de {formatCurrency(parseFloat(formData.amount) / parseInt(formData.installments))}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -239,14 +216,10 @@ export default function VariableExpenses() {
                 <div className="space-y-2">
                   <Label>Categoria *</Label>
                   <Select onValueChange={(value) => setFormData({ ...formData, category: value as ExpenseCategory })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a categoria" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
                       {categories.map((category) => (
-                        <SelectItem key={category.value} value={category.value}>
-                          {category.label}
-                        </SelectItem>
+                        <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -255,34 +228,49 @@ export default function VariableExpenses() {
                 <div className="space-y-2">
                   <Label>Forma de Pagamento *</Label>
                   <Select onValueChange={(value) => setFormData({ ...formData, paymentMethod: value as PaymentMethod })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Como foi pago" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="dinheiro">💵 Dinheiro</SelectItem>
                       <SelectItem value="debito">💳 Débito</SelectItem>
                       <SelectItem value="pix">📱 PIX</SelectItem>
                       {state.creditCards.map((card) => (
-                        <SelectItem key={card.id} value={card.name}>
-                          🔳 {card.name}
-                        </SelectItem>
+                        <SelectItem key={card.id} value={card.name}>🔳 {card.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
+              {/* CAMPO DE PARCELAS - SÓ APARECE SE FOR CARTÃO DE CRÉDITO */}
+              {isCreditCard(formData.paymentMethod) && (
+                 <div className="space-y-2 bg-muted/30 p-3 rounded-lg border border-dashed border-border">
+                    <Label className="flex items-center space-x-2">
+                        <Layers className="w-4 h-4" />
+                        <span>Número de Parcelas</span>
+                    </Label>
+                    <div className="flex items-center space-x-4">
+                        <Input 
+                            type="number" 
+                            min="1" 
+                            max="36" 
+                            value={formData.installments} 
+                            onChange={(e) => setFormData({ ...formData, installments: e.target.value })}
+                            className="w-24"
+                        />
+                        <div className="text-sm text-muted-foreground">
+                            {formData.installments === '1' ? 'Pagamento à vista' : 'Parcelamento mensal automático'}
+                        </div>
+                    </div>
+                 </div>
+              )}
+
               <div className="space-y-2">
                 <Label>Usuário Responsável *</Label>
                 <Select onValueChange={(value) => setFormData({ ...formData, userId: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Quem fez o gasto" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Quem fez o gasto" /></SelectTrigger>
                   <SelectContent>
                     {state.users.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        {user.name}
-                      </SelectItem>
+                      <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -290,23 +278,14 @@ export default function VariableExpenses() {
 
               <div className="space-y-2">
                 <Label htmlFor="description">Descrição</Label>
-                <Textarea
-                  id="description"
-                  placeholder="Descreva o gasto (opcional)"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={3}
-                />
+                <Textarea id="description" placeholder="Ex: Tênis novo, Jantar..." value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} />
               </div>
 
               <div className="flex space-x-4 pt-4">
-                <Button type="submit" className="bg-gradient-primary hover:opacity-90">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Cadastrar
+                <Button type="submit" disabled={loading} className="bg-gradient-primary">
+                  {loading ? 'Processando...' : 'Salvar Gasto'}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
-                  Cancelar
-                </Button>
+                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
               </div>
             </form>
           </CardContent>
@@ -317,47 +296,35 @@ export default function VariableExpenses() {
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle>Gastos do Mês Atual</CardTitle>
-          <CardDescription>
-            Histórico de gastos variáveis registrados neste mês
-          </CardDescription>
+          <CardDescription>Histórico de gastos variáveis e parcelas de cartão</CardDescription>
         </CardHeader>
         <CardContent>
           {currentMonthExpenses.length === 0 ? (
             <div className="text-center py-8">
               <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">
-                Nenhum gasto registrado
-              </h3>
-              <p className="text-muted-foreground mb-4">
-                Registre seus primeiros gastos variáveis do mês
-              </p>
-              <Button onClick={() => setShowForm(true)} className="bg-gradient-primary hover:opacity-90">
-                <Plus className="w-4 h-4 mr-2" />
-                Registrar Primeiro Gasto
-              </Button>
+              <p>Nenhum gasto registrado</p>
             </div>
           ) : (
             <div className="space-y-4">
               {currentMonthExpenses.map((expense) => (
-                <div
-                  key={expense.id}
-                  className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
-                >
+                <div key={expense.id} className="flex items-center justify-between p-4 border rounded-lg">
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-2">
                       <Badge variant="outline">
-                        {getCategoryLabel(expense.category)}
+                        {getCategoryLabel(expense.category as ExpenseCategory)}
                       </Badge>
                       <div className="flex items-center space-x-1 text-sm text-muted-foreground">
                         {getPaymentIcon(expense.paymentMethod)}
                         <span>{getPaymentMethodLabel(expense.paymentMethod)}</span>
                       </div>
+                      {/* Badge de Parcelamento */}
+                      {expense.installments && expense.installments.total > 1 && (
+                         <Badge variant="secondary" className="text-xs">
+                            {expense.installments.current}/{expense.installments.total}
+                         </Badge>
+                      )}
                     </div>
-                    
-                    <p className="font-medium text-foreground mb-1">
-                      {expense.description || 'Sem descrição'}
-                    </p>
-                    
+                    <p className="font-medium">{expense.description || 'Sem descrição'}</p>
                     <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                       <div className="flex items-center space-x-1">
                         <Calendar className="w-4 h-4" />
@@ -369,11 +336,8 @@ export default function VariableExpenses() {
                       </div>
                     </div>
                   </div>
-
                   <div className="text-right">
-                    <p className="text-lg font-semibold text-foreground">
-                      {formatCurrency(expense.amount)}
-                    </p>
+                    <p className="text-lg font-semibold">{formatCurrency(expense.amount)}</p>
                   </div>
                 </div>
               ))}

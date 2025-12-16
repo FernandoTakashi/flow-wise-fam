@@ -7,16 +7,41 @@ export interface User {
 
 export interface Expense {
   id: string;
-  date: Date;
-  category: ExpenseCategory;
-  type: ExpenseType;
-  paymentMethod: PaymentMethod;
   description: string;
   amount: number;
-  userId: string;
-  createdAt: Date;
-  updatedAt?: Date;
+  date: Date;
+  type: 'variavel' | 'cartao_credito';
+  category: string;
+  paymentMethod?: string;
+  
+  // --- ADICIONE ESTA LINHA ---
+  userId: string; 
+  // ---------------------------
+
+  installments?: {
+    current: number;
+    total: number;
+  };
+  createdAt?: Date; // Garanta que este também esteja aqui se usar
 }
+
+// ... mantenha as outras interfaces (User, Expense, etc) ...
+
+// ADICIONE ISTO:
+export interface FixedIncome {
+  id: string;
+  description: string;
+  amount: number;
+  receiveDay: number; // Dia de receber
+  isReceived: boolean;
+  receivedBy?: string;
+  receivedAt?: Date;
+  createdAt: Date;
+  effectiveFrom: Date;
+  effectiveUntil?: Date;
+}
+
+// ... mantenha o resto ...
 
 export interface FixedExpense {
   id: string;
@@ -83,6 +108,7 @@ export type ExpenseCategory =
   | 'educacao'
   | 'moradia'
   | 'vestuario'
+  | 'presente'
   | 'outros';
 
 export type ExpenseType = 

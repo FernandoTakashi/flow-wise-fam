@@ -1,19 +1,11 @@
 import { useFinance } from '@/contexts/FinanceContext';
 import { DashboardCard } from '@/components/DashboardCard';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
 import {
-  Wallet,
-  TrendingUp,
-  CreditCard,
-  AlertCircle,
-  CheckCircle2,
-  Users,
-  Plus,
-  ArrowUpCircle,
-  ArrowDownCircle
+  Wallet, TrendingUp, AlertCircle, CheckCircle2, Users, Plus, ArrowUpCircle, ArrowDownCircle, Check, Clock
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -24,17 +16,17 @@ export default function Dashboard() {
   const dashboardData = getDashboardData();
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
   const getBalanceVariant = (balance: number) => {
     if (balance > 1000) return 'success';
-    if (balance > 0) return 'warning';
+    if (balance >= 0) return 'warning';
     return 'danger';
   };
+
+  // Filtrar apenas entradas fixas ativas (opcional: ou mostrar todas do state)
+  const recentFixedIncomes = state.fixedIncomes.slice(0, 3);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -46,13 +38,14 @@ export default function Dashboard() {
             Visão geral das finanças em {format(new Date(), 'MMMM yyyy', { locale: ptBR })}
           </p>
         </div>
-        <Button 
-          onClick={() => navigate('/variable-expenses')}
-          className="bg-gradient-primary hover:opacity-90"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Novo Gasto
-        </Button>
+        <div className="flex space-x-2">
+          <Button onClick={() => navigate('/fixed-incomes')} variant="outline" className="border-green-200 text-green-700 hover:bg-green-50">
+            <ArrowUpCircle className="w-4 h-4 mr-2" /> Nova Entrada
+          </Button>
+          <Button onClick={() => navigate('/variable-expenses')} className="bg-gradient-primary hover:opacity-90">
+            <Plus className="w-4 h-4 mr-2" /> Novo Gasto
+          </Button>
+        </div>
       </div>
 
       {/* Cards principais */}
@@ -60,7 +53,7 @@ export default function Dashboard() {
         <DashboardCard
           title="Gastos do Mês"
           value={formatCurrency(dashboardData.monthlyExpenses)}
-          description="Total gasto este mês"
+          description="Total variável gasto"
           icon={<ArrowDownCircle className="w-6 h-6" />}
           variant="danger"
         />
@@ -68,167 +61,126 @@ export default function Dashboard() {
         <DashboardCard
           title="Saldo Atual"
           value={formatCurrency(dashboardData.currentBalance)}
-          description="Disponível em caixa"
+          description="Caixa + Recebidos - Gastos"
           icon={<Wallet className="w-6 h-6" />}
           variant={getBalanceVariant(dashboardData.currentBalance)}
         />
         
         <DashboardCard
-          title="Projeção Próximo Mês"
+          title="Projeção"
           value={formatCurrency(dashboardData.projectedBalance)}
-          description={`Com rendimento de ${state.settings.monthlyYield}%`}
+          description={`Rendimento: ${state.settings.monthlyYield}%`}
           icon={<TrendingUp className="w-6 h-6" />}
           variant="success"
-          trend="up"
-          trendValue={`+${state.settings.monthlyYield}%`}
         />
         
         <DashboardCard
           title="Pendências"
           value={dashboardData.pendingFixedExpenses + dashboardData.pendingCreditCards}
-          description="Fixos + cartões pendentes"
+          description="Contas a pagar"
           icon={<AlertCircle className="w-6 h-6" />}
-          variant={dashboardData.pendingFixedExpenses + dashboardData.pendingCreditCards > 0 ? 'warning' : 'success'}
+          variant={dashboardData.pendingFixedExpenses > 0 ? 'warning' : 'success'}
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Gastos Fixos */}
-        <Card className="shadow-card">
-          <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center space-x-2">
-                  <CheckCircle2 className="w-5 h-5 text-primary" />
-                  <span>Gastos Fixos</span>
-                </CardTitle>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate('/fixed-expenses')}
-                >
-                  Ver Todos
-                </Button>
-              </div>
-            <CardDescription>Status dos gastos fixos do mês</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {state.fixedExpenses.slice(0, 5).map((expense) => (
-              <div key={expense.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                <div className="flex items-center space-x-3">
-                  <div className={`w-2 h-2 rounded-full ${expense.isPaid ? 'bg-success' : 'bg-warning'}`} />
-                  <div>
-                    <p className="font-medium text-sm">{expense.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Vence dia {expense.dueDay}
-                    </p>
+        
+        <div className="space-y-6">
+            {/* Entradas Fixas (Resumo) */}
+            <Card className="shadow-card border-l-4 border-l-green-500">
+              <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center space-x-2 text-base">
+                        <ArrowUpCircle className="w-5 h-5 text-green-600" />
+                        <span>Entradas Fixas</span>
+                    </CardTitle>
+                    <Button variant="ghost" size="sm" onClick={() => navigate('/fixed-incomes')} className="text-xs h-8">Ver Todas</Button>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium">{formatCurrency(expense.amount)}</p>
-                  <Badge variant={expense.isPaid ? 'default' : 'secondary'} className="text-xs">
-                    {expense.isPaid ? 'Pago' : 'Pendente'}
-                  </Badge>
-                </div>
-              </div>
-            ))}
-            
-            {state.fixedExpenses.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p>Nenhum gasto fixo cadastrado</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-2">
+                  {recentFixedIncomes.map((income) => (
+                    <div key={income.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-2 h-2 rounded-full ${income.isReceived ? 'bg-green-500' : 'bg-gray-300'}`} />
+                          <div>
+                              <p className="font-medium text-sm">{income.description}</p>
+                              <p className="text-xs text-muted-foreground">Dia {income.receiveDay}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium text-green-700">+{formatCurrency(income.amount)}</p>
+                          <Badge variant={income.isReceived ? 'default' : 'secondary'} className="text-[10px] h-5 px-1.5">
+                              {income.isReceived ? 'Recebido' : 'Pendente'}
+                          </Badge>
+                        </div>
+                    </div>
+                  ))}
+                  {recentFixedIncomes.length === 0 && <p className="text-center text-sm text-muted-foreground py-2">Nenhuma entrada fixa cadastrada.</p>}
+              </CardContent>
+            </Card>
 
-        {/* Cartões de Crédito */}
-        <Card className="shadow-card">
-          <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center space-x-2">
-                  <CreditCard className="w-5 h-5 text-primary" />
-                  <span>Cartões de Crédito</span>
-                </CardTitle>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate('/credit-cards')}
-                >
-                  Ver Todos
-                </Button>
-              </div>
-            <CardDescription>Status das faturas dos cartões</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {state.creditCards.map((card) => (
-              <div key={card.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                <div className="flex items-center space-x-3">
-                  <div className={`w-2 h-2 rounded-full ${card.isPaid ? 'bg-success' : 'bg-warning'}`} />
-                  <div>
-                    <p className="font-medium text-sm">{card.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Vence dia {card.dueDay}
-                    </p>
+            {/* Gastos Fixos Recentes */}
+            <Card className="shadow-card">
+              <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center space-x-2 text-base">
+                        <CheckCircle2 className="w-5 h-5 text-primary" />
+                        <span>Gastos Fixos Próximos</span>
+                    </CardTitle>
+                    <Button variant="outline" size="sm" onClick={() => navigate('/fixed-expenses')}>Ver Todos</Button>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium">{formatCurrency(card.limit * 0.3)}</p>
-                  <Badge variant={card.isPaid ? 'default' : 'secondary'} className="text-xs">
-                    {card.isPaid ? 'Quitada' : 'Pendente'}
-                  </Badge>
-                </div>
-              </div>
-            ))}
-            
-            {state.creditCards.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                <CreditCard className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p>Nenhum cartão cadastrado</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                  {state.fixedExpenses.slice(0, 5).map((expense) => (
+                    <div key={expense.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-2 h-2 rounded-full ${expense.isPaid ? 'bg-success' : 'bg-warning'}`} />
+                          <div>
+                              <p className="font-medium text-sm">{expense.name}</p>
+                              <p className="text-xs text-muted-foreground">Vence dia {expense.dueDay}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium">{formatCurrency(expense.amount)}</p>
+                          <Badge variant={expense.isPaid ? 'default' : 'secondary'} className="text-xs">
+                              {expense.isPaid ? 'Pago' : 'Pendente'}
+                          </Badge>
+                        </div>
+                    </div>
+                  ))}
+                  {state.fixedExpenses.length === 0 && <p className="text-center text-muted-foreground py-4">Sem gastos fixos.</p>}
+              </CardContent>
+            </Card>
+        </div>
+
+        {/* Ranking e Resumo */}
+        <div className="space-y-6">
+            <Card className="shadow-card">
+              <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Users className="w-5 h-5 text-primary" />
+                    <span>Quem gastou mais?</span>
+                  </CardTitle>
+              </CardHeader>
+              <CardContent>
+                  <div className="space-y-4">
+                    {dashboardData.topUsers.map((user, index) => (
+                        <div key={user.userId} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                          <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-bold text-sm">
+                                {index + 1}
+                              </div>
+                              <p className="font-medium">{user.userName}</p>
+                          </div>
+                          <p className="font-bold text-destructive">{formatCurrency(user.totalAmount)}</p>
+                        </div>
+                    ))}
+                    {dashboardData.topUsers.length === 0 && <p className="text-center text-muted-foreground py-4">Sem dados de gastos ainda.</p>}
+                  </div>
+              </CardContent>
+            </Card>
+        </div>
       </div>
-
-      {/* Ranking de Usuários */}
-      <Card className="shadow-card">
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Users className="w-5 h-5 text-primary" />
-            <span>Participação por Usuário</span>
-          </CardTitle>
-          <CardDescription>Ranking de movimentações financeiras</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {dashboardData.topUsers.map((user, index) => (
-              <div key={user.userId} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 rounded-full bg-gradient-primary text-white flex items-center justify-center text-sm font-medium">
-                    {index + 1}
-                  </div>
-                  <div>
-                    <p className="font-medium">{user.userName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {user.type === 'income' ? 'Maior contribuidor' : 'Maior gastador'}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {user.type === 'income' ? (
-                    <ArrowUpCircle className="w-4 h-4 text-success" />
-                  ) : (
-                    <ArrowDownCircle className="w-4 h-4 text-destructive" />
-                  )}
-                  <span className={`font-medium ${user.type === 'income' ? 'text-success' : 'text-destructive'}`}>
-                    {formatCurrency(Math.abs(user.totalAmount))}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
