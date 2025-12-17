@@ -48,14 +48,16 @@ export interface FixedExpense {
   name: string;
   category: ExpenseCategory;
   amount: number;
-  dueDay: number; // Dia do mês para vencimento
+  dueDay: number;
   isPaid: boolean;
   paidBy?: string;
   paidAt?: Date;
   createdAt: Date;
-  effectiveFrom: Date; // Data a partir da qual essa versão é válida
-  effectiveUntil?: Date; // Data até quando essa versão é válida
-  originalId?: string; // ID original para rastrear versões
+  effectiveFrom: Date;
+  effectiveUntil?: Date;
+  
+  // ADICIONE ISSO 👇
+  creditCardId?: string | null; 
 }
 
 export interface CreditCard {
@@ -122,13 +124,30 @@ export type PaymentMethod =
   | 'pix'
   | string; // Para cartões específicos (ex: "Nubank", "Itaú")
 
+// Em src/types/index.ts
+
+export interface CreditCardWithBill extends CreditCard {
+  billAmount: number;
+}
+
+// Atualize a interface DashboardData
 export interface DashboardData {
-  monthlyExpenses: number;
-  currentBalance: number;
-  projectedBalance: number;
-  pendingFixedExpenses: number;
-  pendingCreditCards: number;
+  // ... (outros campos mantêm igual)
+  totalIncome: number;
+  totalFixedExpenses: number;
+  variableExpenses: number;
   totalInvestments: number;
+  projectedBalance: number;
+  currentBalance: number;
+  pendingFixedExpenses: number;
+  pendingFixedList: FixedExpense[];
+  pendingIncomeValue: number;         // Valor R$ que falta receber (Entradas Fixas)
+  pendingFixedExpensesValue: number;
+  
+  pendingCreditCards: number;
+  // MUDE AQUI 👇: De CreditCard[] para CreditCardWithBill[]
+  pendingCreditCardList: CreditCardWithBill[]; 
+
   investmentYield: number;
   topUsers: Array<{
     userId: string;
@@ -146,4 +165,23 @@ export interface MonthlyData {
   creditCardExpenses: Expense[];
   cashMovements: CashMovement[];
   investments: Investment[];
+}
+
+export interface FixedPayment {
+  id: string;
+  fixedExpenseId: string;
+  month: number;
+  year: number;
+  amount: number;
+  paidAt: Date;
+  generatedExpenseId?: string; 
+}
+
+export interface FixedReceipt {
+  id: string;
+  fixedIncomeId: string;
+  month: number;
+  year: number;
+  amount: number;
+  receivedAt: Date;
 }

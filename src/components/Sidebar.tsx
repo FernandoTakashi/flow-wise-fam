@@ -25,11 +25,6 @@ const navigationItems = [
     icon: LayoutDashboard
   },
   {
-    title: 'Controle Mensal',
-    href: '/monthly-view',
-    icon: CalendarDays
-  },
-  {
     title: 'Entradas Fixas', // <--- NOVO ITEM
     href: '/fixed-incomes',
     icon: ArrowUpCircle

@@ -29,6 +29,15 @@ export default function VariableExpenses() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Pega o Mês e Ano selecionados no Global State
+  const { month: selectedMonth, year: selectedYear } = state.selectedMonth;
+
+  // Array de nomes para exibir no título
+  const MONTH_NAMES = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     category: '' as ExpenseCategory,
@@ -47,7 +56,6 @@ export default function VariableExpenses() {
     return new Intl.DateTimeFormat('pt-BR').format(new Date(date));
   };
 
-  // Verifica se é cartão de crédito para mostrar o campo de parcelas
   const isCreditCard = (method: string) => {
     return !['dinheiro', 'debito', 'pix', ''].includes(method);
   };
@@ -62,7 +70,6 @@ export default function VariableExpenses() {
 
     setLoading(true);
 
-    // Se for cartão, muda o tipo para acionar a lógica de parcelamento no Contexto
     const isCard = isCreditCard(formData.paymentMethod);
     const expenseType = isCard ? 'cartao_credito' : 'variavel';
     const numInstallments = isCard ? parseInt(formData.installments) : 1;
@@ -70,12 +77,11 @@ export default function VariableExpenses() {
     await addExpense({
       date: new Date(formData.date),
       category: formData.category,
-      type: expenseType, // <--- Tipo dinâmico
+      type: expenseType,
       paymentMethod: formData.paymentMethod,
       description: formData.description,
       amount: parseFloat(formData.amount),
       userId: formData.userId,
-      // <--- Objeto de parcelamento
       installments: {
         current: 1,
         total: numInstallments
@@ -114,13 +120,16 @@ export default function VariableExpenses() {
     return <CreditCard className="w-4 h-4" />;
   };
 
+  // --- CORREÇÃO AQUI ---
+  // Antes você usava "new Date()". Agora usamos selectedMonth e selectedYear
   const currentMonthExpenses = state.expenses
     .filter(expense => {
       const expenseDate = new Date(expense.date);
-      const currentDate = new Date();
-      return expenseDate.getMonth() === currentDate.getMonth() &&
-        expenseDate.getFullYear() === currentDate.getFullYear() &&
-        (expense.type === 'variavel' || expense.type === 'cartao_credito'); // Mostrar ambos
+      
+      // Compara com o estado global, não com o relógio do PC
+      return expenseDate.getMonth() === selectedMonth &&
+        expenseDate.getFullYear() === selectedYear &&
+        (expense.type === 'variavel' || expense.type === 'cartao_credito');
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -131,7 +140,9 @@ export default function VariableExpenses() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Gastos Variáveis</h1>
-          <p className="text-muted-foreground">Registre despesas avulsas e compras parceladas</p>
+          <p className="text-muted-foreground">
+             Mostrando dados de <strong>{MONTH_NAMES[selectedMonth]}/{selectedYear}</strong>
+          </p>
         </div>
         <Button onClick={() => setShowForm(!showForm)} className="bg-gradient-primary hover:opacity-90">
           <Plus className="w-4 h-4 mr-2" />
@@ -148,7 +159,7 @@ export default function VariableExpenses() {
                 <DollarSign className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total do Mês</p>
+                <p className="text-sm font-medium text-muted-foreground">Total em {MONTH_NAMES[selectedMonth]}</p>
                 <p className="text-2xl font-bold text-foreground">{formatCurrency(monthlyTotal)}</p>
               </div>
             </div>
@@ -241,7 +252,6 @@ export default function VariableExpenses() {
                 </div>
               </div>
 
-              {/* CAMPO DE PARCELAS - SÓ APARECE SE FOR CARTÃO DE CRÉDITO */}
               {isCreditCard(formData.paymentMethod) && (
                  <div className="space-y-2 bg-muted/30 p-3 rounded-lg border border-dashed border-border">
                     <Label className="flex items-center space-x-2">
@@ -295,14 +305,14 @@ export default function VariableExpenses() {
       {/* Lista de Gastos */}
       <Card className="shadow-card">
         <CardHeader>
-          <CardTitle>Gastos do Mês Atual</CardTitle>
+          <CardTitle>Gastos de {MONTH_NAMES[selectedMonth]}</CardTitle>
           <CardDescription>Histórico de gastos variáveis e parcelas de cartão</CardDescription>
         </CardHeader>
         <CardContent>
           {currentMonthExpenses.length === 0 ? (
             <div className="text-center py-8">
               <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <p>Nenhum gasto registrado</p>
+              <p>Nenhum gasto registrado em {MONTH_NAMES[selectedMonth]}</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -317,11 +327,10 @@ export default function VariableExpenses() {
                         {getPaymentIcon(expense.paymentMethod)}
                         <span>{getPaymentMethodLabel(expense.paymentMethod)}</span>
                       </div>
-                      {/* Badge de Parcelamento */}
                       {expense.installments && expense.installments.total > 1 && (
-                         <Badge variant="secondary" className="text-xs">
+                          <Badge variant="secondary" className="text-xs">
                             {expense.installments.current}/{expense.installments.total}
-                         </Badge>
+                          </Badge>
                       )}
                     </div>
                     <p className="font-medium">{expense.description || 'Sem descrição'}</p>

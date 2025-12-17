@@ -6,13 +6,27 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Calendar, DollarSign, Check, X, Clock, TrendingUp } from 'lucide-react';
+import { Plus, Calendar, DollarSign, Check, X, Clock, TrendingUp, User } from 'lucide-react';
+import MonthSelector from '@/components/MonthSelector'; // Importe para ver qual mês está operando
 
 export default function FixedIncomes() {
-  const { state, addFixedIncome, updateFixedIncome } = useFinance();
+  const { 
+    state, 
+    addFixedIncome, 
+    toggleFixedIncomeReceipt, // <--- Nova função
+    getActiveFixedIncomes, 
+    getUserName 
+  } = useFinance();
+  
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Lê o mês global
+  const { month: selectedMonth, year: selectedYear } = state.selectedMonth;
+  
+  // Pega a lista filtrada e com status atualizado
+  const currentMonthIncomes = getActiveFixedIncomes(selectedMonth, selectedYear);
 
   const [formData, setFormData] = useState({
     description: '',
@@ -46,41 +60,34 @@ export default function FixedIncomes() {
     setShowForm(false);
   };
 
-  const handleReceive = async (incomeId: string, userId: string) => {
-    await updateFixedIncome(incomeId, {
-      isReceived: true,
-      receivedBy: userId,
-      receivedAt: new Date()
-    });
-    toast({ title: 'Recebimento registrado!', description: 'Valor marcado como recebido' });
-  };
-
-  const handleUnreceive = async (incomeId: string) => {
-    await updateFixedIncome(incomeId, {
-      isReceived: false,
-      receivedBy: undefined,
-      receivedAt: undefined
-    });
-    toast({ title: 'Ação desfeita', description: 'Marcado como pendente' });
-  };
-
-  const getUserName = (userId: string) => {
-    return state.users.find(user => user.id === userId)?.name || 'Usuário';
+  const handleToggleReceipt = async (incomeId: string, amount: number) => {
+    try {
+      // Chama o toggle passando o mês global
+      await toggleFixedIncomeReceipt(incomeId, selectedMonth, selectedYear, amount);
+    } catch (error) {
+      toast({ title: 'Erro', description: 'Falha ao atualizar status', variant: 'destructive' });
+    }
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      
+      {/* Cabeçalho com Seletor para saber onde estamos lançando */}
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Entradas Fixas</h1>
           <p className="text-muted-foreground">
-            Gerencie salários, aluguéis e outras receitas recorrentes
+            Gerencie salários e receitas recorrentes
           </p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)} className="bg-gradient-primary hover:opacity-90">
-          <Plus className="w-4 h-4 mr-2" />
-          Nova Entrada Fixa
-        </Button>
+        
+        <div className="flex gap-2">
+            <MonthSelector />
+            <Button onClick={() => setShowForm(!showForm)} className="bg-gradient-primary hover:opacity-90">
+                <Plus className="w-4 h-4 md:mr-2" />
+                <span className="hidden md:inline">Nova Entrada</span>
+            </Button>
+        </div>
       </div>
 
       {showForm && (
@@ -146,17 +153,14 @@ export default function FixedIncomes() {
       )}
 
       <div className="grid gap-4">
-        {state.fixedIncomes.length === 0 ? (
+        {currentMonthIncomes.length === 0 ? (
           <Card className="p-8 text-center">
             <TrendingUp className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Nenhuma entrada fixa cadastrada</h3>
-            <p className="text-muted-foreground mb-4">Cadastre suas receitas mensais</p>
-            <Button onClick={() => setShowForm(true)} className="bg-gradient-primary">
-              Cadastrar Primeira Entrada
-            </Button>
+            <h3 className="text-lg font-semibold mb-2">Nenhuma entrada fixa ativa neste mês</h3>
+            <p className="text-muted-foreground mb-4">Verifique se as datas de vigência estão corretas ou cadastre uma nova.</p>
           </Card>
         ) : (
-          state.fixedIncomes.map((income) => (
+          currentMonthIncomes.map((income) => (
             <Card key={income.id} className="shadow-card hover:shadow-card-hover transition-all">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
@@ -184,32 +188,27 @@ export default function FixedIncomes() {
                         <Calendar className="w-4 h-4" />
                         <span>Dia {income.receiveDay}</span>
                       </div>
-                      {income.isReceived && income.receivedBy && (
-                        <div>Recebido por: <span className="font-medium">{getUserName(income.receivedBy)}</span></div>
+                      {income.isReceived && income.receivedAt && (
+                        <div>
+                            Recebido em: <span className="font-medium">{new Date(income.receivedAt).toLocaleDateString()}</span>
+                        </div>
                       )}
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-2">
-                    {income.isReceived ? (
-                      <Button variant="outline" size="sm" onClick={() => handleUnreceive(income.id)}>
-                        <X className="w-4 h-4 mr-2" /> Desfazer
-                      </Button>
-                    ) : (
-                      <div className="flex space-x-2">
-                        {state.users.map((user) => (
-                          <Button 
-                            key={user.id} 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => handleReceive(income.id, user.id)}
-                            className="text-green-600 border-green-200 hover:bg-green-50"
-                          >
-                            <Check className="w-4 h-4 mr-1" /> Receber ({user.name})
-                          </Button>
-                        ))}
-                      </div>
-                    )}
+                    <Button 
+                        variant={income.isReceived ? "outline" : "default"} 
+                        size="sm" 
+                        onClick={() => handleToggleReceipt(income.id, income.amount)}
+                        className={!income.isReceived ? "text-green-600 border-green-200 hover:bg-green-50 bg-white border" : ""}
+                    >
+                         {income.isReceived ? (
+                             <><X className="w-4 h-4 mr-2" /> Desfazer</>
+                         ) : (
+                             <><Check className="w-4 h-4 mr-2" /> Receber</>
+                         )}
+                    </Button>
                   </div>
                 </div>
               </CardContent>

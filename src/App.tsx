@@ -20,7 +20,6 @@ import CreditCards from "./pages/CreditCards";
 import FinancialProjection from "./pages/FinancialProjection";
 import Reports from "./pages/Reports";
 import Users from "./pages/Users";
-import MonthlyView from "./pages/MonthlyView";
 import Investments from "./pages/Investments";
 import NotFound from "./pages/NotFound";
 
@@ -75,7 +74,6 @@ const App = () => {
           <Layout>
             <Routes>
               <Route path="/" element={<Dashboard />} />
-              <Route path="/monthly-view" element={<MonthlyView />} />
               <Route path="/fixed-expenses" element={<FixedExpenses />} />
               <Route path="/fixed-incomes" element={<FixedIncomes />} />
               <Route path="/variable-expenses" element={<VariableExpenses />} />

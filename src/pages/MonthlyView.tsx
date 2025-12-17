@@ -1,11 +1,9 @@
-import { useState, useEffect } from 'react';
 import { useFinance } from '@/contexts/FinanceContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import MonthSelector from '@/components/MonthSelector';
+import MonthSelector from '@/components/MonthSelector'; // <--- Importação corrigida (default)
 import { Check, Clock, DollarSign, Calendar, TrendingUp, TrendingDown, PiggyBank, ArrowUpCircle } from 'lucide-react';
-import { MonthlyData } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
 const categories: Record<string, string> = {
@@ -15,46 +13,50 @@ const categories: Record<string, string> = {
 };
 
 export default function MonthlyView() {
-  // Importamos getActiveFixedIncomes
-  const { state, getMonthlyData, updateFixedExpense, getActiveFixedIncomes, updateFixedIncome } = useFinance(); 
+  const { 
+    state, 
+    getMonthlyData, 
+    toggleFixedExpensePayment, // <--- Nova função do Plano B
+    getActiveFixedIncomes, 
+    updateFixedIncome
+  } = useFinance(); 
+  
   const { toast } = useToast();
   
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [monthlyData, setMonthlyData] = useState<MonthlyData | null>(null);
+  // Lê o mês selecionado globalmente (controlado pelo MonthSelector)
+  const { month: selectedMonth, year: selectedYear } = state.selectedMonth;
 
-  useEffect(() => {
-    const data = getMonthlyData(selectedMonth, selectedYear);
-    setMonthlyData(data);
-  }, [selectedMonth, selectedYear, state, getMonthlyData]);
-
-  const handleMonthYearChange = (month: number, year: number) => {
-    setSelectedMonth(month);
-    setSelectedYear(year);
-  };
+  // Busca os dados filtrados para este mês
+  const monthlyData = getMonthlyData(selectedMonth, selectedYear);
+  const activeFixedIncomes = getActiveFixedIncomes(selectedMonth, selectedYear);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
+  
   const getUserName = (userId: string) => state.users.find(user => user.id === userId)?.name || 'Usuário';
   const getCategoryLabel = (category: string) => categories[category] || category;
 
-  const handleFixedExpensePayment = async (expenseId: string, userId: string) => {
-    await updateFixedExpense(expenseId, { isPaid: true, paidBy: userId, paidAt: new Date() });
-    toast({ title: "Conta paga!", description: "Pagamento registrado com sucesso." });
+  // --- AÇÃO: PAGAR / ESTORNAR CONTA FIXA ---
+  const handleFixedExpensePayment = async (expenseId: string, amount: number) => {
+    try {
+      // Chama a função inteligente do Contexto que cria ou remove o histórico
+      await toggleFixedExpensePayment(expenseId, selectedMonth, selectedYear, amount);
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Erro", description: "Não foi possível atualizar o pagamento.", variant: "destructive" });
+    }
   };
   
-  // Função para receber entrada fixa direto daqui (opcional)
   const handleFixedIncomeReceive = async (incomeId: string, userId: string) => {
+    // Para entradas, mantivemos a lógica simples por enquanto, mas pode evoluir igual
     await updateFixedIncome(incomeId, { isReceived: true, receivedBy: userId, receivedAt: new Date() });
     toast({ title: "Valor recebido!", description: "Entrada registrada com sucesso." });
   };
 
   if (!monthlyData) return null;
 
-  // --- CÁLCULOS ATUALIZADOS ---
-  const activeFixedIncomes = getActiveFixedIncomes(selectedMonth, selectedYear);
-
+  // --- CÁLCULOS TOTAIS ---
   const totalFixedExpenses = monthlyData.fixedExpenses.reduce((sum, expense) => sum + expense.amount, 0);
   const totalVariableExpenses = monthlyData.variableExpenses.reduce((sum, expense) => sum + expense.amount, 0);
   
@@ -63,38 +65,38 @@ export default function MonthlyView() {
     .reduce((sum, movement) => sum + movement.amount, 0);
     
   const totalFixedIncome = activeFixedIncomes.reduce((sum, income) => sum + income.amount, 0);
-  
-  // Total Geral de Entradas (Fixo + Caixa)
   const totalIncome = totalCashIncome + totalFixedIncome;
-
   const totalInvestments = monthlyData.investments.reduce((sum, investment) => sum + investment.amount, 0);
+
+  console.log("=== DEBUG MONTHLY VIEW ===");
+console.log("Mês Selecionado:", selectedMonth); // 0=Jan, 11=Dez
+console.log("Ano Selecionado:", selectedYear);
+console.log("Gastos Variáveis carregados:", monthlyData.variableExpenses.length);
+console.log("==========================");
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Controle Mensal</h1>
           <p className="text-muted-foreground">Visualize todas as movimentações de um mês específico</p>
         </div>
+        
+        {/* O Seletor agora fica aqui e controla tudo sozinho */}
+        <MonthSelector />
       </div>
 
-      <MonthSelector 
-        selectedMonth={selectedMonth}
-        selectedYear={selectedYear}
-        onMonthYearChange={handleMonthYearChange}
-      />
-
-      {/* Resumo do Mês */}
+      {/* Cards de Resumo */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="shadow-card">
           <CardContent className="p-6">
             <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 rounded-lg bg-success/10 flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-success" />
+              <div className="w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
+                <TrendingUp className="w-6 h-6 text-green-500" />
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Entradas Totais</p>
-                <p className="text-2xl font-bold text-success">
+                <p className="text-2xl font-bold text-green-500">
                   {formatCurrency(totalIncome)}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -108,12 +110,12 @@ export default function MonthlyView() {
         <Card className="shadow-card">
           <CardContent className="p-6">
             <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 rounded-lg bg-destructive/10 flex items-center justify-center">
-                <TrendingDown className="w-6 h-6 text-destructive" />
+              <div className="w-12 h-12 rounded-lg bg-red-500/10 flex items-center justify-center">
+                <TrendingDown className="w-6 h-6 text-red-500" />
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Gastos Fixos</p>
-                <p className="text-2xl font-bold text-destructive">
+                <p className="text-2xl font-bold text-red-500">
                   {formatCurrency(totalFixedExpenses)}
                 </p>
               </div>
@@ -124,12 +126,12 @@ export default function MonthlyView() {
         <Card className="shadow-card">
           <CardContent className="p-6">
             <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 rounded-lg bg-warning/10 flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-warning" />
+              <div className="w-12 h-12 rounded-lg bg-yellow-500/10 flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-yellow-500" />
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Gastos Variáveis</p>
-                <p className="text-2xl font-bold text-warning">
+                <p className="text-2xl font-bold text-yellow-500">
                   {formatCurrency(totalVariableExpenses)}
                 </p>
               </div>
@@ -156,11 +158,11 @@ export default function MonthlyView() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Entradas Fixas (Lista Nova para visualização rápida) */}
+        {/* Lista de Entradas Fixas */}
         <Card className="shadow-card lg:col-span-2">
             <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                    <ArrowUpCircle className="w-5 h-5 text-success" />
+                    <ArrowUpCircle className="w-5 h-5 text-green-500" />
                     <span>Entradas Fixas do Mês ({activeFixedIncomes.length})</span>
                 </CardTitle>
             </CardHeader>
@@ -176,7 +178,7 @@ export default function MonthlyView() {
                                     <p className="text-sm text-muted-foreground">Dia {income.receiveDay}</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="font-bold text-success">{formatCurrency(income.amount)}</p>
+                                    <p className="font-bold text-green-500">{formatCurrency(income.amount)}</p>
                                     <Badge variant={income.isReceived ? "default" : "secondary"}>
                                         {income.isReceived ? "Recebido" : "Pendente"}
                                     </Badge>
@@ -188,7 +190,7 @@ export default function MonthlyView() {
             </CardContent>
         </Card>
 
-        {/* Gastos Fixos */}
+        {/* Lista de Gastos Fixos (Com botão de Pagar/Estornar) */}
         <Card className="shadow-card">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
@@ -212,16 +214,23 @@ export default function MonthlyView() {
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">Vence dia {expense.dueDay}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-foreground">{formatCurrency(expense.amount)}</p>
-                      {!expense.isPaid && (
-                        <div className="flex space-x-1 mt-1">
-                          {state.users.map((user) => (
-                            <Button key={user.id} variant="outline" size="sm" onClick={() => handleFixedExpensePayment(expense.id, user.id)} className="text-xs h-7 px-2">{user.name}</Button>
-                          ))}
-                        </div>
+                      {expense.isPaid && expense.paidAt && (
+                          <p className="text-xs text-green-600 mt-1">
+                              Pago em {new Date(expense.paidAt).toLocaleDateString('pt-BR')}
+                          </p>
                       )}
+                    </div>
+                    <div className="text-right flex flex-col items-end gap-2">
+                      <p className="font-semibold text-foreground">{formatCurrency(expense.amount)}</p>
+                      
+                      <Button 
+                        variant={expense.isPaid ? "outline" : "default"} 
+                        size="sm" 
+                        onClick={() => handleFixedExpensePayment(expense.id, expense.amount)} 
+                        className="text-xs h-7 px-3"
+                      >
+                        {expense.isPaid ? "Estornar" : "Pagar"}
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -230,7 +239,7 @@ export default function MonthlyView() {
           </CardContent>
         </Card>
 
-        {/* Gastos Variáveis */}
+        {/* Lista de Gastos Variáveis */}
         <Card className="shadow-card">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
@@ -250,7 +259,9 @@ export default function MonthlyView() {
                         <h4 className="font-medium text-foreground">{expense.description}</h4>
                         <Badge variant="outline">{getCategoryLabel(expense.category)}</Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground">{new Date(expense.date).toLocaleDateString('pt-BR')} - {getUserName(expense.userId)}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(expense.date).toLocaleDateString('pt-BR')} - {getUserName(expense.userId)}
+                      </p>
                     </div>
                     <p className="font-semibold text-foreground">{formatCurrency(expense.amount)}</p>
                   </div>
