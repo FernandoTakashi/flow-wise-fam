@@ -177,7 +177,18 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       const mappedExpenses = expenses.data?.map(e => ({ id: e.id, description: e.description, amount: e.amount, type: e.type, category: e.category, paymentMethod: e.payment_method, date: parseSupabaseDate(e.date), userId: e.user_id, installments: { current: e.installments_current, total: e.installments_total }, createdAt: new Date(e.created_at) })) || [];
       const mappedMovements = movements.data?.map(m => ({ id: m.id, type: m.type, description: m.description, amount: m.amount, userId: m.user_id, date: parseSupabaseDate(m.date), createdAt: new Date(m.created_at) })) || [];
       const mappedCards = cards.data?.map(c => ({ id: c.id, name: c.name, limit: c.limit, closingDay: c.closing_day, dueDay: c.due_day, isPaid: c.is_paid, paidBy: c.paid_by, paidAt: c.paid_at ? new Date(c.paid_at) : undefined, createdAt: new Date(c.created_at) })) || [];
-      const mappedInvestments = investments.data?.map(i => ({ id: i.id, description: i.description, amount: i.amount, date: parseSupabaseDate(i.date), userId: i.user_id, createdAt: new Date(i.created_at) })) || [];
+      
+      // Mapeamento de investimentos com TAXA INDIVIDUAL
+      const mappedInvestments = investments.data?.map(i => ({ 
+        id: i.id, 
+        description: i.description, 
+        amount: i.amount, 
+        date: parseSupabaseDate(i.date), 
+        userId: i.user_id, 
+        yieldRate: Number(i.yield_rate || 0), // <-- NOVO
+        createdAt: new Date(i.created_at) 
+      })) || [];
+
       const mappedPayments = fixedPayments.data?.map(p => ({ id: p.id, fixedExpenseId: p.fixed_expense_id, month: p.month, year: p.year, amount: Number(p.amount), paidAt: new Date(p.paid_at), generatedExpenseId: p.generated_expense_id })) || [];
       const mappedReceipts = fixedReceipts.data?.map(r => ({ id: r.id, fixedIncomeId: r.fixed_income_id, month: r.month, year: r.year, amount: Number(r.amount), receivedAt: new Date(r.received_at) })) || [];
 
@@ -354,20 +365,108 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     dispatch({ type: 'ADD_ITEM', payload: { key: 'creditCards', item: { id: data.id, name: data.name, limit: data.limit, closingDay: data.closing_day, dueDay: data.due_day, isPaid: data.is_paid, createdAt: new Date(data.created_at) } } }); 
   };
   
-  const updateCreditCard = async (id: string, updates: any) => { 
-    const { error } = await supabase.from('credit_cards').update({ is_paid: updates.isPaid, paid_by: updates.paidBy, paid_at: updates.paidAt }).eq('id', id); 
-    if (error) throw error; 
-    dispatch({ type: 'UPDATE_ITEM', payload: { key: 'creditCards', id, updates } }); 
+  const updateCreditCard = async (id: string, updates: any) => {
+    if (!state.currentAccountId || !userId) return;
+
+    try {
+      const card = state.creditCards.find(c => c.id === id);
+      if (!card) return;
+
+      if (updates.isPaid && !card.isPaid) {
+        const { month, year } = state.selectedMonth;
+        
+        const dashboard = getDashboardData();
+        const cardInfo = dashboard.pendingCreditCardList.find(c => c.id === id);
+        const amountToPay = cardInfo ? cardInfo.billAmount : 0;
+
+        if (amountToPay > 0) {
+          const { data: movement, error: movError } = await supabase
+            .from('cash_movements')
+            .insert({
+              type: 'outcome',
+              description: `Pagamento Fatura: ${card.name}`,
+              amount: amountToPay,
+              user_id: userId,
+              account_id: state.currentAccountId,
+              date: new Date(), 
+            })
+            .select()
+            .single();
+
+          if (movError) throw movError;
+
+          updates.paid_at = new Date();
+          
+          dispatch({ 
+            type: 'ADD_ITEM', 
+            payload: { 
+              key: 'cashMovements', 
+              item: { 
+                ...movement, 
+                date: parseSupabaseDate(movement.date), 
+                userId: movement.user_id, 
+                createdAt: new Date(movement.created_at) 
+              } 
+            } 
+          });
+        }
+      } 
+      else if (!updates.isPaid && card.isPaid) {
+        const lastMovement = state.cashMovements.find(m => 
+          m.description === `Pagamento Fatura: ${card.name}` && 
+          m.type === 'outcome'
+        );
+
+        if (lastMovement) {
+          await supabase.from('cash_movements').delete().eq('id', lastMovement.id);
+          dispatch({ type: 'REMOVE_ITEM', payload: { key: 'cashMovements', id: lastMovement.id } });
+        }
+        
+        updates.paid_at = null;
+        updates.paid_by = null;
+      }
+
+      const { error } = await supabase
+        .from('credit_cards')
+        .update({ 
+          is_paid: updates.isPaid, 
+          paid_by: updates.paidBy || userId, 
+          paid_at: updates.paid_at 
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      dispatch({ type: 'UPDATE_ITEM', payload: { key: 'creditCards', id, updates } });
+      toast({ title: updates.isPaid ? "Fatura paga e saldo atualizado!" : "Pagamento estornado!" });
+
+    } catch (error: any) {
+      console.error(error);
+      toast({ title: "Erro ao atualizar fatura", description: error.message, variant: "destructive" });
+    }
   };
-  
+
+  // 1. Função addInvestment Atualizada para receber yieldRate
   const addInvestment = async (investment: any) => { 
     if (!userId || !state.currentAccountId) return; 
     const { data, error } = await supabase.from('investments').insert({ 
-        description: investment.description, amount: investment.amount, 
-        date: investment.date, user_id: userId, account_id: state.currentAccountId 
+        description: investment.description, 
+        amount: investment.amount, 
+        yield_rate: investment.yieldRate, // <-- SALVA A TAXA NO BANCO
+        date: investment.date, 
+        user_id: userId, 
+        account_id: state.currentAccountId 
     }).select().single(); 
     if(error) throw error; 
-    dispatch({ type: 'ADD_ITEM', payload: { key: 'investments', item: { id: data.id, description: data.description, amount: data.amount, date: parseSupabaseDate(data.date), userId: data.user_id, createdAt: new Date(data.created_at) } } }); 
+    dispatch({ type: 'ADD_ITEM', payload: { key: 'investments', item: { 
+      id: data.id, 
+      description: data.description, 
+      amount: data.amount, 
+      date: parseSupabaseDate(data.date), 
+      yieldRate: Number(data.yield_rate || 0), // <-- ATUALIZA ESTADO LOCAL
+      userId: data.user_id, 
+      createdAt: new Date(data.created_at) 
+    } } }); 
   };
   
   const updateSettings = async (settings: Partial<FinancialSettings>) => { 
@@ -382,7 +481,14 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   const getTotalInvestments = () => state.settings.initialInvestment + state.investments.reduce((sum, inv) => sum + Number(inv.amount), 0);
-  const getInvestmentYield = () => getTotalInvestments() * (state.settings.monthlyYield / 100);
+  
+  // 2. Função getInvestmentYield Atualizada para soma individual
+  const getInvestmentYield = () => {
+    return state.investments.reduce((total, inv) => {
+      // Rendimento = Valor * (Taxa / 100)
+      return total + (Number(inv.amount) * (Number(inv.yieldRate || 0) / 100));
+    }, 0);
+  };
   
   const getActiveFixedExpenses = (month: number, year: number) => {
     const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59);

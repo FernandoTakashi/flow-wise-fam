@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
-import { useFinance } from '@/contexts/FinanceContext'; // <--- O SEGREDO ESTÁ AQUI
+import { ChevronLeft, ChevronRight, Calendar, Filter } from 'lucide-react'; // Ícone de filtro
+import { useFinance } from '@/contexts/FinanceContext';
 
 const months = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -23,6 +23,8 @@ export default function MonthSelector() {
       type: 'SET_SELECTED_MONTH', 
       payload: { month: newMonth, year: newYear } 
     });
+    // Opcional: Fechar seletores após escolha no mobile para limpar a tela
+    // setShowSelectors(false); 
   };
 
   const navigateMonth = (direction: 'prev' | 'next') => {
@@ -53,73 +55,82 @@ export default function MonthSelector() {
   const generateYearOptions = () => {
     const currentYear = new Date().getFullYear();
     const years = [];
-    for (let i = currentYear - 5; i <= currentYear + 5; i++) {
+    for (let i = currentYear - 2; i <= currentYear + 3; i++) { // Reduzi o range para ficar mais limpo
       years.push(i);
     }
     return years;
   };
 
   return (
-    <Card className="shadow-card w-full md:w-auto">
-      <CardContent className="p-2 md:p-4">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center space-x-2">
-            <Calendar className="w-5 h-5 text-primary" />
-            <h2 className="text-lg font-semibold text-foreground capitalize whitespace-nowrap">
-              {months[selectedMonth]} {selectedYear}
-            </h2>
+    <Card className="shadow-sm w-full md:w-auto border-none bg-background/50 backdrop-blur-sm">
+      <CardContent className="p-2">
+        <div className="flex items-center justify-between gap-2">
+          
+          {/* Esquerda: Mês Atual */}
+          <div className="flex items-center gap-2 px-2">
+            <Calendar className="w-4 h-4 text-primary" />
+            <span className="text-sm font-semibold capitalize whitespace-nowrap">
+              {months[selectedMonth]} <span className="text-muted-foreground font-normal">{selectedYear}</span>
+            </span>
           </div>
 
-          <div className="flex items-center space-x-1 md:space-x-2">
-            <Button variant="outline" size="icon" onClick={() => navigateMonth('prev')}>
+          {/* Direita: Controles */}
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateMonth('prev')}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
 
-            <Button variant="outline" size="sm" onClick={goToCurrentMonth}>
+            <Button variant="ghost" size="sm" className="h-8 text-xs font-medium px-2 hidden sm:flex" onClick={goToCurrentMonth}>
               Hoje
             </Button>
 
-            <Button variant="outline" size="icon" onClick={() => navigateMonth('next')}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateMonth('next')}>
               <ChevronRight className="w-4 h-4" />
             </Button>
 
-            <Button variant="outline" size="sm" onClick={() => setShowSelectors(!showSelectors)}>
-              {showSelectors ? 'Ocultar' : 'Mudar'}
+            {/* Botão de Filtro Avançado (Mudar) */}
+            <Button 
+              variant={showSelectors ? "secondary" : "ghost"} 
+              size="icon" 
+              className="h-8 w-8 ml-1"
+              onClick={() => setShowSelectors(!showSelectors)}
+            >
+              <Filter className="w-4 h-4" />
             </Button>
           </div>
         </div>
 
+        {/* Seletores Expansíveis */}
         {showSelectors && (
-          <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-border animate-in slide-in-from-top-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Mês</label>
-              <Select 
-                value={selectedMonth.toString()} 
-                onValueChange={(value) => handleMonthChange(parseInt(value), selectedYear)}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {months.map((month, index) => (
-                    <SelectItem key={index} value={index.toString()}>{month}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-border/50 animate-in slide-in-from-top-1 fade-in duration-200">
+            <Select 
+              value={selectedMonth.toString()} 
+              onValueChange={(value) => handleMonthChange(parseInt(value), selectedYear)}
+            >
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {months.map((month, index) => (
+                  <SelectItem key={index} value={index.toString()}>{month}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Ano</label>
-              <Select 
-                value={selectedYear.toString()} 
-                onValueChange={(value) => handleMonthChange(selectedMonth, parseInt(value))}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {generateYearOptions().map((year) => (
-                    <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Select 
+              value={selectedYear.toString()} 
+              onValueChange={(value) => handleMonthChange(selectedMonth, parseInt(value))}
+            >
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {generateYearOptions().map((year) => (
+                  <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            {/* Botão "Hoje" visível apenas quando expandido no mobile */}
+            <Button variant="outline" size="sm" className="col-span-2 h-8 text-xs sm:hidden mt-1" onClick={goToCurrentMonth}>
+              Voltar para Hoje
+            </Button>
           </div>
         )}
       </CardContent>

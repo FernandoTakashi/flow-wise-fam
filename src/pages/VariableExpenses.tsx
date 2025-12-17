@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { ExpenseCategory, PaymentMethod } from '@/types';
-import { Plus, Calendar, DollarSign, CreditCard, Banknote, Layers, User } from 'lucide-react';
+import { Plus, Calendar, DollarSign, CreditCard, Banknote, Layers, User, X } from 'lucide-react';
 
 const categories: { value: ExpenseCategory; label: string }[] = [
   { value: 'alimentacao', label: 'Alimentação' },
@@ -29,10 +29,8 @@ export default function VariableExpenses() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Pega o Mês e Ano selecionados no Global State
   const { month: selectedMonth, year: selectedYear } = state.selectedMonth;
 
-  // Array de nomes para exibir no título
   const MONTH_NAMES = [
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
@@ -53,7 +51,7 @@ export default function VariableExpenses() {
   };
 
   const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat('pt-BR').format(new Date(date));
+    return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(date));
   };
 
   const isCreditCard = (method: string) => {
@@ -100,6 +98,7 @@ export default function VariableExpenses() {
       installments: '1'
     });
     setShowForm(false);
+    toast({ title: "Gasto Salvo!", description: "Despesa registrada com sucesso." });
   };
 
   const getCategoryLabel = (category: ExpenseCategory) => {
@@ -120,13 +119,9 @@ export default function VariableExpenses() {
     return <CreditCard className="w-4 h-4" />;
   };
 
-  // --- CORREÇÃO AQUI ---
-  // Antes você usava "new Date()". Agora usamos selectedMonth e selectedYear
   const currentMonthExpenses = state.expenses
     .filter(expense => {
       const expenseDate = new Date(expense.date);
-      
-      // Compara com o estado global, não com o relógio do PC
       return expenseDate.getMonth() === selectedMonth &&
         expenseDate.getFullYear() === selectedYear &&
         (expense.type === 'variavel' || expense.type === 'cartao_credito');
@@ -136,98 +131,123 @@ export default function VariableExpenses() {
   const monthlyTotal = currentMonthExpenses.reduce((sum, expense) => sum + expense.amount, 0);
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6 animate-fade-in pb-20">
+      
+      {/* HEADER E BOTÃO DE AÇÃO */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Gastos Variáveis</h1>
-          <p className="text-muted-foreground">
-             Mostrando dados de <strong>{MONTH_NAMES[selectedMonth]}/{selectedYear}</strong>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Gastos Variáveis</h1>
+          <p className="text-sm text-muted-foreground">
+             Dados de <strong>{MONTH_NAMES[selectedMonth]}/{selectedYear}</strong>
           </p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)} className="bg-gradient-primary hover:opacity-90">
-          <Plus className="w-4 h-4 mr-2" />
-          {showForm ? 'Cancelar' : 'Novo Gasto'}
-        </Button>
+        
+        {/* Botão Novo Gasto - Full Width no Mobile */}
+        {!showForm && (
+          <Button onClick={() => setShowForm(true)} className="w-full md:w-auto bg-gradient-primary hover:opacity-90 h-12 md:h-10 text-base">
+            <Plus className="w-5 h-5 mr-2" />
+            Novo Gasto
+          </Button>
+        )}
       </div>
 
-      {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="shadow-card">
-          <CardContent className="p-6">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 rounded-lg bg-gradient-primary/10 flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Total em {MONTH_NAMES[selectedMonth]}</p>
-                <p className="text-2xl font-bold text-foreground">{formatCurrency(monthlyTotal)}</p>
-              </div>
+      {/* CARDS DE RESUMO - GRID 3 COLUNAS (Scroll horizontal ou quebra no mobile) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
+        <Card className="shadow-card col-span-2 md:col-span-1">
+          <CardContent className="p-4 md:p-6 flex items-center space-x-4">
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <DollarSign className="w-5 h-5 md:w-6 md:h-6 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs md:text-sm font-medium text-muted-foreground">Total do Mês</p>
+              <p className="text-xl md:text-2xl font-bold text-foreground">{formatCurrency(monthlyTotal)}</p>
             </div>
           </CardContent>
         </Card>
 
         <Card className="shadow-card">
-          <CardContent className="p-6">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-blue-500" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Gastos Registrados</p>
-                <p className="text-2xl font-bold text-foreground">{currentMonthExpenses.length}</p>
-              </div>
+          <CardContent className="p-4 md:p-6 flex items-center space-x-4">
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+              <Calendar className="w-5 h-5 md:w-6 md:h-6 text-blue-500" />
+            </div>
+            <div>
+              <p className="text-xs md:text-sm font-medium text-muted-foreground">Qtd. Gastos</p>
+              <p className="text-xl md:text-2xl font-bold text-foreground">{currentMonthExpenses.length}</p>
             </div>
           </CardContent>
         </Card>
 
         <Card className="shadow-card">
-          <CardContent className="p-6">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <Banknote className="w-6 h-6 text-green-500" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Média por Gasto</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {formatCurrency(currentMonthExpenses.length > 0 ? monthlyTotal / currentMonthExpenses.length : 0)}
-                </p>
-              </div>
+          <CardContent className="p-4 md:p-6 flex items-center space-x-4">
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
+              <Banknote className="w-5 h-5 md:w-6 md:h-6 text-green-500" />
+            </div>
+            <div>
+              <p className="text-xs md:text-sm font-medium text-muted-foreground">Ticket Médio</p>
+              <p className="text-xl md:text-2xl font-bold text-foreground">
+                {formatCurrency(currentMonthExpenses.length > 0 ? monthlyTotal / currentMonthExpenses.length : 0)}
+              </p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Formulário */}
+      {/* FORMULÁRIO DE CADASTRO */}
       {showForm && (
-        <Card className="shadow-card animate-scale-in">
-          <CardHeader>
-            <CardTitle>Cadastrar Gasto</CardTitle>
-            <CardDescription>Registre despesas ou compras no cartão</CardDescription>
+        <Card className="shadow-card animate-in slide-in-from-top-4 border-primary/20">
+          <CardHeader className="p-4 md:p-6 pb-2 md:pb-6 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-lg md:text-xl">Novo Gasto</CardTitle>
+              <CardDescription className="text-xs md:text-sm">Preencha os detalhes da despesa</CardDescription>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setShowForm(false)} className="md:hidden">
+              <X className="w-5 h-5" />
+            </Button>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 md:p-6">
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Data e Valor na mesma linha */}
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="date">Data da Compra *</Label>
-                  <Input id="date" type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} required />
+                  <Label htmlFor="date">Data</Label>
+                  <Input 
+                    id="date" 
+                    type="date" 
+                    value={formData.date} 
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })} 
+                    required 
+                    className="h-11" // Toque facilitado
+                  />
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="amount">Valor Total *</Label>
-                  <Input id="amount" type="number" step="0.01" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} required />
-                  {formData.installments !== '1' && formData.amount && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Serão {formData.installments}x de {formatCurrency(parseFloat(formData.amount) / parseInt(formData.installments))}
-                    </p>
-                  )}
+                  <Label htmlFor="amount">Valor (R$)</Label>
+                  <Input 
+                    id="amount" 
+                    type="number" 
+                    step="0.01" 
+                    placeholder="0,00"
+                    value={formData.amount} 
+                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })} 
+                    required 
+                    className="h-11 font-bold"
+                  />
                 </div>
               </div>
 
+              {/* Parcela Info (Se houver valor) */}
+              {formData.installments !== '1' && formData.amount && (
+                <div className="text-xs text-center p-2 bg-muted/50 rounded text-muted-foreground">
+                  Serão {formData.installments}x de {formatCurrency(parseFloat(formData.amount) / parseInt(formData.installments))}
+                </div>
+              )}
+
+              {/* Categoria e Pagamento */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Categoria *</Label>
+                  <Label>Categoria</Label>
                   <Select onValueChange={(value) => setFormData({ ...formData, category: value as ExpenseCategory })}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectTrigger className="h-11"><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
                       {categories.map((category) => (
                         <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
@@ -237,9 +257,9 @@ export default function VariableExpenses() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Forma de Pagamento *</Label>
+                  <Label>Pagamento</Label>
                   <Select onValueChange={(value) => setFormData({ ...formData, paymentMethod: value as PaymentMethod })}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectTrigger className="h-11"><SelectValue placeholder="Forma de Pagto" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="dinheiro">💵 Dinheiro</SelectItem>
                       <SelectItem value="debito">💳 Débito</SelectItem>
@@ -252,11 +272,12 @@ export default function VariableExpenses() {
                 </div>
               </div>
 
+              {/* Parcelas (Condicional) */}
               {isCreditCard(formData.paymentMethod) && (
-                 <div className="space-y-2 bg-muted/30 p-3 rounded-lg border border-dashed border-border">
-                    <Label className="flex items-center space-x-2">
+                 <div className="space-y-2 bg-primary/5 p-3 rounded-lg border border-dashed border-primary/20">
+                    <Label className="flex items-center space-x-2 text-primary">
                         <Layers className="w-4 h-4" />
-                        <span>Número de Parcelas</span>
+                        <span>Parcelamento</span>
                     </Label>
                     <div className="flex items-center space-x-4">
                         <Input 
@@ -265,19 +286,20 @@ export default function VariableExpenses() {
                             max="36" 
                             value={formData.installments} 
                             onChange={(e) => setFormData({ ...formData, installments: e.target.value })}
-                            className="w-24"
+                            className="w-20 h-10 text-center font-bold"
                         />
-                        <div className="text-sm text-muted-foreground">
-                            {formData.installments === '1' ? 'Pagamento à vista' : 'Parcelamento mensal automático'}
-                        </div>
+                        <span className="text-sm text-muted-foreground">
+                            {formData.installments === '1' ? 'parcela (à vista)' : 'parcelas mensais'}
+                        </span>
                     </div>
                  </div>
               )}
 
+              {/* Usuário e Descrição */}
               <div className="space-y-2">
-                <Label>Usuário Responsável *</Label>
+                <Label>Responsável</Label>
                 <Select onValueChange={(value) => setFormData({ ...formData, userId: value })}>
-                  <SelectTrigger><SelectValue placeholder="Quem fez o gasto" /></SelectTrigger>
+                  <SelectTrigger className="h-11"><SelectValue placeholder="Quem gastou?" /></SelectTrigger>
                   <SelectContent>
                     {state.users.map((user) => (
                       <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
@@ -287,66 +309,92 @@ export default function VariableExpenses() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description">Descrição</Label>
-                <Textarea id="description" placeholder="Ex: Tênis novo, Jantar..." value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} />
+                <Label htmlFor="description">Descrição (Opcional)</Label>
+                <Textarea 
+                  id="description" 
+                  placeholder="Detalhes da compra..." 
+                  value={formData.description} 
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })} 
+                  rows={2} 
+                  className="resize-none"
+                />
               </div>
 
-              <div className="flex space-x-4 pt-4">
-                <Button type="submit" disabled={loading} className="bg-gradient-primary">
-                  {loading ? 'Processando...' : 'Salvar Gasto'}
+              {/* Botões de Ação */}
+              <div className="flex space-x-3 pt-2">
+                <Button type="button" variant="outline" onClick={() => setShowForm(false)} className="flex-1 h-12">
+                  Cancelar
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
+                <Button type="submit" disabled={loading} className="flex-[2] h-12 bg-gradient-primary">
+                  {loading ? 'Salvando...' : 'Confirmar Gasto'}
+                </Button>
               </div>
             </form>
           </CardContent>
         </Card>
       )}
 
-      {/* Lista de Gastos */}
-      <Card className="shadow-card">
-        <CardHeader>
-          <CardTitle>Gastos de {MONTH_NAMES[selectedMonth]}</CardTitle>
-          <CardDescription>Histórico de gastos variáveis e parcelas de cartão</CardDescription>
+      {/* LISTA DE GASTOS */}
+      <Card className="shadow-card border-none bg-transparent shadow-none md:border md:bg-card">
+        <CardHeader className="px-0 md:px-6 py-2 md:py-6">
+          <CardTitle className="text-lg md:text-xl">Histórico ({currentMonthExpenses.length})</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-0 md:px-6">
           {currentMonthExpenses.length === 0 ? (
-            <div className="text-center py-8">
-              <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <p>Nenhum gasto registrado em {MONTH_NAMES[selectedMonth]}</p>
+            <div className="text-center py-10 bg-card rounded-lg border border-dashed">
+              <Calendar className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
+              <p className="text-muted-foreground">Nenhum gasto neste mês</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {currentMonthExpenses.map((expense) => (
-                <div key={expense.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <Badge variant="outline">
-                        {getCategoryLabel(expense.category as ExpenseCategory)}
-                      </Badge>
-                      <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                        {getPaymentIcon(expense.paymentMethod)}
-                        <span>{getPaymentMethodLabel(expense.paymentMethod)}</span>
-                      </div>
-                      {expense.installments && expense.installments.total > 1 && (
-                          <Badge variant="secondary" className="text-xs">
+                <div key={expense.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-card rounded-lg border shadow-sm">
+                  
+                  {/* Linha Superior Mobile: Categoria + Valor */}
+                  <div className="flex justify-between items-start mb-2 md:mb-0 md:w-full">
+                    <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-4">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="capitalize">
+                          {getCategoryLabel(expense.category as ExpenseCategory)}
+                        </Badge>
+                        {expense.installments && expense.installments.total > 1 && (
+                          <Badge variant="outline" className="text-[10px] h-5 px-1">
                             {expense.installments.current}/{expense.installments.total}
                           </Badge>
-                      )}
-                    </div>
-                    <p className="font-medium">{expense.description || 'Sem descrição'}</p>
-                    <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                      <div className="flex items-center space-x-1">
-                        <Calendar className="w-4 h-4" />
-                        <span>{formatDate(expense.date)}</span>
+                        )}
                       </div>
-                      <div className="flex items-center space-x-1">
-                        <User className="w-4 h-4" />
-                        <span>{getUserName(expense.userId)}</span>
-                      </div>
+                      <span className="font-semibold text-base md:text-lg text-foreground line-clamp-1">
+                        {expense.description || 'Sem descrição'}
+                      </span>
                     </div>
+                    
+                    {/* Valor em destaque no mobile */}
+                    <span className="font-bold text-lg md:hidden">
+                      {formatCurrency(expense.amount)}
+                    </span>
                   </div>
-                  <div className="text-right">
-                    <p className="text-lg font-semibold">{formatCurrency(expense.amount)}</p>
+
+                  {/* Linha Inferior: Detalhes + Valor Desktop */}
+                  <div className="flex items-center justify-between w-full md:w-auto text-xs text-muted-foreground mt-1 md:mt-0">
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1 bg-muted/30 px-2 py-1 rounded">
+                        {getPaymentIcon(expense.paymentMethod)}
+                        {getPaymentMethodLabel(expense.paymentMethod)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {formatDate(expense.date)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <User className="w-3 h-3" />
+                        {getUserName(expense.userId).split(' ')[0]}
+                      </span>
+                    </div>
+
+                    {/* Valor no Desktop */}
+                    <span className="font-bold text-lg hidden md:block md:ml-6 min-w-[100px] text-right">
+                      {formatCurrency(expense.amount)}
+                    </span>
                   </div>
                 </div>
               ))}

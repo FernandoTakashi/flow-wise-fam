@@ -6,12 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
+import { DollarSign, Loader2 } from "lucide-react"; // Ícone de loading
 
 export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
 
   // Função de Login
   const handleLogin = async (e: React.FormEvent) => {
@@ -29,18 +30,17 @@ export default function AuthPage() {
     setLoading(false);
   };
 
-  // Função de Cadastro Otimizada para Escalabilidade (Multi-User)
+  // Função de Cadastro
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // 1. Criar a conta no Supabase Auth com metadados
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
-          full_name: name, // O Trigger do SQL usará isso para criar o perfil automaticamente
+          full_name: name,
         },
       },
     });
@@ -48,11 +48,9 @@ export default function AuthPage() {
     if (authError) {
       toast({ title: "Erro ao cadastrar", description: authError.message, variant: "destructive" });
     } else if (authData.user) {
-      // 2. Sucesso no cadastro
-      // Não inserimos manualmente na 'app_users' aqui para evitar duplicidade com o Trigger
       toast({ 
         title: "Conta criada com sucesso!", 
-        description: "Se a confirmação de e-mail estiver ativa, verifique sua caixa de entrada." 
+        description: "Verifique seu e-mail para confirmar (se necessário)." 
       });
     }
     
@@ -60,69 +58,136 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-100 p-4">
-      <Tabs defaultValue="login" className="w-[400px]">
-        <TabsList className="grid w-full grid-cols-2">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-4 animate-in fade-in duration-500">
+      
+      {/* Logo / Marca para contexto no Mobile */}
+      <div className="mb-8 text-center">
+        <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
+          <DollarSign className="h-6 w-6" />
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">FinanceApp</h1>
+        <p className="text-sm text-slate-500">Gestão financeira simplificada</p>
+      </div>
+
+      {/* Container Principal - Adaptável */}
+      <Tabs defaultValue="login" className="w-full max-w-sm sm:max-w-md">
+        <TabsList className="grid w-full grid-cols-2 mb-4">
           <TabsTrigger value="login">Entrar</TabsTrigger>
           <TabsTrigger value="register">Cadastrar</TabsTrigger>
         </TabsList>
 
+        {/* ABA DE LOGIN */}
         <TabsContent value="login">
-          <Card>
+          <Card className="border-0 shadow-lg sm:border sm:shadow-sm">
             <CardHeader>
-              <CardTitle>Acessar Finanças</CardTitle>
-              <CardDescription>Entre com seu e-mail e senha.</CardDescription>
+              <CardTitle>Bem-vindo de volta</CardTitle>
+              <CardDescription>Acesse sua carteira para continuar.</CardDescription>
             </CardHeader>
             <form onSubmit={handleLogin}>
               <CardContent className="space-y-4">
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <Label htmlFor="email">E-mail</Label>
-                  <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="seu@email.com"
+                    autoComplete="email"
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)} 
+                    required 
+                    className="h-11" // Altura maior para toque
+                  />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <Label htmlFor="password">Senha</Label>
-                  <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                  <Input 
+                    id="password" 
+                    type="password" 
+                    autoComplete="current-password"
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)} 
+                    required 
+                    className="h-11"
+                  />
                 </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Entrando..." : "Entrar"}
+                <Button type="submit" className="w-full h-11 text-base" disabled={loading}>
+                  {loading ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Entrando...</>
+                  ) : (
+                    "Acessar Conta"
+                  )}
                 </Button>
               </CardFooter>
             </form>
           </Card>
         </TabsContent>
 
+        {/* ABA DE CADASTRO */}
         <TabsContent value="register">
-          <Card>
+          <Card className="border-0 shadow-lg sm:border sm:shadow-sm">
             <CardHeader>
-              <CardTitle>Criar Conta</CardTitle>
-              <CardDescription>Crie sua conta para salvar seus dados na nuvem.</CardDescription>
+              <CardTitle>Criar nova conta</CardTitle>
+              <CardDescription>Comece a controlar suas finanças hoje.</CardDescription>
             </CardHeader>
             <form onSubmit={handleSignUp}>
               <CardContent className="space-y-4">
-                <div className="space-y-1">
-                  <Label htmlFor="name">Seu Nome</Label>
-                  <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nome Completo</Label>
+                  <Input 
+                    id="name" 
+                    type="text"
+                    autoComplete="name"
+                    placeholder="Ex: João Silva"
+                    value={name} 
+                    onChange={(e) => setName(e.target.value)} 
+                    required 
+                    className="h-11"
+                  />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <Label htmlFor="register-email">E-mail</Label>
-                  <Input id="register-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                  <Input 
+                    id="register-email" 
+                    type="email" 
+                    autoComplete="email"
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)} 
+                    required 
+                    className="h-11"
+                  />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <Label htmlFor="register-password">Senha</Label>
-                  <Input id="register-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                  <Input 
+                    id="register-password" 
+                    type="password" 
+                    autoComplete="new-password"
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)} 
+                    required 
+                    className="h-11"
+                  />
                 </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Criando..." : "Cadastrar"}
+                <Button type="submit" className="w-full h-11 text-base" disabled={loading}>
+                  {loading ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Criando...</>
+                  ) : (
+                    "Criar Conta Grátis"
+                  )}
                 </Button>
               </CardFooter>
             </form>
           </Card>
         </TabsContent>
       </Tabs>
+      
+      <p className="mt-8 text-center text-xs text-slate-400">
+        &copy; {new Date().getFullYear()} FinanceApp. Todos os direitos reservados.
+      </p>
     </div>
   );
 }

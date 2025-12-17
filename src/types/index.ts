@@ -92,6 +92,7 @@ export interface Investment {
   id: string;
   description: string;
   amount: number;
+  yieldRate?: number; 
   date: Date;
   userId: string;
   createdAt: Date;
