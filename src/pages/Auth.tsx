@@ -5,13 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "@/hooks/use-toast"; // Verifique se o caminho do seu toast está aqui
+import { toast } from "@/hooks/use-toast";
 
 export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [name, setName] = useState(""); // Apenas para cadastro
+  const [name, setName] = useState("");
 
   // Função de Login
   const handleLogin = async (e: React.FormEvent) => {
@@ -25,42 +25,37 @@ export default function AuthPage() {
 
     if (error) {
       toast({ title: "Erro ao entrar", description: error.message, variant: "destructive" });
-    } else {
-      // O App.tsx vai detectar a mudança de sessão automaticamente
     }
     setLoading(false);
   };
 
-  // Função de Cadastro
+  // Função de Cadastro Otimizada para Escalabilidade (Multi-User)
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // 1. Cria a conta de autenticação (Email/Senha)
+    // 1. Criar a conta no Supabase Auth com metadados
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          full_name: name, // O Trigger do SQL usará isso para criar o perfil automaticamente
+        },
+      },
     });
 
     if (authError) {
       toast({ title: "Erro ao cadastrar", description: authError.message, variant: "destructive" });
-      setLoading(false);
-      return;
+    } else if (authData.user) {
+      // 2. Sucesso no cadastro
+      // Não inserimos manualmente na 'app_users' aqui para evitar duplicidade com o Trigger
+      toast({ 
+        title: "Conta criada com sucesso!", 
+        description: "Se a confirmação de e-mail estiver ativa, verifique sua caixa de entrada." 
+      });
     }
-
-    // 2. Se deu certo, cria o perfil na tabela 'app_users' que criamos no SQL
-    if (authData.user) {
-      const { error: dbError } = await supabase
-        .from('app_users')
-        .insert([{ id: authData.user.id, name: name }]);
-
-      if (dbError) {
-        console.error("Erro ao criar perfil:", dbError);
-        toast({ title: "Conta criada, mas houve erro no perfil.", description: "Contate o suporte." });
-      } else {
-        toast({ title: "Conta criada com sucesso!", description: "Você já pode fazer login." });
-      }
-    }
+    
     setLoading(false);
   };
 
@@ -72,7 +67,6 @@ export default function AuthPage() {
           <TabsTrigger value="register">Cadastrar</TabsTrigger>
         </TabsList>
 
-        {/* ABA DE LOGIN */}
         <TabsContent value="login">
           <Card>
             <CardHeader>
@@ -99,7 +93,6 @@ export default function AuthPage() {
           </Card>
         </TabsContent>
 
-        {/* ABA DE CADASTRO */}
         <TabsContent value="register">
           <Card>
             <CardHeader>
@@ -123,7 +116,7 @@ export default function AuthPage() {
               </CardContent>
               <CardFooter>
                 <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Criar Conta" : "Cadastrar"}
+                  {loading ? "Criando..." : "Cadastrar"}
                 </Button>
               </CardFooter>
             </form>

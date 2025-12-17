@@ -47,9 +47,14 @@ const App = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  if (loading) {
-    return <div className="flex h-screen items-center justify-center">Carregando...</div>;
-  }
+ if (loading) {
+  return (
+    <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-50">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+      <p className="mt-4 text-sm font-medium text-muted-foreground">Sincronizando suas finanças...</p>
+    </div>
+  );
+}
 
   // SE NÃO ESTIVER LOGADO -> MOSTRA APENAS TELA DE LOGIN
   if (!session) {
