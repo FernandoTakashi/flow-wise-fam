@@ -339,14 +339,33 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
   
-  const addFixedIncome = async (income: any) => { 
+ const addFixedIncome = async (income: any) => { 
     if(!state.currentAccountId) return;
     const { data, error } = await supabase.from('fixed_incomes').insert({ 
-        description: income.description, amount: income.amount, receive_day: income.receive_day, 
-        effective_from: income.effectiveFrom, account_id: state.currentAccountId 
+        description: income.description, 
+        amount: income.amount, 
+        receive_day: income.receiveDay, // <--- CORRIGIDO PARA ler 'receiveDay'
+        effective_from: income.effectiveFrom, 
+        account_id: state.currentAccountId 
     }).select().single(); 
+    
     if (error) throw error; 
-    dispatch({ type: 'ADD_ITEM', payload: { key: 'fixedIncomes', item: { id: data.id, description: data.description, amount: data.amount, receiveDay: data.receive_day, isReceived: false, createdAt: new Date(data.created_at), effectiveFrom: parseSupabaseDate(data.effective_from) } } }); 
+    
+    dispatch({ 
+      type: 'ADD_ITEM', 
+      payload: { 
+        key: 'fixedIncomes', 
+        item: { 
+          id: data.id, 
+          description: data.description, 
+          amount: data.amount, 
+          receiveDay: data.receive_day, 
+          isReceived: false, 
+          createdAt: new Date(data.created_at), 
+          effectiveFrom: parseSupabaseDate(data.effective_from) 
+        } 
+      } 
+    }); 
   };
   
   const updateFixedIncome = async (id: string, updates: any) => { 
