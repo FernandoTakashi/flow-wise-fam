@@ -55,8 +55,7 @@ export interface FixedExpense {
   createdAt: Date;
   effectiveFrom: Date;
   effectiveUntil?: Date;
-  
-  // ADICIONE ISSO 👇
+  paidAmount?: number;
   creditCardId?: string | null; 
 }
 

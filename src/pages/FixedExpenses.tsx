@@ -6,9 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+// IMPORTANTE: Certifique-se de que os componentes do Dialog estão instalados no seu projeto
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { ExpenseCategory } from '@/types';
-import { Plus, Calendar, Check, X, CreditCard, AlertCircle, Trash2 } from 'lucide-react';
+import { ExpenseCategory, FixedExpense } from '@/types';
+import { Plus, Calendar, Check, X, CreditCard, AlertCircle } from 'lucide-react';
 
 const categories: { value: ExpenseCategory; label: string }[] = [
   { value: 'moradia', label: 'Moradia' },
@@ -32,12 +34,18 @@ export default function FixedExpenses() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // --- ESTADOS DO MODAL DE CONFIRMAÇÃO ---
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedExpenseToPay, setSelectedExpenseToPay] = useState<FixedExpense | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+
   const { month: selectedMonth, year: selectedYear } = state.selectedMonth;
   const currentExpenses = getActiveFixedExpenses(selectedMonth, selectedYear);
 
   // --- CÁLCULOS DE RESUMO ---
-  const totalExpected = currentExpenses.reduce((acc, e) => acc + e.amount, 0);
-  const totalPaid = currentExpenses.filter(e => e.isPaid).reduce((acc, e) => acc + e.amount, 0);
+  // Se tiver paidAmount (valor real pago), usa ele. Se não, usa o amount (valor previsto).
+  const totalExpected = currentExpenses.reduce((acc, e) => acc + (e.isPaid && e.paidAmount ? e.paidAmount : e.amount), 0);
+  const totalPaid = currentExpenses.filter(e => e.isPaid).reduce((acc, e) => acc + (e.paidAmount || e.amount), 0);
   const totalPending = totalExpected - totalPaid;
 
   const [formData, setFormData] = useState({
@@ -60,9 +68,6 @@ export default function FixedExpenses() {
     }
 
     setLoading(true);
-    
-    // CORREÇÃO: Usamos o dia 1 do mês SELECIONADO como data de início.
-    // Assim o gasto aparece imediatamente na tela que você está vendo.
     const effectiveDate = new Date(selectedYear, selectedMonth, 1);
 
     await addFixedExpense({
@@ -79,6 +84,36 @@ export default function FixedExpenses() {
     toast({ title: 'Sucesso!', description: 'Gasto fixo cadastrado.' });
     setFormData({ name: '', category: '' as ExpenseCategory, amount: '', dueDay: '', creditCardId: 'none' });
     setShowForm(false);
+  };
+
+  // --- AÇÃO 1: CLICAR NO BOTÃO "PAGAR" NA LISTA ---
+  const handleClickPay = (expense: FixedExpense) => {
+    if (expense.isPaid) {
+      // Se já está pago, executa o estorno direto (manda 0 pois será deletado)
+      handleTogglePayment(expense.id, 0); 
+    } else {
+      // Se vai pagar, ABRE O MODAL
+      setSelectedExpenseToPay(expense);
+      setPaymentAmount(expense.amount.toString()); // Preenche com o valor padrão
+      setPaymentModalOpen(true);
+    }
+  };
+
+  // --- AÇÃO 2: CONFIRMAR NO MODAL ---
+  const confirmPayment = async () => {
+    if (!selectedExpenseToPay) return;
+    
+    // Validação do valor
+    const val = parseFloat(paymentAmount);
+    if (!val || val <= 0) {
+        toast({ title: "Valor inválido", description: "O valor deve ser maior que zero.", variant: "destructive" });
+        return;
+    }
+
+    // Fecha modal e executa pagamento
+    await handleTogglePayment(selectedExpenseToPay.id, val);
+    setPaymentModalOpen(false);
+    setSelectedExpenseToPay(null);
   };
 
   const handleTogglePayment = async (expenseId: string, amount: number) => {
@@ -115,7 +150,7 @@ export default function FixedExpenses() {
         </div>
       </div>
 
-      {/* CARDS DE RESUMO - GRID 2x2 no Mobile */}
+      {/* CARDS DE RESUMO */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
          <Card className="shadow-card border-l-4 border-l-blue-500 bg-blue-50/20 col-span-2 md:col-span-1">
             <CardContent className="p-4 flex items-center justify-between">
@@ -170,7 +205,6 @@ export default function FixedExpenses() {
                  </div>
                  <div className="space-y-2">
                     <Label>Categoria</Label>
-                    {/* CORREÇÃO: Adicionado value={formData.category} */}
                     <Select value={formData.category} onValueChange={v => setFormData({...formData, category: v as ExpenseCategory})}>
                         <SelectTrigger className="h-11"><SelectValue placeholder="Selecione" /></SelectTrigger>
                         <SelectContent>
@@ -212,7 +246,6 @@ export default function FixedExpenses() {
                  <Label className="flex items-center gap-2 text-sm font-medium">
                     <CreditCard className="w-4 h-4" /> Vincular Cartão (Opcional)
                  </Label>
-                 {/* CORREÇÃO: Adicionado value={formData.creditCardId} */}
                  <Select value={formData.creditCardId} onValueChange={v => setFormData({...formData, creditCardId: v})}>
                     <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Forma de Pagamento" /></SelectTrigger>
                     <SelectContent>
@@ -245,9 +278,14 @@ export default function FixedExpenses() {
         ) : (
             currentExpenses.map((expense) => {
                 const cardName = getCardName(expense.creditCardId);
+                // Define qual valor mostrar (o pago se existir, ou o padrão)
+                const displayAmount = expense.isPaid && expense.paidAmount ? expense.paidAmount : expense.amount;
+                // Define se o valor mudou para dar destaque visual
+                const isAmountChanged = expense.isPaid && expense.paidAmount && expense.paidAmount !== expense.amount;
+
                 return (
                     <Card key={expense.id} className={`shadow-sm transition-all border ${expense.isPaid ? 'bg-muted/30 opacity-80' : 'bg-card border-l-4 border-l-primary'}`}>
-                       <CardContent className="p-4">
+                        <CardContent className="p-4">
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
                              
                              {/* Informações da Conta */}
@@ -260,43 +298,96 @@ export default function FixedExpenses() {
                                 </div>
                                 
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                                   <span className="font-bold text-foreground text-base">
-                                      {formatCurrency(expense.amount)}
-                                   </span>
+                                   <div className="flex items-center gap-2">
+                                     <span className={`font-bold text-base ${isAmountChanged ? 'text-blue-600' : 'text-foreground'}`}>
+                                        {formatCurrency(displayAmount)}
+                                     </span>
+                                     {isAmountChanged && (
+                                       <span className="text-xs line-through text-muted-foreground">
+                                          {formatCurrency(expense.amount)}
+                                       </span>
+                                     )}
+                                   </div>
+                                   
                                    <span className="flex items-center gap-1 text-xs md:text-sm">
                                       <Calendar className="w-3 h-3" /> Vence dia {expense.dueDay}
                                    </span>
                                    {cardName && (
-                                       <span className="flex items-center gap-1 text-xs text-purple-600 font-medium bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                                      <span className="flex items-center gap-1 text-xs text-purple-600 font-medium bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
                                             <CreditCard className="w-3 h-3" /> {cardName}
-                                       </span>
+                                      </span>
                                    )}
                                 </div>
                              </div>
         
-                             {/* Botão de Ação */}
+                             {/* Botão de Ação - CHAMA O HANDLER QUE ABRE O MODAL */}
                              <div className="w-full md:w-auto mt-2 md:mt-0">
                                 <Button 
                                    variant={expense.isPaid ? "outline" : "default"}
                                    size="sm"
-                                   onClick={() => handleTogglePayment(expense.id, expense.amount)}
+                                   onClick={() => handleClickPay(expense)}
                                    className={`w-full md:w-auto h-10 ${expense.isPaid ? 'border-red-200 text-red-600 hover:bg-red-50' : 'bg-gradient-primary'}`}
                                 >
                                    {expense.isPaid ? (
                                       <><X className="w-4 h-4 mr-2" /> Desmarcar</>
                                    ) : (
-                                      <><Check className="w-4 h-4 mr-2" /> Marcar como Pago</>
+                                      <><Check className="w-4 h-4 mr-2" /> Pagar</>
                                    )}
                                 </Button>
                              </div>
 
                           </div>
-                       </CardContent>
+                        </CardContent>
                     </Card>
                 );
             })
         )}
       </div>
+
+      {/* --- O MODAL PARA VALIDAR O VALOR ESTÁ AQUI --- */}
+      <Dialog open={paymentModalOpen} onOpenChange={setPaymentModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmar Pagamento</DialogTitle>
+            <DialogDescription>
+              O valor da conta veio diferente? Ajuste abaixo antes de confirmar.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="pay-amount" className="text-right">
+                Valor
+              </Label>
+              <Input
+                id="pay-amount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                autoFocus
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                className="col-span-3 font-bold text-lg"
+              />
+            </div>
+            {selectedExpenseToPay && (
+                <div className="text-xs text-muted-foreground text-center bg-muted/50 p-2 rounded">
+                    Conta: <span className="font-medium text-foreground">{selectedExpenseToPay.name}</span> • Vencimento: dia {selectedExpenseToPay.dueDay}
+                </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex flex-row justify-end gap-2">
+            <Button variant="outline" onClick={() => setPaymentModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmPayment} className="bg-green-600 hover:bg-green-700 text-white">
+              <Check className="w-4 h-4 mr-2"/> Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

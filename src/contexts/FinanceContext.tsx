@@ -518,7 +518,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       return effectiveFrom <= endOfMonth && (!effectiveUntil || effectiveUntil >= startOfMonth);
     }).map(expense => {
       const payment = state.fixedPayments.find(p => p.fixedExpenseId === expense.id && p.month === month && p.year === year);
-      return { ...expense, isPaid: !!payment, paidAt: payment?.paidAt };
+      return { ...expense, isPaid: !!payment, paidAt: payment?.paidAt, paidAmount: payment ? Number(payment.amount) : undefined};
     });
   };
 
