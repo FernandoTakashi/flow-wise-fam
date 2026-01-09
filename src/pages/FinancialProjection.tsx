@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { useFinance } from '@/contexts/FinanceContext';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { TrendingUp, TrendingDown, Calculator, DollarSign, ArrowUpCircle, Wallet, Calendar } from 'lucide-react';
+import { TrendingUp, Calendar } from 'lucide-react';
 
 export default function FinancialProjection() {
   const { state, getTotalInvestments, getDashboardData } = useFinance();
@@ -18,9 +18,7 @@ export default function FinancialProjection() {
   };
 
   // 1. CÁLCULO EXATO DO MÊS ATUAL (HOJE)
-  // Independente do filtro global, calculamos as entradas e saídas totais deste mês real
   const currentMonthTotals = useMemo(() => {
-      // Entradas: Renda Fixa Total + Entradas Extras (Cash Movements)
       const fixedIncomeTotal = state.fixedIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
       const extraIncome = state.cashMovements
           .filter(m => { 
@@ -29,7 +27,6 @@ export default function FinancialProjection() {
           })
           .reduce((sum, m) => sum + Number(m.amount), 0);
 
-      // Saídas: Despesas Fixas + Variáveis (Cartão e Outros) + Saídas Extras
       const fixedExpenseTotal = state.fixedExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
       
       const currentMonthExpenses = state.expenses
@@ -46,19 +43,11 @@ export default function FinancialProjection() {
           })
           .reduce((sum, m) => sum + Number(m.amount), 0);
 
-      // Saldo Atual Real (Caixa)
-      // Usamos a função do contexto ou calculamos na hora se necessário. 
-      // Para projeção, vamos confiar no getCurrentBalance() que reflete o "agora".
-      // Mas precisamos somar o que falta acontecer (Recebíveis Futuros) para projetar o fim do mês?
-      // Pela lógica da tabela, o 'Caixa' ali é o saldo acumulado final esperado.
-      
-      // Vamos usar o saldo atual do dashboard como base.
       const dashboard = getDashboardData();
 
       return {
           totalIncome: fixedIncomeTotal + extraIncome,
           totalExpenses: fixedExpenseTotal + currentMonthExpenses + extraOutflows,
-          // O saldo final do mês atual na tabela será o saldo de hoje projetado até o fim do mês
           currentBalance: dashboard.projectedBalance 
       };
   }, [state, startMonth, startYear, getDashboardData]);
@@ -70,6 +59,7 @@ export default function FinancialProjection() {
   const totalFixedIncome = useMemo(() => state.fixedIncomes.reduce((sum, i) => sum + Number(i.amount), 0), [state.fixedIncomes]);
   const totalFixedExpenses = useMemo(() => state.fixedExpenses.reduce((sum, e) => sum + Number(e.amount), 0), [state.fixedExpenses]);
 
+  // A média de consumo variável deve ignorar cartão de crédito para não duplicar com a lógica de parcelas abaixo
   const averageVariableConsumption = useMemo(() => {
     let checkMonth = startMonth - 1; 
     let checkYear = startYear;
@@ -81,9 +71,13 @@ export default function FinancialProjection() {
       const monthlySum = state.expenses
         .filter(e => {
           const d = new Date(e.date);
-          return d.getMonth() === checkMonth && d.getFullYear() === checkYear && e.type === 'variavel'; 
+          // IMPORTANTE: Só soma o que NÃO é cartão (pix, débito, dinheiro)
+          return d.getMonth() === checkMonth && 
+                 d.getFullYear() === checkYear && 
+                 ['debito', 'pix', 'dinheiro', 'variavel'].includes(e.type); 
         })
         .reduce((sum, e) => sum + Number(e.amount), 0);
+      
       if (monthlySum > 0) { totalVariable += monthlySum; count++; }
       checkMonth--;
     }
@@ -94,7 +88,6 @@ export default function FinancialProjection() {
   const projectionData = useMemo(() => {
     const data = [];
     
-    // Taxa Média Ponderada
     let totalInvestedVal = 0;
     let totalYieldVal = 0;
     if (state.investments.length > 0) {
@@ -104,7 +97,6 @@ export default function FinancialProjection() {
     const monthlyYieldRate = totalInvestedVal > 0 ? (totalYieldVal / totalInvestedVal) : 0;
 
     let accumulatedInvested = startInvestedBalance; 
-    // Começamos o caixa com o saldo PROJETADO para o fim deste mês (calculado acima)
     let accumulatedCash = startCashBalance;
 
     for (let i = 0; i <= projectionMonths; i++) {
@@ -119,12 +111,8 @@ export default function FinancialProjection() {
       // MÊS ATUAL (i=0)
       if (i === 0) {
         if (accumulatedInvested > 0) yieldAmount = accumulatedInvested * monthlyYieldRate;
-        
-        // CORREÇÃO: Usamos os totais calculados no useMemo currentMonthTotals
         monthIncome = currentMonthTotals.totalIncome;
         monthExpenses = currentMonthTotals.totalExpenses;
-        
-        // O accumulatedCash já está setado como startCashBalance, então não alteramos ele aqui.
       } 
       // MESES FUTUROS
       else {
@@ -133,21 +121,25 @@ export default function FinancialProjection() {
 
         monthIncome = totalFixedIncome; 
 
+        // SOMA DAS FATURAS DE CARTÃO FUTURAS
+        // Aqui somamos todas as parcelas de cartão que caem neste mês específico
         const futureCardInstallments = state.expenses
           .filter(e => {
             const d = new Date(e.date);
-            return d.getMonth() === loopMonth && d.getFullYear() === loopYear;
+            return d.getMonth() === loopMonth && d.getFullYear() === loopYear && e.type === 'cartao_credito';
           })
           .reduce((sum, e) => sum + Number(e.amount), 0);
 
+        // A Pagar = Fixos + Fatura Cartão + Média Variável (Pix/Débito)
         monthExpenses = totalFixedExpenses + futureCardInstallments + averageVariableConsumption;
+        
         accumulatedCash = accumulatedCash + monthIncome - monthExpenses;
       }
 
       data.push({
         month: currentProjectionDate.toLocaleDateString('pt-BR', { month: 'long', year: '2-digit' }), 
-        shortMonth: currentProjectionDate.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }), // "jan. de 26"
-        desktopMonth: currentProjectionDate.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).replace('.', '') + (i===0 ? '' : ''), // Ajuste visual
+        shortMonth: currentProjectionDate.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }), 
+        desktopMonth: currentProjectionDate.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).replace('.', ''),
         fullDate: currentProjectionDate,
         balance: Math.round(accumulatedInvested + accumulatedCash),
         invested: Math.round(accumulatedInvested),

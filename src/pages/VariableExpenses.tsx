@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useFinance } from '@/contexts/FinanceContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +35,14 @@ export default function VariableExpenses() {
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
   ];
+
+  // --- OTIMIZAÇÃO MOBILE: Abre o formulário automaticamente se for celular ---
+  useEffect(() => {
+    const isMobile = window.innerWidth < 768; // 768px é o breakpoint padrão 'md'
+    if (isMobile) {
+      setShowForm(true);
+    }
+  }, []);
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -97,7 +105,11 @@ export default function VariableExpenses() {
       userId: '',
       installments: '1'
     });
-    setShowForm(false);
+    
+    // No mobile, talvez você queira fechar após salvar, ou manter aberto para lançar outro.
+    // Vou fechar por padrão para ver o resumo, mas o usuário pode clicar em "+" novamente.
+    setShowForm(false); 
+    
     toast({ title: "Gasto Salvo!", description: "Despesa registrada com sucesso." });
   };
 

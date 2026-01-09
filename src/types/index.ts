@@ -71,6 +71,17 @@ export interface CreditCard {
   createdAt: Date;
 }
 
+export interface CreditCardPayment {
+  id: string;
+  cardId: string;
+  month: number;
+  year: number;
+  amount: number;
+  paidAt: Date;
+  paidBy?: string;
+  cashMovementId?: string;
+}
+
 export interface CashMovement {
   id: string;
   type: 'income' | 'outcome';

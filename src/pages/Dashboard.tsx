@@ -3,6 +3,10 @@ import { useFinance } from '@/contexts/FinanceContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowUpCircle, ShoppingCart, PiggyBank, Target, 
@@ -10,51 +14,94 @@ import {
 } from 'lucide-react';
 
 export default function Dashboard() {
-  const { getDashboardData, state, toggleFixedExpensePayment, updateCreditCard } = useFinance();
+  const { 
+    getDashboardData, 
+    state, 
+    toggleFixedExpensePayment, 
+    payCreditCardBill 
+  } = useFinance();
+  
   const { toast } = useToast();
   
+  // Garante que os dados são sempre do mês selecionado no contexto
   const dashboardData = getDashboardData();
   const { month, year } = state.selectedMonth;
 
+  // Estados dos Accordions
   const [isFixedOpen, setIsFixedOpen] = useState(false);
   const [isCardsOpen, setIsCardsOpen] = useState(false);
+
+  // --- ESTADOS PARA MODAIS DE PAGAMENTO ---
+  const [fixedModalOpen, setFixedModalOpen] = useState(false);
+  const [selectedFixed, setSelectedFixed] = useState<any>(null);
+  const [fixedAmount, setFixedAmount] = useState('');
+
+  const [cardModalOpen, setCardModalOpen] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<any>(null);
+  const [cardPayer, setCardPayer] = useState('');
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
-  const handlePayFixed = async (id: string, amount: number) => {
+  // --- HANDLERS DE CONTA FIXA ---
+  const clickPayFixed = (item: any) => {
+    setSelectedFixed(item);
+    setFixedAmount(item.amount.toString());
+    setFixedModalOpen(true);
+  };
+
+  const confirmPayFixed = async () => {
+    if (!selectedFixed) return;
     try {
-      await toggleFixedExpensePayment(id, month, year, amount);
-      toast({ title: "Pago!", description: "Conta fixa atualizada." });
-    } catch (error) {
-      toast({ title: "Erro", variant: "destructive" });
+      const val = parseFloat(fixedAmount);
+      if (!val || val <= 0) throw new Error("Valor inválido");
+
+      await toggleFixedExpensePayment(selectedFixed.id, month, year, val);
+      toast({ title: "Conta paga!", description: "Valor registrado com sucesso." });
+      setFixedModalOpen(false);
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
     }
   };
 
-  const handlePayCard = async (id: string) => {
+  // --- HANDLERS DE CARTÃO DE CRÉDITO ---
+  const clickPayCard = (card: any) => {
+    setSelectedCard(card);
+    // Tenta preencher o pagador com o usuário logado se possível, ou vazio
+    setCardPayer(''); 
+    setCardModalOpen(true);
+  };
+
+  const confirmPayCard = async () => {
+    if (!selectedCard || !cardPayer) {
+        toast({ title: "Selecione quem pagou", variant: "destructive" });
+        return;
+    }
     try {
-      await updateCreditCard(id, { isPaid: true, paidAt: new Date() });
-      toast({ title: "Fatura Paga!", description: "Cartão atualizado." });
-    } catch (error) {
-      toast({ title: "Erro", variant: "destructive" });
+      // Usa a nova função do contexto que gera o pagamento e o movimento de caixa
+      await payCreditCardBill(selectedCard.id, month, year, selectedCard.billAmount, cardPayer);
+      toast({ title: "Fatura Paga!", description: "Saldo atualizado." });
+      setCardModalOpen(false);
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
     }
   };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       
-      {/* HEADER: Flexível para Mobile */}
+      {/* HEADER */}
       <div className="flex flex-col gap-4">
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-sm text-muted-foreground">Visão geral das finanças</p>
+            <p className="text-sm text-muted-foreground">Visão geral de {month + 1}/{year}</p>
           </div>
         </div>
       </div>
 
-      {/* BLOCO 1: INDICADORES PRINCIPAIS (Grid 2x2 no Mobile) */}
+      {/* BLOCO 1: INDICADORES PRINCIPAIS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         
         {/* 1. Saldo Atual */}
@@ -109,7 +156,7 @@ export default function Dashboard() {
             <div className="text-lg md:text-2xl font-bold text-green-600 break-words">
               {formatCurrency(dashboardData.totalIncome)}
             </div>
-            <p className="text-[10px] md:text-xs text-muted-foreground">Previsto</p>
+            <p className="text-[10px] md:text-xs text-muted-foreground">Receitas do mês</p>
           </CardContent>
         </Card>
 
@@ -162,7 +209,7 @@ export default function Dashboard() {
 
       </div>
 
-      {/* BLOCO 3: DETALHAMENTO (Grid Ajustado) */}
+      {/* BLOCO 3: DETALHAMENTO */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         
         {/* Pendências (Lista Interativa) */}
@@ -203,7 +250,7 @@ export default function Dashboard() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-sm">{formatCurrency(item.amount)}</span>
-                          <Button size="icon" className="h-8 w-8 shrink-0" onClick={() => handlePayFixed(item.id, item.amount)}>
+                          <Button size="icon" className="h-8 w-8 shrink-0" onClick={() => clickPayFixed(item)}>
                             <Check className="h-4 w-4" />
                           </Button>
                         </div>
@@ -247,7 +294,7 @@ export default function Dashboard() {
                               <span className="block font-bold text-foreground text-sm">{formatCurrency(card.billAmount)}</span>
                               <span className="text-[10px] text-muted-foreground block">Limite: {formatCurrency(card.limit)}</span>
                            </div>
-                          <Button size="icon" className="h-8 w-8 shrink-0" onClick={() => handlePayCard(card.id)}>
+                          <Button size="icon" className="h-8 w-8 shrink-0" onClick={() => clickPayCard(card)}>
                             <Check className="h-4 w-4" />
                           </Button>
                         </div>
@@ -294,6 +341,69 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* --- MODAL PAGAMENTO CONTA FIXA --- */}
+      <Dialog open={fixedModalOpen} onOpenChange={setFixedModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pagar Conta Fixa</DialogTitle>
+            <DialogDescription>Confirme ou ajuste o valor pago.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="fixed-amount" className="text-right">Valor</Label>
+              <Input
+                id="fixed-amount"
+                type="number"
+                step="0.01"
+                value={fixedAmount}
+                onChange={(e) => setFixedAmount(e.target.value)}
+                className="col-span-3 font-bold text-lg"
+              />
+            </div>
+            <div className="text-xs text-muted-foreground text-center">
+               Conta: {selectedFixed?.name}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFixedModalOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmPayFixed} className="bg-green-600 hover:bg-green-700">Confirmar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- MODAL PAGAMENTO CARTÃO --- */}
+      <Dialog open={cardModalOpen} onOpenChange={setCardModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pagar Fatura</DialogTitle>
+            <DialogDescription>Quem está realizando o pagamento?</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+             <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Pagador</Label>
+                <Select value={cardPayer} onValueChange={setCardPayer}>
+                    <SelectTrigger className="col-span-3">
+                        <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {state.users.map(u => (
+                            <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+             </div>
+             <div className="text-center p-2 bg-muted/50 rounded text-sm">
+                Valor da Fatura: <strong>{selectedCard && formatCurrency(selectedCard.billAmount)}</strong>
+             </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCardModalOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmPayCard} className="bg-gradient-primary">Confirmar Pagamento</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

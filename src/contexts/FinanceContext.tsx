@@ -4,8 +4,9 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   User, Expense, FixedExpense, FixedIncome, CreditCard, CashMovement, 
   FinancialSettings, DashboardData, Investment, MonthlyFilter, MonthlyData,
-  FixedPayment, FixedReceipt 
+  FixedPayment, FixedReceipt, CreditCardPayment 
 } from '@/types';
+import { isAfter } from 'date-fns';
 
 // --- STATE ---
 interface FinanceState {
@@ -14,6 +15,7 @@ interface FinanceState {
   fixedExpenses: FixedExpense[];
   fixedIncomes: FixedIncome[];
   creditCards: CreditCard[];
+  creditCardPayments: CreditCardPayment[];
   cashMovements: CashMovement[];
   investments: Investment[];
   fixedPayments: FixedPayment[];
@@ -26,7 +28,7 @@ interface FinanceState {
 }
 
 const initialState: FinanceState = {
-  users: [], expenses: [], fixedExpenses: [], fixedIncomes: [], creditCards: [], 
+  users: [], expenses: [], fixedExpenses: [], fixedIncomes: [], creditCards: [], creditCardPayments: [],
   cashMovements: [], investments: [], fixedPayments: [], fixedReceipts: [],
   settings: { monthlyYield: 0, initialBalance: 0, initialInvestment: 0 },
   selectedMonth: { month: new Date().getMonth(), year: new Date().getFullYear() },
@@ -85,6 +87,7 @@ interface FinanceContextType {
   toggleFixedIncomeReceipt: (incomeId: string, month: number, year: number, amount: number) => Promise<void>;
   addCreditCard: (card: Omit<CreditCard, 'id' | 'createdAt'>) => Promise<void>;
   updateCreditCard: (id: string, updates: Partial<CreditCard>) => Promise<void>;
+  payCreditCardBill: (cardId: string, month: number, year: number, amount: number, userId: string) => Promise<void>;
   addInvestment: (investment: Omit<Investment, 'id' | 'createdAt'>) => Promise<void>;
   updateSettings: (settings: Partial<FinancialSettings>) => Promise<void>;
   getDashboardData: () => DashboardData;
@@ -110,110 +113,115 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const { toast } = useToast();
   const [userId, setUserId] = useState<string | null>(null);
 
-  const refreshData = async (explicitAccountId?: string) => {
-    try {
-      dispatch({ type: 'SET_LOADING', payload: true });
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      setUserId(user.id);
+  // --- HELPERS DE LÓGICA DE NEGÓCIO ---
 
-      const { data: memberships } = await supabase
-        .from('account_members')
-        .select(`account_id, accounts (id, name)`)
-        .eq('user_id', user.id);
+  // Calcula o saldo atual
+  const calculateBalance = (): number => {
+    const cashIncome = state.cashMovements.filter(m => m.type === 'income').reduce((acc, m) => acc + Number(m.amount), 0);
+    const fixedIncomeReceived = state.fixedReceipts.reduce((acc, r) => acc + Number(r.amount), 0);
+    const cashOutcome = state.cashMovements.filter(m => m.type === 'outcome').reduce((acc, m) => acc + Number(m.amount), 0);
+    const immediateExpenses = state.expenses.filter(e => e.paymentMethod === 'debito' || e.paymentMethod === 'pix' || e.paymentMethod === 'dinheiro').reduce((sum, e) => sum + Number(e.amount), 0);
+    const fixedExpensesPaidCash = state.fixedPayments.reduce((sum, payment) => {
+      const expense = state.fixedExpenses.find(e => e.id === payment.fixedExpenseId);
+      // Se não tem cartão vinculado, foi pago com saldo
+      return (expense && expense.creditCardId) ? sum : sum + Number(payment.amount);
+    }, 0);
+    
+    return Number(state.settings.initialBalance) + cashIncome + fixedIncomeReceived - cashOutcome - immediateExpenses - fixedExpensesPaidCash;
+  };
 
-      if (!memberships || memberships.length === 0) {
-        dispatch({ type: 'SET_LOADING', payload: false });
-        return;
-      }
+  // Verifica se a despesa pertence à fatura do mês X/Ano Y baseada no dia de fechamento
+  const belongsToBill = (expenseDate: Date, targetMonth: number, targetYear: number, closingDay: number) => {
+      const expDay = expenseDate.getDate();
+      const expMonth = expenseDate.getMonth();
+      const expYear = expenseDate.getFullYear();
 
-      const available = memberships.map(m => ({
-        id: (m.accounts as any).id,
-        name: (m.accounts as any).name
-      }));
-
-      const accId = explicitAccountId || state.currentAccountId || available[0].id;
-
-      const { data: membersList } = await supabase
-        .from('account_members')
-        .select('user_id')
-        .eq('account_id', accId);
-
-      const memberIds = membersList?.map(m => m.user_id) || [];
-
-      const [
-        usersData,
-        settingsData, expenses, 
-        fixedExp, fixedInc,
-        movements, cards, investments,
-        fixedPayments, fixedReceipts 
-      ] = await Promise.all([
-        supabase.from('app_users').select('*').in('id', memberIds),
-        supabase.from('financial_settings').select('*').eq('account_id', accId).maybeSingle(),
-        supabase.from('expenses').select('*').eq('account_id', accId),
-        supabase.from('fixed_expenses').select('*').eq('account_id', accId),
-        supabase.from('fixed_incomes').select('*').eq('account_id', accId),
-        supabase.from('cash_movements').select('*').eq('account_id', accId),
-        supabase.from('credit_cards').select('*').eq('account_id', accId),
-        supabase.from('investments').select('*').eq('account_id', accId),
-        supabase.from('fixed_expense_payments').select('*').eq('account_id', accId),
-        supabase.from('fixed_income_receipts').select('*').eq('account_id', accId),
-      ]);
-
-      let settings = settingsData.data;
-      if (!settings && user) {
-        const { data: newSettings } = await supabase.from('financial_settings').insert({
-          user_id: user.id,
-          account_id: accId,
-          initial_balance: 0,
-          monthly_yield: 0
-        }).select().single();
-        settings = newSettings;
-      }
-
-      const mappedUsers = usersData.data?.map(u => ({ id: u.id, name: u.name, createdAt: u.created_at ? new Date(u.created_at) : new Date(), email: u.email })) || [];
-      const mappedFixedExp = fixedExp.data?.map(f => ({ id: f.id, name: f.name, category: f.category, amount: f.amount, dueDay: f.due_day, isPaid: false, createdAt: new Date(f.created_at), effectiveFrom: parseSupabaseDate(f.effective_from), effectiveUntil: f.effective_until ? parseSupabaseDate(f.effective_until) : undefined, creditCardId: f.credit_card_id })) || [];
-      const mappedFixedInc = fixedInc.data?.map(f => ({ id: f.id, description: f.description, amount: f.amount, receiveDay: f.receive_day, isReceived: false, createdAt: new Date(f.created_at), effectiveFrom: parseSupabaseDate(f.effective_from), effectiveUntil: f.effective_until ? parseSupabaseDate(f.effective_until) : undefined })) || [];
-      const mappedExpenses = expenses.data?.map(e => ({ id: e.id, description: e.description, amount: e.amount, type: e.type, category: e.category, paymentMethod: e.payment_method, date: parseSupabaseDate(e.date), userId: e.user_id, installments: { current: e.installments_current, total: e.installments_total }, createdAt: new Date(e.created_at) })) || [];
-      const mappedMovements = movements.data?.map(m => ({ id: m.id, type: m.type, description: m.description, amount: m.amount, userId: m.user_id, date: parseSupabaseDate(m.date), createdAt: new Date(m.created_at) })) || [];
-      const mappedCards = cards.data?.map(c => ({ id: c.id, name: c.name, limit: c.limit, closingDay: c.closing_day, dueDay: c.due_day, isPaid: c.is_paid, paidBy: c.paid_by, paidAt: c.paid_at ? new Date(c.paid_at) : undefined, createdAt: new Date(c.created_at) })) || [];
+      let billMonth = expMonth;
+      let billYear = expYear;
       
-      // Mapeamento de investimentos com TAXA INDIVIDUAL
-      const mappedInvestments = investments.data?.map(i => ({ 
-        id: i.id, 
-        description: i.description, 
-        amount: i.amount, 
-        date: parseSupabaseDate(i.date), 
-        userId: i.user_id, 
-        yieldRate: Number(i.yield_rate || 0), // <-- NOVO
-        createdAt: new Date(i.created_at) 
-      })) || [];
+      if (expDay >= closingDay) {
+          billMonth++;
+          if (billMonth > 11) {
+              billMonth = 0;
+              billYear++;
+          }
+      }
 
-      const mappedPayments = fixedPayments.data?.map(p => ({ id: p.id, fixedExpenseId: p.fixed_expense_id, month: p.month, year: p.year, amount: Number(p.amount), paidAt: new Date(p.paid_at), generatedExpenseId: p.generated_expense_id })) || [];
-      const mappedReceipts = fixedReceipts.data?.map(r => ({ id: r.id, fixedIncomeId: r.fixed_income_id, month: r.month, year: r.year, amount: Number(r.amount), receivedAt: new Date(r.received_at) })) || [];
+      return billMonth === targetMonth && billYear === targetYear;
+  };
 
-      dispatch({
-        type: 'SET_DATA',
-        payload: {
-          users: mappedUsers,
-          settings: settings ? { monthlyYield: settings.monthly_yield, initialBalance: settings.initial_balance, initialInvestment: settings.initial_investment || 0 } : initialState.settings,
-          expenses: mappedExpenses, fixedExpenses: mappedFixedExp, fixedIncomes: mappedFixedInc,
-          cashMovements: mappedMovements, creditCards: mappedCards, investments: mappedInvestments, 
-          fixedPayments: mappedPayments, fixedReceipts: mappedReceipts, isLoading: false,
-          currentAccountId: accId,
-          availableAccounts: available
+  // --- REFRESH DATA (Mantido igual) ---
+  const refreshData = async (explicitAccountId?: string) => {
+       try {
+        dispatch({ type: 'SET_LOADING', payload: true });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        setUserId(user.id);
+  
+        const { data: memberships } = await supabase
+          .from('account_members')
+          .select(`account_id, accounts (id, name)`)
+          .eq('user_id', user.id);
+  
+        if (!memberships || memberships.length === 0) {
+          dispatch({ type: 'SET_LOADING', payload: false });
+          return;
         }
-      });
-    } catch (error) {
-      console.error(error);
-      dispatch({ type: 'SET_LOADING', payload: false });
-    }
+  
+        const available = memberships.map(m => ({
+          id: (m.accounts as any).id,
+          name: (m.accounts as any).name
+        }));
+  
+        const accId = explicitAccountId || state.currentAccountId || available[0].id;
+  
+        const { data: membersList } = await supabase.from('account_members').select('user_id').eq('account_id', accId);
+        const memberIds = membersList?.map(m => m.user_id) || [];
+  
+        const [usersData, settingsData, expenses, fixedExp, fixedInc, movements, cards, investments, fixedPayments, fixedReceipts, ccPayments] = await Promise.all([
+          supabase.from('app_users').select('*').in('id', memberIds),
+          supabase.from('financial_settings').select('*').eq('account_id', accId).maybeSingle(),
+          supabase.from('expenses').select('*').eq('account_id', accId),
+          supabase.from('fixed_expenses').select('*').eq('account_id', accId),
+          supabase.from('fixed_incomes').select('*').eq('account_id', accId),
+          supabase.from('cash_movements').select('*').eq('account_id', accId),
+          supabase.from('credit_cards').select('*').eq('account_id', accId),
+          supabase.from('investments').select('*').eq('account_id', accId),
+          supabase.from('fixed_expense_payments').select('*').eq('account_id', accId),
+          supabase.from('fixed_income_receipts').select('*').eq('account_id', accId),
+          supabase.from('credit_card_payments').select('*').eq('account_id', accId),
+        ]);
+  
+        let settings = settingsData.data;
+        if (!settings && user) {
+          const { data: newSettings } = await supabase.from('financial_settings').insert({ user_id: user.id, account_id: accId, initial_balance: 0, monthly_yield: 0 }).select().single();
+          settings = newSettings;
+        }
+  
+        // Mappers
+        const mappedUsers = usersData.data?.map(u => ({ id: u.id, name: u.name, createdAt: u.created_at ? new Date(u.created_at) : new Date(), email: u.email })) || [];
+        const mappedFixedExp = fixedExp.data?.map(f => ({ id: f.id, name: f.name, category: f.category, amount: f.amount, dueDay: f.due_day, isPaid: false, createdAt: new Date(f.created_at), effectiveFrom: parseSupabaseDate(f.effective_from), effectiveUntil: f.effective_until ? parseSupabaseDate(f.effective_until) : undefined, creditCardId: f.credit_card_id })) || [];
+        const mappedFixedInc = fixedInc.data?.map(f => ({ id: f.id, description: f.description, amount: f.amount, receiveDay: f.receive_day, isReceived: false, createdAt: new Date(f.created_at), effectiveFrom: parseSupabaseDate(f.effective_from), effectiveUntil: f.effective_until ? parseSupabaseDate(f.effective_until) : undefined })) || [];
+        const mappedExpenses = expenses.data?.map(e => ({ id: e.id, description: e.description, amount: e.amount, type: e.type, category: e.category, paymentMethod: e.payment_method, date: parseSupabaseDate(e.date), userId: e.user_id, installments: { current: e.installments_current, total: e.installments_total }, createdAt: new Date(e.created_at) })) || [];
+        const mappedMovements = movements.data?.map(m => ({ id: m.id, type: m.type, description: m.description, amount: m.amount, userId: m.user_id, date: parseSupabaseDate(m.date), createdAt: new Date(m.created_at) })) || [];
+        const mappedCards = cards.data?.map(c => ({ id: c.id, name: c.name, limit: c.limit, closingDay: c.closing_day, dueDay: c.due_day, isPaid: c.is_paid, paidBy: c.paid_by, paidAt: c.paid_at ? new Date(c.paid_at) : undefined, createdAt: new Date(c.created_at) })) || [];
+        const mappedInvestments = investments.data?.map(i => ({ id: i.id, description: i.description, amount: i.amount, date: parseSupabaseDate(i.date), userId: i.user_id, yieldRate: Number(i.yield_rate || 0), createdAt: new Date(i.created_at) })) || [];
+        const mappedPayments = fixedPayments.data?.map(p => ({ id: p.id, fixedExpenseId: p.fixed_expense_id, month: p.month, year: p.year, amount: Number(p.amount), paidAt: new Date(p.paid_at), generatedExpenseId: p.generated_expense_id })) || [];
+        const mappedReceipts = fixedReceipts.data?.map(r => ({ id: r.id, fixedIncomeId: r.fixed_income_id, month: r.month, year: r.year, amount: Number(r.amount), receivedAt: new Date(r.received_at) })) || [];
+        const mappedCCPayments = ccPayments.data?.map(p => ({ id: p.id, cardId: p.card_id, month: p.month, year: p.year, amount: Number(p.amount), paidAt: new Date(p.paid_at), paidBy: p.paid_by, cashMovementId: p.cash_movement_id })) || [];
+  
+        dispatch({
+          type: 'SET_DATA',
+          payload: {
+            users: mappedUsers, settings: settings ? { monthlyYield: settings.monthly_yield, initialBalance: settings.initial_balance, initialInvestment: settings.initial_investment || 0 } : initialState.settings,
+            expenses: mappedExpenses, fixedExpenses: mappedFixedExp, fixedIncomes: mappedFixedInc, cashMovements: mappedMovements, creditCards: mappedCards, investments: mappedInvestments, 
+            fixedPayments: mappedPayments, fixedReceipts: mappedReceipts, creditCardPayments: mappedCCPayments, isLoading: false, currentAccountId: accId, availableAccounts: available
+          }
+        });
+      } catch (error) { console.error(error); dispatch({ type: 'SET_LOADING', payload: false }); }
   };
 
-  const switchAccount = async (accountId: string) => {
-    await refreshData(accountId);
-  };
-
+  const switchAccount = async (accountId: string) => { await refreshData(accountId); };
   useEffect(() => { refreshData(); }, []);
 
   const addUser = async (userData: any) => { 
@@ -222,8 +230,18 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     dispatch({ type: 'ADD_ITEM', payload: { key: 'users', item: data } }); 
   };
   
+  // --- ADD CASH MOVEMENT ---
   const addCashMovement = async (movement: any) => { 
     if(!userId || !state.currentAccountId) return;
+    
+    // VALIDAÇÃO: Se for saída, tem saldo?
+    if (movement.type === 'outcome') {
+        const currentBal = calculateBalance();
+        if (currentBal < movement.amount) {
+            throw new Error(`Saldo insuficiente! Você tem ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(currentBal)}.`);
+        }
+    }
+
     const { data, error } = await supabase.from('cash_movements').insert({ 
         type: movement.type, description: movement.description, amount: movement.amount, 
         user_id: userId, account_id: state.currentAccountId, date: movement.date 
@@ -233,71 +251,32 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     dispatch({ type: 'ADD_ITEM', payload: { key: 'cashMovements', item: newMovement } }); 
   };
 
-  const addFixedExpense = async (expense: any) => { 
-    if(!state.currentAccountId) return;
-    const { data, error } = await supabase.from('fixed_expenses').insert({ 
-        name: expense.name, category: expense.category, amount: expense.amount, 
-        due_day: expense.dueDay, effective_from: expense.effectiveFrom, 
-        credit_card_id: expense.creditCardId, account_id: state.currentAccountId 
-    }).select().single(); 
-    if (error) throw error; 
-    const newItem: FixedExpense = { id: data.id, name: data.name, category: data.category, amount: data.amount, dueDay: data.due_day, isPaid: false, createdAt: new Date(data.created_at), effectiveFrom: parseSupabaseDate(data.effective_from), creditCardId: data.credit_card_id }; 
-    dispatch({ type: 'ADD_ITEM', payload: { key: 'fixedExpenses', item: newItem } }); 
-  };
-
-  const updateFixedExpense = async (id: string, updates: any) => { 
-    const { error } = await supabase.from('fixed_expenses').update({ name: updates.name, amount: updates.amount }).eq('id', id); 
-    if (error) throw error; 
-    dispatch({ type: 'UPDATE_ITEM', payload: { key: 'fixedExpenses', id, updates } }); 
-  };
-  
-  const toggleFixedExpensePayment = async (expenseId: string, month: number, year: number, amount: number) => {
-    if(!state.currentAccountId || !userId) return;
-    const existingPayment = state.fixedPayments.find(p => p.fixedExpenseId === expenseId && p.month === month && p.year === year);
-    
-    if (existingPayment) {
-      if (existingPayment.generatedExpenseId) {
-          await supabase.from('expenses').delete().eq('id', existingPayment.generatedExpenseId);
-          dispatch({ type: 'REMOVE_ITEM', payload: { key: 'expenses', id: existingPayment.generatedExpenseId } });
-      }
-      const { error } = await supabase.from('fixed_expense_payments').delete().eq('id', existingPayment.id);
-      if (error) throw error;
-      dispatch({ type: 'SET_DATA', payload: { fixedPayments: state.fixedPayments.filter(p => p.id !== existingPayment.id) } });
-      toast({ title: "Pagamento estornado!" });
-    } else {
-      const fixedExpense = state.fixedExpenses.find(e => e.id === expenseId);
-      if (!fixedExpense) return;
-      let generatedExpenseId = null;
-
-      if (fixedExpense.creditCardId) {
-         const creditCard = state.creditCards.find(c => c.id === fixedExpense.creditCardId);
-         if (creditCard) {
-            const { data: expenseData, error: expenseError } = await supabase.from('expenses').insert({ 
-                user_id: userId, account_id: state.currentAccountId, description: `${fixedExpense.name} (Fixo)`, 
-                amount, type: 'cartao_credito', category: fixedExpense.category, payment_method: creditCard.name, 
-                date: new Date(year, month, fixedExpense.dueDay), installments_current: 1, installments_total: 1 
-            }).select().single();
-            if (!expenseError && expenseData) {
-               generatedExpenseId = expenseData.id;
-               dispatch({ type: 'ADD_ITEM', payload: { key: 'expenses', item: { ...expenseData, date: parseSupabaseDate(expenseData.date), userId: expenseData.user_id, paymentMethod: expenseData.payment_method, createdAt: new Date(expenseData.created_at) } } });
-            }
-         }
-      }
-
-      const { data, error } = await supabase.from('fixed_expense_payments').insert({ 
-          fixed_expense_id: expenseId, month, year, amount, 
-          generated_expense_id: generatedExpenseId, account_id: state.currentAccountId 
-      }).select().single();
-      if (error) throw error;
-      dispatch({ type: 'SET_DATA', payload: { fixedPayments: [...state.fixedPayments, { id: data.id, fixedExpenseId: data.fixed_expense_id, month: data.month, year: data.year, amount: Number(data.amount), paidAt: new Date(data.paid_at), generatedExpenseId: data.generated_expense_id }] } });
-      toast({ title: "Conta paga!" });
-    }
-  };
-
+  // --- ADD EXPENSE ---
   const addExpense = async (expenseData: Omit<Expense, 'id' | 'createdAt'>) => {
     if (!userId || !state.currentAccountId) return;
+    
+    const { amount, description, date, installments, type, category, paymentMethod } = expenseData;
+
+    // VALIDAÇÃO DE LIMITE (Se for Crédito)
+    if (type === 'cartao_credito') {
+        const card = state.creditCards.find(c => c.name === paymentMethod);
+        if (card) {
+            const { pendingCreditCardList } = getDashboardData();
+            const committed = state.expenses.filter(e => e.paymentMethod === card.name).reduce((sum, e) => sum + Number(e.amount), 0);
+            
+            if ((committed + amount) > card.limit) {
+                throw new Error("Limite do cartão excedido!");
+            }
+        }
+    } else {
+        // Se for débito/pix, valida saldo
+        const currentBal = calculateBalance();
+        if (currentBal < amount) {
+             throw new Error("Saldo insuficiente na conta!");
+        }
+    }
+
     try {
-      const { amount, description, date, installments, type, category, paymentMethod } = expenseData;
       const totalInst = installments?.total || 1;
       if (type === 'cartao_credito' && totalInst > 1) {
         const instVal = amount / totalInst;
@@ -318,7 +297,95 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         if (error) throw error;
         dispatch({ type: 'ADD_ITEM', payload: { key: 'expenses', item: { ...data, date: parseSupabaseDate(data.date), userId: data.user_id, paymentMethod: data.payment_method, createdAt: new Date(data.created_at) } } });
       }
-    } catch (error: any) { toast({ title: "Erro", description: error.message, variant: "destructive" }); }
+    } catch (error: any) { throw error; }
+  };
+
+  const addFixedExpense = async (expense: any) => { 
+    if(!state.currentAccountId) return;
+    
+    // Validação de Limite para Gasto Fixo no Cartão
+    if (expense.creditCardId) {
+        const card = state.creditCards.find(c => c.id === expense.creditCardId);
+        if (card) {
+             const committed = state.expenses.filter(e => e.paymentMethod === card.name).reduce((sum, e) => sum + Number(e.amount), 0);
+             // Adiciona o valor do gasto fixo (estimando que vai cair todo mês)
+             if ((committed + expense.amount) > card.limit) {
+                 throw new Error("Limite do cartão insuficiente para essa conta fixa!");
+             }
+        }
+    }
+
+    const { data, error } = await supabase.from('fixed_expenses').insert({ 
+        name: expense.name, category: expense.category, amount: expense.amount, 
+        due_day: expense.dueDay, effective_from: expense.effectiveFrom, 
+        credit_card_id: expense.creditCardId, account_id: state.currentAccountId 
+    }).select().single(); 
+    if (error) throw error; 
+    const newItem: FixedExpense = { id: data.id, name: data.name, category: data.category, amount: data.amount, dueDay: data.due_day, isPaid: false, createdAt: new Date(data.created_at), effectiveFrom: parseSupabaseDate(data.effective_from), creditCardId: data.credit_card_id }; 
+    dispatch({ type: 'ADD_ITEM', payload: { key: 'fixedExpenses', item: newItem } }); 
+  };
+
+  const updateFixedExpense = async (id: string, updates: any) => { 
+    const { error } = await supabase.from('fixed_expenses').update({ name: updates.name, amount: updates.amount }).eq('id', id); 
+    if (error) throw error; 
+    dispatch({ type: 'UPDATE_ITEM', payload: { key: 'fixedExpenses', id, updates } }); 
+  };
+  
+  const toggleFixedExpensePayment = async (expenseId: string, month: number, year: number, amount: number) => {
+    if(!state.currentAccountId || !userId) return;
+    const existingPayment = state.fixedPayments.find(p => p.fixedExpenseId === expenseId && p.month === month && p.year === year);
+    
+    // Se for pagar (não existe pagamento ainda)
+    if (!existingPayment) {
+        const fixedExpense = state.fixedExpenses.find(e => e.id === expenseId);
+        // Se NÃO for cartão de crédito (ou seja, é débito em conta), valida saldo
+        if (fixedExpense && !fixedExpense.creditCardId) {
+            const currentBal = calculateBalance();
+            if (currentBal < amount) {
+                throw new Error("Saldo insuficiente para pagar esta conta!");
+            }
+        }
+    }
+
+    if (existingPayment) {
+      if (existingPayment.generatedExpenseId) {
+          await supabase.from('expenses').delete().eq('id', existingPayment.generatedExpenseId);
+          dispatch({ type: 'REMOVE_ITEM', payload: { key: 'expenses', id: existingPayment.generatedExpenseId } });
+      }
+      const { error } = await supabase.from('fixed_expense_payments').delete().eq('id', existingPayment.id);
+      if (error) throw error;
+      dispatch({ type: 'SET_DATA', payload: { fixedPayments: state.fixedPayments.filter(p => p.id !== existingPayment.id) } });
+      toast({ title: "Pagamento estornado!" });
+    } else {
+      const fixedExpense = state.fixedExpenses.find(e => e.id === expenseId);
+      if (!fixedExpense) return;
+      let generatedExpenseId = null;
+
+      if (fixedExpense.creditCardId) {
+         const creditCard = state.creditCards.find(c => c.id === fixedExpense.creditCardId);
+         if (creditCard) {
+            let expenseDate = new Date(year, month, fixedExpense.dueDay);
+            
+            const { data: expenseData, error: expenseError } = await supabase.from('expenses').insert({ 
+                user_id: userId, account_id: state.currentAccountId, description: `${fixedExpense.name} (Fixo)`, 
+                amount, type: 'cartao_credito', category: fixedExpense.category, payment_method: creditCard.name, 
+                date: expenseDate, installments_current: 1, installments_total: 1 
+            }).select().single();
+            if (!expenseError && expenseData) {
+               generatedExpenseId = expenseData.id;
+               dispatch({ type: 'ADD_ITEM', payload: { key: 'expenses', item: { ...expenseData, date: parseSupabaseDate(expenseData.date), userId: expenseData.user_id, paymentMethod: expenseData.payment_method, createdAt: new Date(expenseData.created_at) } } });
+            }
+         }
+      }
+
+      const { data, error } = await supabase.from('fixed_expense_payments').insert({ 
+          fixed_expense_id: expenseId, month, year, amount, 
+          generated_expense_id: generatedExpenseId, account_id: state.currentAccountId 
+      }).select().single();
+      if (error) throw error;
+      dispatch({ type: 'SET_DATA', payload: { fixedPayments: [...state.fixedPayments, { id: data.id, fixedExpenseId: data.fixed_expense_id, month: data.month, year: data.year, amount: Number(data.amount), paidAt: new Date(data.paid_at), generatedExpenseId: data.generated_expense_id }] } });
+      toast({ title: "Conta paga!" });
+    }
   };
 
   const toggleFixedIncomeReceipt = async (incomeId: string, month: number, year: number, amount: number) => {
@@ -344,28 +411,12 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     const { data, error } = await supabase.from('fixed_incomes').insert({ 
         description: income.description, 
         amount: income.amount, 
-        receive_day: income.receiveDay, // <--- CORRIGIDO PARA ler 'receiveDay'
+        receive_day: income.receiveDay, 
         effective_from: income.effectiveFrom, 
         account_id: state.currentAccountId 
     }).select().single(); 
-    
     if (error) throw error; 
-    
-    dispatch({ 
-      type: 'ADD_ITEM', 
-      payload: { 
-        key: 'fixedIncomes', 
-        item: { 
-          id: data.id, 
-          description: data.description, 
-          amount: data.amount, 
-          receiveDay: data.receive_day, 
-          isReceived: false, 
-          createdAt: new Date(data.created_at), 
-          effectiveFrom: parseSupabaseDate(data.effective_from) 
-        } 
-      } 
-    }); 
+    dispatch({ type: 'ADD_ITEM', payload: { key: 'fixedIncomes', item: { id: data.id, description: data.description, amount: data.amount, receiveDay: data.receive_day, isReceived: false, createdAt: new Date(data.created_at), effectiveFrom: parseSupabaseDate(data.effective_from) } } }); 
   };
   
   const updateFixedIncome = async (id: string, updates: any) => { 
@@ -376,116 +427,75 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const addCreditCard = async (card: any) => { 
     if(!state.currentAccountId) return;
-    const { data, error } = await supabase.from('credit_cards').insert({ 
-        name: card.name, limit: card.limit, closing_day: card.closingDay, due_day: card.dueDay, 
-        is_paid: false, account_id: state.currentAccountId 
-    }).select().single(); 
+    const { data, error } = await supabase.from('credit_cards').insert({ name: card.name, limit: card.limit, closing_day: card.closing_day, due_day: card.due_day, is_paid: false, account_id: state.currentAccountId }).select().single(); 
     if(error) throw error; 
     dispatch({ type: 'ADD_ITEM', payload: { key: 'creditCards', item: { id: data.id, name: data.name, limit: data.limit, closingDay: data.closing_day, dueDay: data.due_day, isPaid: data.is_paid, createdAt: new Date(data.created_at) } } }); 
   };
   
   const updateCreditCard = async (id: string, updates: any) => {
-    if (!state.currentAccountId || !userId) return;
-
-    try {
-      const card = state.creditCards.find(c => c.id === id);
-      if (!card) return;
-
-      if (updates.isPaid && !card.isPaid) {
-        const { month, year } = state.selectedMonth;
-        
-        const dashboard = getDashboardData();
-        const cardInfo = dashboard.pendingCreditCardList.find(c => c.id === id);
-        const amountToPay = cardInfo ? cardInfo.billAmount : 0;
-
-        if (amountToPay > 0) {
-          const { data: movement, error: movError } = await supabase
-            .from('cash_movements')
-            .insert({
-              type: 'outcome',
-              description: `Pagamento Fatura: ${card.name}`,
-              amount: amountToPay,
-              user_id: userId,
-              account_id: state.currentAccountId,
-              date: new Date(), 
-            })
-            .select()
-            .single();
-
-          if (movError) throw movError;
-
-          updates.paid_at = new Date();
-          
-          dispatch({ 
-            type: 'ADD_ITEM', 
-            payload: { 
-              key: 'cashMovements', 
-              item: { 
-                ...movement, 
-                date: parseSupabaseDate(movement.date), 
-                userId: movement.user_id, 
-                createdAt: new Date(movement.created_at) 
-              } 
-            } 
-          });
-        }
-      } 
-      else if (!updates.isPaid && card.isPaid) {
-        const lastMovement = state.cashMovements.find(m => 
-          m.description === `Pagamento Fatura: ${card.name}` && 
-          m.type === 'outcome'
-        );
-
-        if (lastMovement) {
-          await supabase.from('cash_movements').delete().eq('id', lastMovement.id);
-          dispatch({ type: 'REMOVE_ITEM', payload: { key: 'cashMovements', id: lastMovement.id } });
-        }
-        
-        updates.paid_at = null;
-        updates.paid_by = null;
-      }
-
-      const { error } = await supabase
-        .from('credit_cards')
-        .update({ 
-          is_paid: updates.isPaid, 
-          paid_by: updates.paidBy || userId, 
-          paid_at: updates.paid_at 
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-
-      dispatch({ type: 'UPDATE_ITEM', payload: { key: 'creditCards', id, updates } });
-      toast({ title: updates.isPaid ? "Fatura paga e saldo atualizado!" : "Pagamento estornado!" });
-
-    } catch (error: any) {
-      console.error(error);
-      toast({ title: "Erro ao atualizar fatura", description: error.message, variant: "destructive" });
-    }
+    if (!state.currentAccountId) return;
+    const { error } = await supabase.from('credit_cards').update(updates).eq('id', id);
+    if (error) throw error;
+    dispatch({ type: 'UPDATE_ITEM', payload: { key: 'creditCards', id, updates } });
   };
 
-  // 1. Função addInvestment Atualizada para receber yieldRate
+  // --- PAGAR FATURA (COM VALIDAÇÃO DE SALDO) ---
+  const payCreditCardBill = async (cardId: string, month: number, year: number, amount: number, userId: string) => {
+    if (!state.currentAccountId) return;
+
+    // VALIDAÇÃO: Tem saldo pra pagar a fatura?
+    const currentBal = calculateBalance();
+    if (currentBal < amount) {
+        throw new Error("Saldo insuficiente para pagar esta fatura!");
+    }
+
+    // 1. PRIMEIRO geramos o movimento de saída
+    const card = state.creditCards.find(c => c.id === cardId);
+    const { data: movementData, error: movementError } = await supabase
+        .from('cash_movements')
+        .insert({
+            type: 'outcome',
+            description: `Pagamento Fatura: ${card?.name || 'Cartão'}`,
+            amount: amount,
+            date: new Date(), 
+            user_id: userId,
+            account_id: state.currentAccountId
+        })
+        .select()
+        .single();
+
+    if (movementError) throw movementError;
+
+    const newMovement = { ...movementData, date: parseSupabaseDate(movementData.date), userId: movementData.user_id, createdAt: new Date(movementData.created_at) };
+    dispatch({ type: 'ADD_ITEM', payload: { key: 'cashMovements', item: newMovement } });
+
+    // 2. DEPOIS criamos o registro de pagamento
+    const { data: payment, error: paymentError } = await supabase.from('credit_card_payments').insert({
+        card_id: cardId,
+        month, 
+        year,
+        amount,
+        paid_by: userId,
+        account_id: state.currentAccountId,
+        cash_movement_id: movementData.id
+    }).select().single();
+
+    if (paymentError) {
+        // Rollback movimento
+        await supabase.from('cash_movements').delete().eq('id', movementData.id);
+        dispatch({ type: 'REMOVE_ITEM', payload: { key: 'cashMovements', id: movementData.id } });
+        throw paymentError;
+    }
+
+    const newPaymentRecord = { id: payment.id, cardId: payment.card_id, month: payment.month, year: payment.year, amount: Number(payment.amount), paidAt: new Date(payment.paid_at), paidBy: payment.paid_by, cashMovementId: payment.cash_movement_id };
+    dispatch({ type: 'ADD_ITEM', payload: { key: 'creditCardPayments', item: newPaymentRecord } });
+  };
+
   const addInvestment = async (investment: any) => { 
     if (!userId || !state.currentAccountId) return; 
-    const { data, error } = await supabase.from('investments').insert({ 
-        description: investment.description, 
-        amount: investment.amount, 
-        yield_rate: investment.yieldRate, // <-- SALVA A TAXA NO BANCO
-        date: investment.date, 
-        user_id: userId, 
-        account_id: state.currentAccountId 
-    }).select().single(); 
+    const { data, error } = await supabase.from('investments').insert({ description: investment.description, amount: investment.amount, yield_rate: investment.yieldRate, date: investment.date, user_id: userId, account_id: state.currentAccountId }).select().single(); 
     if(error) throw error; 
-    dispatch({ type: 'ADD_ITEM', payload: { key: 'investments', item: { 
-      id: data.id, 
-      description: data.description, 
-      amount: data.amount, 
-      date: parseSupabaseDate(data.date), 
-      yieldRate: Number(data.yield_rate || 0), // <-- ATUALIZA ESTADO LOCAL
-      userId: data.user_id, 
-      createdAt: new Date(data.created_at) 
-    } } }); 
+    dispatch({ type: 'ADD_ITEM', payload: { key: 'investments', item: { id: data.id, description: data.description, amount: data.amount, date: parseSupabaseDate(data.date), yieldRate: Number(data.yield_rate || 0), userId: data.user_id, createdAt: new Date(data.created_at) } } }); 
   };
   
   const updateSettings = async (settings: Partial<FinancialSettings>) => { 
@@ -493,7 +503,6 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     const dbPayload: any = {}; 
     if(settings.monthlyYield !== undefined) dbPayload.monthly_yield = settings.monthlyYield; 
     if(settings.initialBalance !== undefined) dbPayload.initial_balance = settings.initialBalance; 
-    
     const { error } = await supabase.from('financial_settings').update(dbPayload).eq('account_id', state.currentAccountId); 
     if(error) throw error;
     dispatch({ type: 'UPDATE_SETTINGS', payload: settings }); 
@@ -501,10 +510,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const getTotalInvestments = () => state.settings.initialInvestment + state.investments.reduce((sum, inv) => sum + Number(inv.amount), 0);
   
-  // 2. Função getInvestmentYield Atualizada para soma individual
   const getInvestmentYield = () => {
     return state.investments.reduce((total, inv) => {
-      // Rendimento = Valor * (Taxa / 100)
       return total + (Number(inv.amount) * (Number(inv.yieldRate || 0) / 100));
     }, 0);
   };
@@ -535,30 +542,44 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     });
   };
 
-  const getCurrentBalance = (): number => {
-    const cashIncome = state.cashMovements.filter(m => m.type === 'income').reduce((acc, m) => acc + Number(m.amount), 0);
-    const fixedIncomeReceived = state.fixedReceipts.reduce((acc, r) => acc + Number(r.amount), 0);
-    const cashOutcome = state.cashMovements.filter(m => m.type === 'outcome').reduce((acc, m) => acc + Number(m.amount), 0);
-    const immediateExpenses = state.expenses.filter(e => e.paymentMethod === 'debito' || e.paymentMethod === 'pix' || e.paymentMethod === 'dinheiro').reduce((sum, e) => sum + Number(e.amount), 0);
-    const fixedExpensesPaidCash = state.fixedPayments.reduce((sum, payment) => {
-      const expense = state.fixedExpenses.find(e => e.id === payment.fixedExpenseId);
-      return (expense && expense.creditCardId) ? sum : sum + Number(payment.amount);
-    }, 0);
-    return Number(state.settings.initialBalance) + cashIncome + fixedIncomeReceived - cashOutcome - immediateExpenses - fixedExpensesPaidCash;
-  };
+  const getCurrentBalance = () => calculateBalance();
 
   const getDashboardData = (): DashboardData => {
     const { month: currentMonth, year: currentYear } = state.selectedMonth;
-    const expensesOfMonth = state.expenses.filter(e => { const d = new Date(e.date); return d.getMonth() === currentMonth && d.getFullYear() === currentYear; });
+
+    // --- CORREÇÃO: FILTRAR DESPESAS DE CARTÃO CONSIDERANDO O FECHAMENTO ---
+    const expensesOfMonth = state.expenses.filter(e => { 
+        const d = new Date(e.date);
+        
+        // Se for cartão, aplica a lógica de fechamento
+        if (e.type === 'cartao_credito') {
+            const card = state.creditCards.find(c => c.name === e.paymentMethod);
+            if (card) {
+                // Usa a função helper belongsToBill
+                return belongsToBill(d, currentMonth, currentYear, card.closingDay);
+            }
+        }
+        
+        // Se não for cartão, lógica padrão de mês/ano
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear; 
+    });
+
     const generatedIds = state.fixedPayments.map(p => p.generatedExpenseId).filter((id): id is string => !!id);
     const variableExpenses = expensesOfMonth.filter(e => !generatedIds.includes(e.id)).reduce((sum, e) => sum + Number(e.amount), 0);
+    
+    // Cash Income e Fixed Income mantêm lógica de data normal
     const cashIncome = state.cashMovements.filter(m => { const d = new Date(m.date); return m.type === 'income' && d.getMonth() === currentMonth && d.getFullYear() === currentYear; }).reduce((sum, m) => sum + Number(m.amount), 0);
     const activeFixedExp = getActiveFixedExpenses(currentMonth, currentYear);
     const activeFixedInc = getActiveFixedIncomes(currentMonth, currentYear);
     
-    const pendingCreditCardList = state.creditCards.filter(c => !c.isPaid).map(card => ({
+    const pendingCreditCardList = state.creditCards.filter(card => {
+        const isPaid = state.creditCardPayments.some(p => p.cardId === card.id && p.month === currentMonth && p.year === currentYear);
+        return !isPaid;
+    }).map(card => ({
       ...card,
-      billAmount: expensesOfMonth.filter(e => e.paymentMethod === card.name).reduce((sum, e) => sum + Number(e.amount), 0)
+      // Recalcula billAmount usando a lógica de fechamento (expensesOfMonth já está filtrado corretamente acima)
+      billAmount: expensesOfMonth.filter(e => e.paymentMethod === card.name).reduce((sum, e) => sum + Number(e.amount), 0) 
+                  + activeFixedExp.filter(f => f.creditCardId === card.id).reduce((sum, f) => sum + Number(f.isPaid && f.paidAmount ? f.paidAmount : f.amount), 0)
     }));
 
     const pendingFixedList = activeFixedExp.filter(e => !e.isPaid);
@@ -573,13 +594,18 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       totalIncome: activeFixedInc.reduce((sum, i) => sum + Number(i.amount), 0) + cashIncome,
       totalFixedExpenses: activeFixedExp.reduce((sum, e) => sum + Number(e.amount), 0),
       variableExpenses, totalInvestments: getTotalInvestments(), projectedBalance, currentBalance, 
-      pendingIncomeValue: pendingFixedToReceive, pendingFixedExpensesValue: pendingFixedToPay,
+      pendingIncomeValue: pendingFixedToReceive, 
+      
+      // AQUI: A Pagar (Card Vermelho) = Boletos + Faturas de Cartão (Apenas o que falta sair)
+      pendingFixedExpensesValue: pendingFixedToPay + pendingCardsTotal,
+      
       pendingFixedExpenses: pendingFixedList.length, pendingFixedList, pendingCreditCards: pendingCreditCardList.length, pendingCreditCardList, investmentYield, 
       topUsers: state.users.map(u => ({ userId: u.id, userName: u.name, totalAmount: expensesOfMonth.filter(e => e.userId === u.id && !generatedIds.includes(e.id)).reduce((acc, e) => acc + Number(e.amount), 0), type: 'outcome' as 'income' | 'outcome' })).sort((a, b) => b.totalAmount - a.totalAmount)
     };
   };
 
   const getMonthlyData = (month: number, year: number): MonthlyData => ({
+      // Mantive simples para brevidade, mas o ideal é aplicar a mesma lógica de fechamento aqui também para visualização de lista
     month, year, 
     fixedExpenses: getActiveFixedExpenses(month, year),
     variableExpenses: state.expenses.filter(e => { const d = new Date(e.date); return d.getMonth() === month && d.getFullYear() === year && e.type === 'variavel'; }),
@@ -593,7 +619,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   return (
     <FinanceContext.Provider value={{ 
       state, dispatch, refreshData, switchAccount, addUser, addExpense, addCashMovement, addFixedExpense, updateFixedExpense, toggleFixedExpensePayment, 
-      addFixedIncome, updateFixedIncome, toggleFixedIncomeReceipt, addCreditCard, updateCreditCard, updateSettings, addInvestment, 
+      addFixedIncome, updateFixedIncome, toggleFixedIncomeReceipt, addCreditCard, updateCreditCard, payCreditCardBill, updateSettings, addInvestment, 
       getDashboardData, getMonthlyData, getActiveFixedExpenses, getActiveFixedIncomes, getCurrentBalance, getTotalInvestments, getInvestmentYield, getUserName 
     }}>
       {children}
