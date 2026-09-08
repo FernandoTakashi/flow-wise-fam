@@ -1,15 +1,15 @@
 // Webhook do bot do Telegram: recebe mensagens e cliques de botão.
 // Sempre responde 200 rápido (o Telegram re-tenta em não-200).
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { env } from '../_lib/env';
+import { env } from '../_lib/env.js';
 import {
   sendMessage, answerCallback, clearButtons, type TgUpdate, type TgMessage, type TgCallbackQuery,
-} from '../_lib/telegram';
-import { findLink, redeemToken, setPending, takePending, type ChatLink } from '../_lib/chat';
-import { loadWalletBundle, insertEntry, markOccurrence, occurrenceTx } from '../_lib/finance';
-import { parseEntry } from '../_lib/parse';
-import { spDateISO } from '../../src/lib/dates';
-import { formatBRL, toCents } from '../../src/lib/money';
+} from '../_lib/telegram.js';
+import { findLink, redeemToken, setPending, takePending, type ChatLink } from '../_lib/chat.js';
+import { loadWalletBundle, insertEntry, markOccurrence, occurrenceTx } from '../_lib/finance.js';
+import { parseEntry } from '../_lib/parse.js';
+import { spDateISO } from '../_lib/shared.js';
+import { formatBRL, toCents } from '../_lib/shared.js';
 
 const HELP =
   'Manda um gasto em uma linha, ex.:\n' +
