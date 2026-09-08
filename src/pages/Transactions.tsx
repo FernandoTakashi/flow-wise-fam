@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { formatBRL, splitInstallments } from '@/lib/money';
@@ -56,6 +57,7 @@ export default function Transactions() {
   const { month, year } = selectedMonth;
   const locked = isPeriodLocked(month, year);
 
+  const [tab, setTab] = useState<Kind>('expense');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm(today));
   const [editing, setEditing] = useState<Transaction | null>(null);
@@ -65,6 +67,11 @@ export default function Transactions() {
     () => transactions.filter((t) => t.refMonth === month + 1 && t.refYear === year)
       .sort((a, b) => (a.date < b.date ? 1 : -1)),
     [transactions, month, year],
+  );
+  // "Saídas" = despesas + transferências (pagamento de fatura é saída de dinheiro)
+  const tabTx = useMemo(
+    () => monthTx.filter((t) => (tab === 'income' ? t.kind === 'income' : t.kind !== 'income')),
+    [monthTx, tab],
   );
   const totals = useMemo(() => {
     let income = 0; let expense = 0;
@@ -103,7 +110,10 @@ export default function Transactions() {
   };
 
   const openNew = () => {
-    setForm({ ...emptyForm(today), accountId: spendingAccounts[0]?.id ?? accounts[0]?.id ?? '', memberId: userId ?? '' });
+    setForm({
+      ...emptyForm(today), kind: tab,
+      accountId: spendingAccounts[0]?.id ?? accounts[0]?.id ?? '', memberId: userId ?? '',
+    });
     setEditing(null);
     setShowForm(true);
   };
@@ -185,7 +195,7 @@ export default function Transactions() {
       <PageHeader
         title="Lançamentos"
         subtitle={`Competência de ${MONTHS_PT[month]} de ${year}`}
-        action={<Button onClick={openNew}><Plus className="mr-2 h-4 w-4" /> Novo lançamento</Button>}
+        action={<Button onClick={openNew}><Plus className="mr-2 h-4 w-4" /> {tab === 'income' ? 'Nova entrada' : 'Nova saída'}</Button>}
       />
 
       {locked && (
@@ -194,18 +204,27 @@ export default function Transactions() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-3">
-        <MiniTile label="Entradas" value={formatBRL(totals.income)} className="text-emerald-600" />
-        <MiniTile label="Saídas" value={formatBRL(totals.expense)} className="text-red-600" />
-        <MiniTile label="Resultado" value={formatBRL(totals.net)} className={totals.net >= 0 ? 'text-emerald-600' : 'text-red-600'} />
+      <Tabs value={tab} onValueChange={(v) => setTab(v as Kind)}>
+        <TabsList className="grid w-full max-w-xs grid-cols-2">
+          <TabsTrigger value="expense">Saídas</TabsTrigger>
+          <TabsTrigger value="income">Entradas</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      <div className="grid grid-cols-2 gap-3">
+        {tab === 'income'
+          ? <MiniTile label={`Entradas de ${MONTHS_PT[month]}`} value={formatBRL(totals.income)} className="text-emerald-600" />
+          : <MiniTile label={`Saídas de ${MONTHS_PT[month]}`} value={formatBRL(totals.expense)} className="text-red-600" />}
+        <MiniTile label="Resultado do mês" value={formatBRL(totals.net)} className={totals.net >= 0 ? 'text-emerald-600' : 'text-red-600'} />
       </div>
 
-      {monthTx.length === 0 ? (
-        <EmptyState icon={<ArrowLeftRight className="h-10 w-10" />} title="Nenhum lançamento neste mês"
-          hint="Registre entradas e saídas para acompanhar o saldo." />
+      {tabTx.length === 0 ? (
+        <EmptyState icon={<ArrowLeftRight className="h-10 w-10" />}
+          title={tab === 'income' ? 'Nenhuma entrada neste mês' : 'Nenhuma saída neste mês'}
+          hint={tab === 'income' ? 'Registre salário, freelas, reembolsos…' : 'Registre compras, contas, pagamentos…'} />
       ) : (
         <div className="space-y-2">
-          {monthTx.map((t) => (
+          {tabTx.map((t) => (
             <Card key={t.id} className={t.status === 'pending' ? 'border-dashed opacity-70' : ''}>
               <CardContent className="flex items-center justify-between gap-3 p-3">
                 <div className="flex min-w-0 items-center gap-3">
