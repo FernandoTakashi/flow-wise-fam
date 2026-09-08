@@ -88,7 +88,10 @@ export async function parseEntry(text: string, ctx: ParseContext): Promise<Parse
     });
 
     const p = response.parsed_output;
-    if (!p) return regexFallback(text, ctx);
+    if (!p) {
+      console.error('[parse] Haiku respondeu sem parsed_output, caindo no regex. stop_reason:', response.stop_reason);
+      return regexFallback(text, ctx);
+    }
 
     const validAccount = p.account_id && ctx.accounts.some((a) => a.id === p.account_id) ? p.account_id : null;
     const validCategory = p.category_id && ctx.categories.some((c) => c.id === p.category_id) ? p.category_id : null;
@@ -104,7 +107,8 @@ export async function parseEntry(text: string, ctx: ParseContext): Promise<Parse
       dateISO,
       note: p.note?.trim() || null,
     };
-  } catch {
+  } catch (e) {
+    console.error('[parse] chamada ao Haiku falhou, usando regex:', (e as Error).message ?? e);
     return regexFallback(text, ctx);
   }
 }
