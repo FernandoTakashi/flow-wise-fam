@@ -46,7 +46,7 @@ const emptyForm = (dateISO: string): FormState => {
   };
 };
 
-export default function Transactions({ kind = 'expense' }: { kind?: Kind }) {
+export default function Transactions({ kind = 'expense', embedded = false }: { kind?: Kind; embedded?: boolean }) {
   const {
     loading, selectedMonth, today, transactions, accounts, spendingAccounts, cards, activeCategories,
     members, userId, accountName, categoryName, memberName, isPeriodLocked, wouldOverdraw, wouldExceedLimit,
@@ -191,11 +191,17 @@ export default function Transactions({ kind = 'expense' }: { kind?: Kind }) {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title={isIncome ? 'Entradas' : 'Saídas'}
-        subtitle={`Competência de ${MONTHS_PT[month]} de ${year}`}
-        action={<Button onClick={openNew}><Plus className="mr-2 h-4 w-4" /> {isIncome ? 'Nova entrada' : 'Nova saída'}</Button>}
-      />
+      {embedded ? (
+        <div className="flex justify-end">
+          <Button size="sm" onClick={openNew}><Plus className="mr-2 h-4 w-4" /> {isIncome ? 'Nova receita' : 'Novo lançamento'}</Button>
+        </div>
+      ) : (
+        <PageHeader
+          title={isIncome ? 'Receitas' : 'Lançamentos'}
+          subtitle={`Competência de ${MONTHS_PT[month]} de ${year}`}
+          action={<Button onClick={openNew}><Plus className="mr-2 h-4 w-4" /> {isIncome ? 'Nova receita' : 'Novo lançamento'}</Button>}
+        />
+      )}
 
       {locked && (
         <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">

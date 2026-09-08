@@ -13,6 +13,7 @@ import AuthPage from '@/pages/Auth';
 
 const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const Transactions = lazy(() => import('@/pages/Transactions'));
+const Receitas = lazy(() => import('@/pages/Receitas'));
 const Recurrences = lazy(() => import('@/pages/Recurrences'));
 const Cards = lazy(() => import('@/pages/Cards'));
 const Investments = lazy(() => import('@/pages/Investments'));
@@ -70,10 +71,11 @@ const App = () => {
               <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Carregando seção…</div>}>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
-                  <Route path="/saidas" element={<Transactions kind="expense" />} />
-                  <Route path="/entradas" element={<Transactions kind="income" />} />
-                  <Route path="/lancamentos" element={<Navigate to="/saidas" replace />} />
-                  <Route path="/fixos" element={<Recurrences />} />
+                  <Route path="/lancamentos" element={<Transactions kind="expense" />} />
+                  <Route path="/receitas" element={<Receitas />} />
+                  <Route path="/fixos" element={<Recurrences kind="expense" />} />
+                  <Route path="/saidas" element={<Navigate to="/lancamentos" replace />} />
+                  <Route path="/entradas" element={<Navigate to="/receitas" replace />} />
                   <Route path="/cartoes" element={<Cards />} />
                   <Route path="/investimentos" element={<Investments />} />
                   <Route path="/projecao" element={<Projection />} />

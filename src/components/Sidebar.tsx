@@ -7,9 +7,9 @@ import { cn } from '@/lib/utils';
 
 export const NAV_ITEMS = [
   { title: 'Dashboard', href: '/', icon: LayoutDashboard, exact: true },
-  { title: 'Saídas', href: '/saidas', icon: ArrowDownCircle },
-  { title: 'Entradas', href: '/entradas', icon: ArrowUpCircle },
-  { title: 'Fixos', href: '/fixos', icon: Repeat },
+  { title: 'Lançamentos', href: '/lancamentos', icon: ArrowDownCircle },
+  { title: 'Receitas', href: '/receitas', icon: ArrowUpCircle },
+  { title: 'Gastos fixos', href: '/fixos', icon: Repeat },
   { title: 'Cartões', href: '/cartoes', icon: CreditCard },
   { title: 'Investimentos', href: '/investimentos', icon: PiggyBank },
   { title: 'Projeção', href: '/projecao', icon: TrendingUp },

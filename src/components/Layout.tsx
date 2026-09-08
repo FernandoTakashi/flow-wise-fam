@@ -13,8 +13,8 @@ import {
 
 const MOBILE_PRIMARY = [
   { title: 'Início', href: '/', icon: LayoutDashboard, exact: true },
-  { title: 'Saídas', href: '/saidas', icon: ArrowDownCircle },
-  { title: 'Entradas', href: '/entradas', icon: ArrowUpCircle },
+  { title: 'Lançar', href: '/lancamentos', icon: ArrowDownCircle },
+  { title: 'Receitas', href: '/receitas', icon: ArrowUpCircle },
   { title: 'Cartões', href: '/cartoes', icon: CreditCard },
 ];
 
@@ -78,7 +78,7 @@ function MobileNav() {
 }
 
 // Só as páginas que realmente reagem ao mês selecionado mostram o seletor.
-const MONTH_SCOPED_ROUTES = ['/', '/saidas', '/entradas', '/fixos', '/cartoes'];
+const MONTH_SCOPED_ROUTES = ['/', '/lancamentos', '/receitas', '/fixos', '/cartoes'];
 
 export function Layout({ children }: { children: ReactNode }) {
   const { toast } = useToast();

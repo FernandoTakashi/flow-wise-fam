@@ -28,7 +28,7 @@ const emptyForm = (): FormState => ({
   day: '5', autopay: false, variableAmount: false,
 });
 
-export default function Recurrences() {
+export default function Recurrences({ kind, embedded = false }: { kind?: CategoryKind; embedded?: boolean }) {
   const {
     loading, selectedMonth, today, recurrenceOccurrences, spendingAccounts, cards,
     activeCategories, accountName, categoryName, userId, members, isPeriodLocked,
@@ -39,7 +39,8 @@ export default function Recurrences() {
   const { month, year } = selectedMonth;
   const locked = isPeriodLocked(month, year);
 
-  const [tab, setTab] = useState<CategoryKind>('expense');
+  const [tabState, setTab] = useState<CategoryKind>('expense');
+  const tab: CategoryKind = kind ?? tabState;
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [editing, setEditing] = useState<Recurrence | null>(null);
@@ -67,7 +68,7 @@ export default function Recurrences() {
 
   if (loading) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
 
-  const reset = () => { setForm(emptyForm()); setEditing(null); setShowForm(false); };
+  const reset = () => { setForm({ ...emptyForm(), kind: tab }); setEditing(null); setShowForm(false); };
   const openNew = () => { setForm({ ...emptyForm(), kind: tab }); setEditing(null); setShowForm(true); };
   const openEdit = (r: Recurrence) => {
     setEditing(r);
@@ -148,13 +149,23 @@ export default function Recurrences() {
 
   const catsForKind = activeCategories.filter((c) => c.kind === form.kind);
 
+  const newBtn = (
+    <Button onClick={openNew} size={embedded ? 'sm' : 'default'}>
+      <Plus className="mr-2 h-4 w-4" /> {tab === 'income' ? 'Nova receita fixa' : 'Novo gasto fixo'}
+    </Button>
+  );
+
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="Fixos"
-        subtitle={`Recorrências de ${MONTHS_PT[month].toLowerCase()} de ${year}`}
-        action={<Button onClick={openNew}><Plus className="mr-2 h-4 w-4" /> Nova recorrência</Button>}
-      />
+      {embedded ? (
+        <div className="flex justify-end">{newBtn}</div>
+      ) : (
+        <PageHeader
+          title={tab === 'income' ? 'Receitas fixas' : 'Gastos fixos'}
+          subtitle={`Recorrências de ${MONTHS_PT[month].toLowerCase()} de ${year}`}
+          action={newBtn}
+        />
+      )}
 
       {locked && (
         <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">
@@ -162,12 +173,14 @@ export default function Recurrences() {
         </div>
       )}
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as CategoryKind)}>
-        <TabsList className="grid w-full max-w-xs grid-cols-2">
-          <TabsTrigger value="expense">Saídas</TabsTrigger>
-          <TabsTrigger value="income">Entradas</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      {!kind && (
+        <Tabs value={tab} onValueChange={(v) => setTab(v as CategoryKind)}>
+          <TabsList className="grid w-full max-w-xs grid-cols-2">
+            <TabsTrigger value="expense">Saídas</TabsTrigger>
+            <TabsTrigger value="income">Entradas</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
 
       <div className="grid grid-cols-3 gap-3">
         <Tile label="Previsto" value={formatBRL(totals.expected)} />
@@ -312,16 +325,22 @@ export default function Recurrences() {
 
       <Dialog open={showForm} onOpenChange={(o) => (o ? setShowForm(true) : reset())}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>{editing ? 'Editar recorrência' : 'Nova recorrência'}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>
+              {editing ? 'Editar' : 'Nova'} {form.kind === 'income' ? 'receita fixa' : 'despesa fixa'}
+            </DialogTitle>
+          </DialogHeader>
           <form onSubmit={submit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
-              {(['expense', 'income'] as CategoryKind[]).map((k) => (
-                <button key={k} type="button" onClick={() => setForm((f) => ({ ...f, kind: k, categoryId: '' }))}
-                  className={`rounded-lg border p-2.5 text-sm font-medium ${form.kind === k ? 'border-primary bg-primary/10 text-primary' : 'bg-background hover:bg-muted'}`}>
-                  {k === 'income' ? 'Entrada' : 'Saída'}
-                </button>
-              ))}
-            </div>
+            {!kind && (
+              <div className="grid grid-cols-2 gap-2">
+                {(['expense', 'income'] as CategoryKind[]).map((k) => (
+                  <button key={k} type="button" onClick={() => setForm((f) => ({ ...f, kind: k, categoryId: '' }))}
+                    className={`rounded-lg border p-2.5 text-sm font-medium ${form.kind === k ? 'border-primary bg-primary/10 text-primary' : 'bg-background hover:bg-muted'}`}>
+                    {k === 'income' ? 'Entrada' : 'Saída'}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label>Descrição</Label>
               <Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
