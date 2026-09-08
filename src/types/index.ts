@@ -1,198 +1,165 @@
-export interface User {
-  id: string;
+// Domínio do FinanceApp — modelo unificado (transactions).
+// Convenções:
+//  - Dinheiro sempre em centavos inteiros (`*Cents`). Formatação só na UI.
+//  - Datas sempre string ISO 'yyyy-mm-dd' (sem Date no domínio → sem bug de fuso).
+
+export type UUID = string;
+
+export type AccountKind = 'cash' | 'checking' | 'card';
+export type TxKind = 'income' | 'expense' | 'transfer';
+export type TxStatus = 'pending' | 'cleared';
+export type CategoryKind = 'income' | 'expense';
+export type MemberRole = 'owner' | 'member';
+export type InvoiceStatus = 'open' | 'closed' | 'paid';
+export type TxSource = 'app' | 'telegram' | 'whatsapp' | 'import' | 'auto';
+
+export interface Profile {
+  id: UUID;
   name: string;
-  email?: string;
-  createdAt: Date;
+  email?: string | null;
 }
 
-export interface Expense {
-  id: string;
-  description: string;
-  amount: number;
-  date: Date;
-  type: 'variavel' | 'cartao_credito';
-  category: string;
-  paymentMethod?: string;
-  
-  // --- ADICIONE ESTA LINHA ---
-  userId: string; 
-  // ---------------------------
-
-  installments?: {
-    current: number;
-    total: number;
-  };
-  createdAt?: Date; // Garanta que este também esteja aqui se usar
-}
-
-// ... mantenha as outras interfaces (User, Expense, etc) ...
-
-// ADICIONE ISTO:
-export interface FixedIncome {
-  id: string;
-  description: string;
-  amount: number;
-  receiveDay: number; // Dia de receber
-  isReceived: boolean;
-  receivedBy?: string;
-  receivedAt?: Date;
-  createdAt: Date;
-  effectiveFrom: Date;
-  effectiveUntil?: Date;
-}
-
-// ... mantenha o resto ...
-
-export interface FixedExpense {
-  id: string;
+export interface Wallet {
+  id: UUID;
   name: string;
-  category: ExpenseCategory;
-  amount: number;
-  dueDay: number;
-  isPaid: boolean;
-  paidBy?: string;
-  paidAt?: Date;
-  createdAt: Date;
-  effectiveFrom: Date;
-  effectiveUntil?: Date;
-  paidAmount?: number;
-  creditCardId?: string | null; 
+  baseCurrency: string;
+  createdBy?: UUID | null;
 }
 
-export interface CreditCard {
-  id: string;
+export interface WalletMember {
+  walletId: UUID;
+  userId: UUID;
+  role: MemberRole;
+  profile?: Profile;
+}
+
+export interface Account {
+  id: UUID;
+  walletId: UUID;
   name: string;
-  limit: number;
-  closingDay: number;
-  dueDay: number;
-  isPaid: boolean;
-  paidBy?: string;
-  paidAt?: Date;
-  createdAt: Date;
+  kind: AccountKind;
+  openingBalanceCents: number;
+  /** só para kind === 'card' */
+  closingDay?: number | null;
+  dueDay?: number | null;
+  creditLimitCents?: number | null;
+  archived: boolean;
 }
 
-export interface CreditCardPayment {
-  id: string;
-  cardId: string;
-  month: number;
-  year: number;
-  amount: number;
-  paidAt: Date;
-  paidBy?: string;
-  cashMovementId?: string;
+export interface Category {
+  id: UUID;
+  walletId: UUID;
+  name: string;
+  kind: CategoryKind;
+  icon?: string | null;
+  color?: string | null;
+  archived: boolean;
 }
 
-export interface CashMovement {
-  id: string;
-  type: 'income' | 'outcome';
+export interface Recurrence {
+  id: UUID;
+  walletId: UUID;
   description: string;
-  amount: number;
-  userId: string;
-  date: Date;
-  createdAt: Date;
+  kind: CategoryKind;
+  amountCents: number;
+  categoryId?: UUID | null;
+  accountId?: UUID | null;
+  day: number;
+  frequency: 'monthly';
+  startDate: string;
+  endDate?: string | null;
+  active: boolean;
+  /** débito automático: o lançamento é criado sozinho na data de vencimento */
+  autopay: boolean;
 }
 
-export interface FinancialSettings {
-  monthlyYield: number; // Percentual mensal de rendimento sobre investimentos
-  initialBalance: number;
-  initialInvestment: number; // Valor inicial investido
+export interface CardInvoice {
+  id: UUID;
+  walletId: UUID;
+  accountId: UUID;
+  refMonth: number; // 1-12
+  refYear: number;
+  closingDate: string;
+  dueDate: string;
+  status: InvoiceStatus;
+  paidTransactionId?: UUID | null;
+}
+
+export interface TransactionSplit {
+  id: UUID;
+  transactionId: UUID;
+  memberId: UUID;
+  shareCents: number;
+}
+
+export interface Transaction {
+  id: UUID;
+  walletId: UUID;
+  accountId: UUID;
+  kind: TxKind;
+  amountCents: number;
+  /** data-caixa: quando o dinheiro se move (bate com o banco) */
+  date: string;
+  /** competência: a que mês o lançamento pertence (1-12). Cartão = mês da fatura. */
+  refMonth: number;
+  refYear: number;
+  status: TxStatus;
+  description: string;
+  categoryId?: UUID | null;
+  /** quem pagou / recebeu */
+  memberId?: UUID | null;
+  cardInvoiceId?: UUID | null;
+  recurrenceId?: UUID | null;
+  installmentGroup?: UUID | null;
+  installmentNo?: number | null;
+  installmentOf?: number | null;
+  transferPeerId?: UUID | null;
+  note?: string | null;
+  createdBy?: UUID | null;
+  /** origem do lançamento: app, bot (telegram/whatsapp), importação, débito automático */
+  source: TxSource;
+  splits: TransactionSplit[];
 }
 
 export interface Investment {
-  id: string;
+  id: UUID;
+  walletId: UUID;
+  memberId?: UUID | null;
   description: string;
-  amount: number;
-  yieldRate?: number; 
-  date: Date;
-  userId: string;
-  createdAt: Date;
+  amountCents: number;
+  /** pontos-base ao mês: 50 = 0,50% a.m. */
+  yieldRateBps: number;
+  date: string;
+}
+
+export interface WalletSettings {
+  walletId: UUID;
+  initialInvestmentCents: number;
+  defaultYieldBps: number;
+}
+
+export interface PeriodLock {
+  walletId: UUID;
+  refMonth: number; // 1-12
+  refYear: number;
+  lockedBy?: UUID | null;
+  lockedAt: string;
 }
 
 export interface MonthlyFilter {
-  month: number; // 0-11 (Janeiro = 0)
+  month: number; // 0-11
   year: number;
 }
 
-export type ExpenseCategory = 
-  | 'alimentacao'
-  | 'transporte'
-  | 'lazer'
-  | 'saude'
-  | 'educacao'
-  | 'moradia'
-  | 'vestuario'
-  | 'presente'
-  | 'outros';
-
-export type ExpenseType = 
-  | 'fixo'
-  | 'variavel'
-  | 'cartao_credito';
-
-export type PaymentMethod = 
-  | 'dinheiro'
-  | 'debito'
-  | 'pix'
-  | string; // Para cartões específicos (ex: "Nubank", "Itaú")
-
-// Em src/types/index.ts
-
-export interface CreditCardWithBill extends CreditCard {
-  billAmount: number;
+/** Saldo líquido de um membro na divisão de despesas (positivo = tem a receber). */
+export interface MemberBalance {
+  memberId: UUID;
+  netCents: number;
 }
 
-// Atualize a interface DashboardData
-export interface DashboardData {
-  // ... (outros campos mantêm igual)
-  totalIncome: number;
-  totalFixedExpenses: number;
-  variableExpenses: number;
-  totalInvestments: number;
-  projectedBalance: number;
-  currentBalance: number;
-  pendingFixedExpenses: number;
-  pendingFixedList: FixedExpense[];
-  pendingIncomeValue: number;         // Valor R$ que falta receber (Entradas Fixas)
-  pendingFixedExpensesValue: number;
-  
-  pendingCreditCards: number;
-  // MUDE AQUI 👇: De CreditCard[] para CreditCardWithBill[]
-  pendingCreditCardList: CreditCardWithBill[]; 
-
-  investmentYield: number;
-  topUsers: Array<{
-    userId: string;
-    userName: string;
-    totalAmount: number;
-    type: 'income' | 'outcome';
-  }>;
-}
-
-export interface MonthlyData {
-  month: number;
-  year: number;
-  fixedExpenses: FixedExpense[];
-  variableExpenses: Expense[];
-  creditCardExpenses: Expense[];
-  cashMovements: CashMovement[];
-  investments: Investment[];
-}
-
-export interface FixedPayment {
-  id: string;
-  fixedExpenseId: string;
-  month: number;
-  year: number;
-  amount: number;
-  paidAt: Date;
-  generatedExpenseId?: string; 
-}
-
-export interface FixedReceipt {
-  id: string;
-  fixedIncomeId: string;
-  month: number;
-  year: number;
-  amount: number;
-  receivedAt: Date;
+/** Sugestão de acerto: `fromId` paga `amountCents` a `toId`. */
+export interface Settlement {
+  fromId: UUID;
+  toId: UUID;
+  amountCents: number;
 }

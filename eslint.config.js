@@ -5,7 +5,9 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  // dist + componentes gerados pelo shadcn/ui (não editados à mão)
+  // api/** roda em Node (Vercel Functions) e tem tsconfig próprio — ver typecheck:api
+  { ignores: ["dist", "src/components/ui/**", "api/**"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

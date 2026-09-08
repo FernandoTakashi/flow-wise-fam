@@ -1,270 +1,177 @@
-import { useState, useMemo } from 'react';
-import { useFinance } from '@/contexts/FinanceContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useMemo, useState } from 'react';
+import { useFinance, type NewInvestment } from '@/contexts/FinanceContext';
+import { PageHeader, EmptyState } from '@/components/PageHeader';
+import { MoneyInput } from '@/components/MoneyInput';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/hooks/use-toast';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { Plus, TrendingUp, CalendarIcon, Percent, PiggyBank, User, X, Target } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
+import { formatBRL, formatPct, pctToBps, bpsToPct } from '@/lib/money';
+import { formatFullDate, todayISO } from '@/lib/dates';
+import type { Investment } from '@/types';
+import { Plus, Pencil, Trash2, PiggyBank, TrendingUp, Target } from 'lucide-react';
+
+interface FormState { description: string; amountCents: number; ratePct: string; memberId: string; dateISO: string; }
+const emptyForm = (): FormState => ({ description: '', amountCents: 0, ratePct: '', memberId: '', dateISO: todayISO() });
 
 export default function Investments() {
-  const { state, addInvestment, getTotalInvestments, getInvestmentYield } = useFinance();
+  const {
+    loading, investments, settings, members, memberName, userId,
+    totalInvestedCents, investmentMonthlyYieldCents,
+    addInvestment, updateInvestment, deleteInvestment,
+  } = useFinance();
   const { toast } = useToast();
+
   const [showForm, setShowForm] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState<FormState>(emptyForm());
+  const [editing, setEditing] = useState<Investment | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  // Formulário agora inclui yieldRate
-  const [formData, setFormData] = useState({
-    description: '',
-    amount: '',
-    yieldRate: '', // Campo novo
-    userId: '',
-    date: new Date()
-  });
+  const weightedRateBps = useMemo(() => {
+    const base = investments.reduce((s, i) => s + i.amountCents, 0);
+    if (base === 0) return 0;
+    const w = investments.reduce((s, i) => s + i.amountCents * i.yieldRateBps, 0);
+    return Math.round(w / base);
+  }, [investments]);
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  if (loading) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
+
+  const reset = () => { setForm(emptyForm()); setEditing(null); setShowForm(false); };
+  const openEdit = (i: Investment) => {
+    setEditing(i);
+    setForm({
+      description: i.description, amountCents: i.amountCents,
+      ratePct: bpsToPct(i.yieldRateBps) ? String(bpsToPct(i.yieldRateBps)).replace('.', ',') : '',
+      memberId: i.memberId ?? '', dateISO: i.date,
+    });
+    setShowForm(true);
   };
 
-  // Cálculo da Taxa Média Ponderada da Carteira (KPI Visual)
-  // Fórmula: Soma(Valor * Taxa) / Valor Total
-  const weightedAverageRate = useMemo(() => {
-    const totalVal = getTotalInvestments();
-    if (totalVal === 0) return 0;
-    
-    const weightedSum = state.investments.reduce((acc, inv) => {
-      return acc + (Number(inv.amount) * Number(inv.yieldRate || 0));
-    }, 0);
-
-    return (weightedSum / totalVal).toFixed(2);
-  }, [state.investments, getTotalInvestments]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!formData.description || !formData.amount || !formData.userId) {
-      toast({ title: 'Erro', description: 'Preencha os campos obrigatórios', variant: 'destructive' });
+    if (!form.description || form.amountCents <= 0) {
+      toast({ title: 'Preencha descrição e valor', variant: 'destructive' });
       return;
     }
-
-    setLoading(true);
-    await addInvestment({
-      description: formData.description,
-      amount: parseFloat(formData.amount),
-      yieldRate: parseFloat(formData.yieldRate) || 0, // Envia a taxa individual
-      date: formData.date,
-      userId: formData.userId
-    });
-    setLoading(false);
-
-    setFormData({ description: '', amount: '', yieldRate: '', userId: '', date: new Date() });
-    setShowForm(false);
-    toast({ title: 'Aplicação registrada com sucesso!' });
-  };
-
-  const getUserName = (userId: string) => {
-    return state.users.find(user => user.id === userId)?.name || 'Usuário';
+    setBusy(true);
+    const payload: NewInvestment = {
+      description: form.description, amountCents: form.amountCents,
+      yieldRateBps: pctToBps(form.ratePct), dateISO: form.dateISO, memberId: form.memberId || null,
+    };
+    try {
+      if (editing) { await updateInvestment(editing.id, payload); toast({ title: 'Aplicação atualizada' }); }
+      else { await addInvestment(payload); toast({ title: 'Aplicação registrada' }); }
+      reset();
+    } catch (err) {
+      toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' });
+    } finally { setBusy(false); }
   };
 
   return (
-    <div className="space-y-4 md:space-y-6 animate-fade-in pb-20">
-      
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Investimentos</h1>
-          <p className="text-sm text-muted-foreground">Carteira de ativos e rendimentos</p>
-        </div>
-        
-        {/* Botão de Ação */}
-        {!showForm && (
-          <Button onClick={() => setShowForm(true)} className="w-full md:w-auto bg-gradient-primary h-11 md:h-10 text-base">
-            <Plus className="w-5 h-5 mr-2" /> Nova Aplicação
-          </Button>
-        )}
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Investimentos"
+        subtitle="Carteira de ativos e rendimento"
+        action={<Button onClick={() => { setEditing(null); setForm(emptyForm()); setShowForm(true); }}><Plus className="mr-2 h-4 w-4" /> Nova aplicação</Button>}
+      />
 
-      {/* CARDS DE RESUMO (KPIs) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
-        
-        {/* Total Investido (Destaque - 2 colunas no mobile) */}
-        <Card className="shadow-card col-span-2 md:col-span-1 border-l-4 border-l-primary bg-primary/5">
-          <CardContent className="p-4 md:p-6 flex items-center justify-between">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <Card className="border-l-4 border-l-primary bg-primary/5">
+          <CardContent className="flex items-center justify-between p-4">
             <div>
-               <p className="text-xs md:text-sm font-medium text-primary">Total Acumulado</p>
-               <p className="text-2xl md:text-3xl font-bold text-foreground">{formatCurrency(getTotalInvestments())}</p>
+              <p className="text-xs font-medium text-primary">Total acumulado</p>
+              <p className="text-2xl font-bold tabular-nums">{formatBRL(totalInvestedCents())}</p>
+              {(settings?.initialInvestmentCents ?? 0) > 0 && (
+                <p className="text-[11px] text-muted-foreground">inclui aporte inicial de {formatBRL(settings!.initialInvestmentCents)}</p>
+              )}
             </div>
-            <div className="h-10 w-10 md:h-12 md:w-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <PiggyBank className="w-6 h-6 text-primary" />
-            </div>
+            <PiggyBank className="h-8 w-8 text-primary/40" />
           </CardContent>
         </Card>
-
-        {/* Rendimento Mensal (Soma dos individuais) */}
-        <Card className="shadow-card">
-          <CardContent className="p-4 md:p-6 flex flex-col justify-between h-full">
-             <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                <TrendingUp className="w-4 h-4" />
-                <p className="text-xs md:text-sm font-medium">Rendimento Mês</p>
-             </div>
-             <p className="text-xl md:text-2xl font-bold text-success">{formatCurrency(getInvestmentYield())}</p>
-          </CardContent>
-        </Card>
-
-        {/* Taxa Média Ponderada */}
-        <Card className="shadow-card">
-          <CardContent className="p-4 md:p-6 flex flex-col justify-between h-full">
-             <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                <Target className="w-4 h-4" />
-                <p className="text-xs md:text-sm font-medium">Rentabilidade Média</p>
-             </div>
-             <div className="flex items-baseline gap-1">
-                <p className="text-xl md:text-2xl font-bold">{weightedAverageRate}%</p>
-                <span className="text-xs text-muted-foreground">a.m.</span>
-             </div>
-          </CardContent>
-        </Card>
+        <Card><CardContent className="p-4">
+          <div className="mb-1 flex items-center gap-2 text-muted-foreground"><TrendingUp className="h-4 w-4" /><span className="text-xs font-medium">Rendimento / mês</span></div>
+          <p className="text-xl font-bold tabular-nums text-emerald-600">{formatBRL(investmentMonthlyYieldCents())}</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-4">
+          <div className="mb-1 flex items-center gap-2 text-muted-foreground"><Target className="h-4 w-4" /><span className="text-xs font-medium">Rentabilidade média</span></div>
+          <p className="text-xl font-bold tabular-nums">{formatPct(weightedRateBps)} <span className="text-xs font-normal text-muted-foreground">a.m.</span></p>
+        </CardContent></Card>
       </div>
 
-      {/* FORMULÁRIO DE NOVA APLICAÇÃO */}
-      {showForm && (
-        <Card className="shadow-card animate-in slide-in-from-top-4 border-primary/20">
-          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">Nova Aplicação</CardTitle>
-            <Button variant="ghost" size="icon" onClick={() => setShowForm(false)} className="h-8 w-8"><X className="w-4 h-4" /></Button>
-          </CardHeader>
-          <CardContent className="p-4">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Ativo / Descrição</Label>
-                <Input 
-                    placeholder="Ex: CDB Nubank, FII MXRF11" 
-                    value={formData.description} 
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })} 
-                    required 
-                    className="h-11"
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Valor (R$)</Label>
-                    <Input 
-                        type="number" 
-                        step="0.01" 
-                        placeholder="0,00"
-                        value={formData.amount} 
-                        onChange={(e) => setFormData({ ...formData, amount: e.target.value })} 
-                        required 
-                        className="h-11 font-bold text-foreground"
-                    />
-                  </div>
-                  
-                  {/* CAMPO DE TAXA INDIVIDUAL */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-1 text-xs md:text-sm">Taxa (% a.m.)</Label>
-                    <div className="relative">
-                        <Input 
-                            type="number" 
-                            step="0.01" 
-                            placeholder="0.00"
-                            value={formData.yieldRate} 
-                            onChange={(e) => setFormData({ ...formData, yieldRate: e.target.value })} 
-                            className="h-11 pl-8"
-                        />
-                        <Percent className="w-4 h-4 absolute left-2.5 top-3.5 text-muted-foreground" />
-                    </div>
-                  </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Responsável</Label>
-                    <Select onValueChange={(value) => setFormData({ ...formData, userId: value })}>
-                        <SelectTrigger className="h-11"><SelectValue placeholder="Quem investiu?" /></SelectTrigger>
-                        <SelectContent>
-                            {state.users.map((user) => <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Data</Label>
-                    <Popover>
-                        <PopoverTrigger asChild>
-                        <Button variant="outline" className={cn("w-full justify-start text-left font-normal h-11", !formData.date && "text-muted-foreground")}>
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {formData.date ? format(formData.date, "dd/MM/yy") : <span>Data</span>}
-                        </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="end">
-                        <Calendar mode="single" selected={formData.date} onSelect={(date) => date && setFormData({ ...formData, date })} initialFocus />
-                        </PopoverContent>
-                    </Popover>
-                  </div>
-              </div>
-
-              <Button type="submit" disabled={loading} className="w-full h-12 bg-gradient-primary text-base">
-                  {loading ? 'Salvando...' : 'Confirmar Aplicação'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* HISTÓRICO DE APLICAÇÕES */}
-      <Card className="shadow-card border-none bg-transparent shadow-none md:border md:bg-card">
-        <CardHeader className="px-0 md:px-6 py-2 md:py-6">
-            <CardTitle className="text-lg md:text-xl">Carteira Atual</CardTitle>
-        </CardHeader>
-        <CardContent className="px-0 md:px-6">
-          {state.investments.length === 0 ? (
-            <div className="text-center py-10 bg-card rounded-lg border border-dashed">
-                <PiggyBank className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
-                <p className="text-muted-foreground">Nenhuma aplicação registrada.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {state.investments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((investment) => (
-                <div key={investment.id} className="flex flex-col p-4 bg-card rounded-lg border shadow-sm">
-                  
-                  {/* Linha 1: Descrição e Valor */}
-                  <div className="flex justify-between items-start mb-2">
-                     <span className="font-semibold text-base text-foreground line-clamp-1">{investment.description}</span>
-                     <span className="font-bold text-lg text-primary whitespace-nowrap">+{formatCurrency(investment.amount)}</span>
-                  </div>
-
-                  {/* Linha 2: Detalhes e Taxa */}
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                     <div className="flex items-center gap-3">
-                        <span className="flex items-center gap-1">
-                            <CalendarIcon className="w-3 h-3" />
-                            {format(new Date(investment.date), "dd/MM/yy")}
-                        </span>
-                        <span className="flex items-center gap-1">
-                            <User className="w-3 h-3" />
-                            {getUserName(investment.userId).split(' ')[0]}
-                        </span>
-                     </div>
-                     
-                     {/* Badge da Taxa Individual */}
-                     <Badge variant="outline" className="bg-secondary/50 border-secondary-foreground/20 text-secondary-foreground">
-                        {investment.yieldRate > 0 ? `+${investment.yieldRate}% a.m.` : '0%'}
-                     </Badge>
+      {investments.length === 0 ? (
+        <EmptyState icon={<PiggyBank className="h-10 w-10" />} title="Nenhuma aplicação registrada"
+          hint="Cadastre CDBs, fundos, ações — com a taxa mensal de cada um." />
+      ) : (
+        <div className="space-y-2">
+          {investments.map((i) => (
+            <Card key={i.id}>
+              <CardContent className="flex items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">{i.description}</div>
+                  <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+                    <span>{formatFullDate(i.date)}</span>
+                    {i.memberId && <><span>·</span><span>{memberName(i.memberId).split(' ')[0]}</span></>}
                   </div>
                 </div>
-              ))}
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge variant="outline">{formatPct(i.yieldRateBps)} a.m.</Badge>
+                  <span className="text-sm font-bold tabular-nums text-primary">{formatBRL(i.amountCents)}</span>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(i)}><Pencil className="h-3.5 w-3.5" /></Button>
+                  <ConfirmDialog
+                    title="Excluir aplicação?" confirmLabel="Excluir"
+                    onConfirm={() => deleteInvestment(i.id)}
+                    trigger={<Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={showForm} onOpenChange={(o) => (o ? setShowForm(true) : reset())}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{editing ? 'Editar aplicação' : 'Nova aplicação'}</DialogTitle></DialogHeader>
+          <form onSubmit={submit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Ativo / descrição</Label>
+              <Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Ex: CDB Nubank, MXRF11" required />
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Valor</Label>
+                <MoneyInput valueCents={form.amountCents} onChangeCents={(c) => setForm((f) => ({ ...f, amountCents: c }))} required />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Taxa (% a.m.)</Label>
+                <Input inputMode="decimal" value={form.ratePct} onChange={(e) => setForm((f) => ({ ...f, ratePct: e.target.value }))} placeholder="0,00" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Responsável</Label>
+                <Select value={form.memberId} onValueChange={(v) => setForm((f) => ({ ...f, memberId: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
+                  <SelectContent>{members.map((m) => <SelectItem key={m.userId} value={m.userId}>{m.profile?.name ?? '—'}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Data</Label>
+                <Input type="date" value={form.dateISO} onChange={(e) => setForm((f) => ({ ...f, dateISO: e.target.value }))} required />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={reset}>Cancelar</Button>
+              <Button type="submit" disabled={busy}>{busy ? 'Salvando…' : editing ? 'Salvar' : 'Registrar'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

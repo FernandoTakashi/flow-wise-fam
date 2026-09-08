@@ -1,62 +1,55 @@
-import { useEffect, useState } from "react";
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Routes, Route, Navigate } from "react-router-dom"; // Removi BrowserRouter daqui pois está no main.tsx
-import { FinanceProvider } from "@/contexts/FinanceContext";
-import { Layout } from "@/components/Layout";
-import { supabase } from "@/lib/supabase";
-import { Session } from "@supabase/supabase-js";
+import { useEffect, useState, lazy, Suspense } from 'react';
+import { Routes, Route } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from '@/components/ui/toaster';
+import { Toaster as Sonner } from '@/components/ui/sonner';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { supabase } from '@/lib/supabase';
+import type { Session } from '@supabase/supabase-js';
+import { FinanceProvider } from '@/contexts/FinanceContext';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Layout } from '@/components/Layout';
+import AuthPage from '@/pages/Auth';
 
-// Páginas
-import AuthPage from "@/pages/Auth";
-import Dashboard from "./pages/Dashboard";
-import FixedExpenses from "./pages/FixedExpenses";
-import FixedIncomes from "./pages/FixedIncomes";
-import VariableExpenses from "./pages/VariableExpenses";
-import CashManagement from "./pages/CashManagement";
-import CreditCards from "./pages/CreditCards";
-import FinancialProjection from "./pages/FinancialProjection";
-import Reports from "./pages/Reports";
-import Users from "./pages/Users";
-import Investments from "./pages/Investments";
-import NotFound from "./pages/NotFound";
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const Transactions = lazy(() => import('@/pages/Transactions'));
+const Recurrences = lazy(() => import('@/pages/Recurrences'));
+const Cards = lazy(() => import('@/pages/Cards'));
+const Investments = lazy(() => import('@/pages/Investments'));
+const Projection = lazy(() => import('@/pages/Projection'));
+const Reports = lazy(() => import('@/pages/Reports'));
+const Settlement = lazy(() => import('@/pages/Settlement'));
+const Settings = lazy(() => import('@/pages/Settings'));
+const NotFound = lazy(() => import('@/pages/NotFound'));
 
 const queryClient = new QueryClient();
 
-const App = () => {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // Lógica de Autenticação
-  useEffect(() => {
-    // 1. Verifica sessão atual
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    // 2. Escuta mudanças (Login/Logout)
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
- if (loading) {
+function FullScreenLoader({ label }: { label: string }) {
   return (
     <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-50">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-      <p className="mt-4 text-sm font-medium text-muted-foreground">Sincronizando suas finanças...</p>
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      <p className="mt-4 text-sm font-medium text-muted-foreground">{label}</p>
     </div>
   );
 }
 
-  // SE NÃO ESTIVER LOGADO -> MOSTRA APENAS TELA DE LOGIN
+const App = () => {
+  const [session, setSession] = useState<Session | null>(null);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setChecking(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, next) => {
+      setSession(next);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (checking) return <FullScreenLoader label="Carregando…" />;
+
   if (!session) {
     return (
       <QueryClientProvider client={queryClient}>
@@ -66,35 +59,31 @@ const App = () => {
     );
   }
 
-  // SE ESTIVER LOGADO -> MOSTRA SEU APP COMPLETO
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <FinanceProvider>
-          <Toaster />
-          <Sonner />
-          
-          {/* O BrowserRouter foi removido daqui pois já está no main.tsx */}
-          
-          <Layout>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/fixed-expenses" element={<FixedExpenses />} />
-              <Route path="/fixed-incomes" element={<FixedIncomes />} />
-              <Route path="/variable-expenses" element={<VariableExpenses />} />
-              <Route path="/cash-management" element={<CashManagement />} />
-              <Route path="/credit-cards" element={<CreditCards />} />
-              <Route path="/investments" element={<Investments />} />
-              <Route path="/financial-projection" element={<FinancialProjection />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/users" element={<Users />} />
-              
-              {/* Rota coringa */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Layout>
-
-        </FinanceProvider>
+        <ErrorBoundary>
+          <FinanceProvider>
+            <Toaster />
+            <Sonner />
+            <Layout>
+              <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Carregando seção…</div>}>
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/lancamentos" element={<Transactions />} />
+                  <Route path="/fixos" element={<Recurrences />} />
+                  <Route path="/cartoes" element={<Cards />} />
+                  <Route path="/investimentos" element={<Investments />} />
+                  <Route path="/projecao" element={<Projection />} />
+                  <Route path="/relatorios" element={<Reports />} />
+                  <Route path="/acerto" element={<Settlement />} />
+                  <Route path="/ajustes" element={<Settings />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Suspense>
+            </Layout>
+          </FinanceProvider>
+        </ErrorBoundary>
       </TooltipProvider>
     </QueryClientProvider>
   );

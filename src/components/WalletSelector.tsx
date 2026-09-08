@@ -1,43 +1,36 @@
+import { useNavigate } from 'react-router-dom';
 import { useFinance } from '@/contexts/FinanceContext';
-import { 
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
-} from '@/components/ui/select';
-import { Wallet, PlusCircle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Wallet, Plus } from 'lucide-react';
 
 export function WalletSelector() {
-  const { state, switchAccount } = useFinance();
-
-  // Encontra o nome da conta atual
-  const currentAccountName = state.availableAccounts.find(
-    acc => acc.id === state.currentAccountId
-  )?.name || 'Carteira';
+  const { wallets, walletId, setWallet } = useFinance();
+  const navigate = useNavigate();
 
   return (
-    <Select 
-      value={state.currentAccountId || ''} 
-      onValueChange={(value) => switchAccount(value)}
+    <Select
+      value={walletId ?? ''}
+      onValueChange={(v) => {
+        if (v === '__new__') navigate('/ajustes?tab=carteiras');
+        else setWallet(v);
+      }}
     >
-      <SelectTrigger className="w-[140px] md:w-[180px] h-9 bg-background/50 border-primary/20 hover:bg-accent/50 transition-all rounded-full px-3 text-xs md:text-sm font-medium">
+      <SelectTrigger className="h-9 w-[150px] rounded-full border-primary/20 bg-background/50 px-3 text-xs font-medium md:w-[190px] md:text-sm">
         <div className="flex items-center gap-2 truncate">
-          <Wallet className="w-3.5 h-3.5 text-primary shrink-0" />
-          <span className="truncate">{currentAccountName}</span>
+          <Wallet className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <SelectValue placeholder="Carteira" />
         </div>
       </SelectTrigger>
-      
-      <SelectContent align="start" className="w-[200px]">
-        <div className="px-2 py-1.5 text-xs text-muted-foreground font-semibold">
-          Minhas Carteiras
-        </div>
-        {state.availableAccounts.map((account) => (
-          <SelectItem key={account.id} value={account.id} className="cursor-pointer">
-            {account.name}
-          </SelectItem>
+      <SelectContent align="start">
+        {wallets.map((w) => (
+          <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
         ))}
-        <div className="p-1 mt-1 border-t">
-            <Button variant="ghost" size="sm" className="w-full justify-start h-8 text-xs font-normal">
-                <PlusCircle className="w-3 h-3 mr-2" /> Criar Nova Carteira
-            </Button>
+        <div className="mt-1 border-t p-1">
+          <Button variant="ghost" size="sm" className="h-8 w-full justify-start text-xs font-normal"
+            onClick={() => navigate('/ajustes?tab=carteiras')}>
+            <Plus className="mr-2 h-3 w-3" /> Nova carteira
+          </Button>
         </div>
       </SelectContent>
     </Select>

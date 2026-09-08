@@ -1,499 +1,337 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useFinance } from '@/contexts/FinanceContext';
+import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Download, Filter, RefreshCw, TrendingUp, TrendingDown,
-  Wallet, CreditCard, ChevronDown, ChevronUp, Search, Calendar
-} from 'lucide-react';
-import { format, subMonths, isSameMonth, eachDayOfInterval, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { ExpenseCategory } from '@/types';
-import { 
-  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, AreaChart, Area, ComposedChart, Line
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, ComposedChart, Line, AreaChart, Area,
 } from 'recharts';
+import { formatBRL } from '@/lib/money';
+import { formatFullDate, isInMonth, isoParts, MONTHS_PT_SHORT } from '@/lib/dates';
+import type { Transaction } from '@/types';
+import { Download, RefreshCw } from 'lucide-react';
 
-interface FilterState {
-  startDate: string;
-  endDate: string;
-  category: string;
-  paymentMethod: string;
-  userId: string;
-  description: string;
-}
+const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#6366f1', '#84cc16'];
+const firstOfMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; };
+
+type Lens = 'competencia' | 'caixa';
 
 export default function Reports() {
-  const { state, getActiveFixedExpenses, getActiveFixedIncomes } = useFinance();
-  const [showFilters, setShowFilters] = useState(false);
+  const { loading, today, transactions, activeCategories, members, categoryName, memberName, accountName, accounts } = useFinance();
 
-  // Filtro inicial: Mês atual completo
-  const [filters, setFilters] = useState<FilterState>({
-    startDate: format(new Date().setDate(1), 'yyyy-MM-dd'), 
-    endDate: format(new Date(), 'yyyy-MM-dd'),
-    category: '',
-    paymentMethod: '',
-    userId: '',
-    description: ''
-  });
+  const [lens, setLens] = useState<Lens>('competencia');
+  const [start, setStart] = useState(firstOfMonth());
+  const [end, setEnd] = useState(today);
+  const [category, setCategory] = useState('');
+  const [memberId, setMemberId] = useState('');
+  const [accountId, setAccountId] = useState('');
+  const [search, setSearch] = useState('');
 
-  const categories: { value: ExpenseCategory; label: string }[] = [
-    { value: 'alimentacao', label: 'Alimentação' },
-    { value: 'transporte', label: 'Transporte' },
-    { value: 'lazer', label: 'Lazer' },
-    { value: 'saude', label: 'Saúde' },
-    { value: 'educacao', label: 'Educação' },
-    { value: 'moradia', label: 'Moradia' },
-    { value: 'vestuario', label: 'Vestuário' },
-    { value: 'outros', label: 'Outros' }
-  ];
+  const range = useMemo(() => (start <= end ? { a: start, b: end } : { a: end, b: start }), [start, end]);
 
-  const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#6366f1'];
-  
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  const inRange = (t: Transaction): boolean => {
+    if (lens === 'caixa') return t.date >= range.a && t.date <= range.b;
+    // competência: compara o mês de referência com o intervalo
+    const ay = isoParts(range.a).y; const am = isoParts(range.a).m + 1;
+    const by = isoParts(range.b).y; const bm = isoParts(range.b).m + 1;
+    const startKey = ay * 12 + am; const endKey = by * 12 + bm;
+    const tKey = t.refYear * 12 + t.refMonth;
+    return tKey >= startKey && tKey <= endKey;
   };
 
-  // --- 1. FILTRAGEM UNIFICADA ---
-  const filteredData = useMemo(() => {
-    const start = new Date(filters.startDate);
-    const end = new Date(filters.endDate);
-    // Ajusta para cobrir o dia inteiro na comparação
-    const interval = { start: startOfDay(start), end: endOfDay(end) };
+  const expenses = useMemo(() => transactions.filter((t) => {
+    if (t.kind !== 'expense' || t.status !== 'cleared') return false;
+    if (!inRange(t)) return false;
+    if (category && t.categoryId !== category) return false;
+    if (memberId && t.memberId !== memberId) return false;
+    if (accountId && t.accountId !== accountId) return false;
+    if (search && !(t.description || '').toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [transactions, range, category, memberId, accountId, search, lens]);
 
-    // Despesas Filtradas
-    const expenses = state.expenses.filter(e => {
-        const d = new Date(e.date);
-        if (!isWithinInterval(d, interval)) return false;
-        if (filters.category && e.category !== filters.category) return false;
-        if (filters.paymentMethod && e.paymentMethod !== filters.paymentMethod) return false;
-        if (filters.userId && e.userId !== filters.userId) return false;
-        if (filters.description && !e.description.toLowerCase().includes(filters.description.toLowerCase())) return false;
-        return true;
-    });
+  const incomes = useMemo(() => transactions.filter((t) =>
+    t.kind === 'income' && t.status === 'cleared' && inRange(t),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [transactions, range, lens]);
 
-    // Receitas Filtradas (Movimentações de caixa do tipo 'income')
-    // Nota: Receitas fixas são calculadas separadamente na visão mensal, aqui pegamos o realizado
-    const incomes = state.cashMovements.filter(m => {
-        const d = new Date(m.date);
-        return m.type === 'income' && isWithinInterval(d, interval);
-    });
+  const totalExpense = expenses.reduce((s, t) => s + t.amountCents, 0);
+  const totalIncome = incomes.reduce((s, t) => s + t.amountCents, 0);
+  const result = totalIncome - totalExpense;
+  const savingsRate = totalIncome > 0 ? (result / totalIncome) * 100 : 0;
+  const pct = (v: number) => (totalExpense > 0 ? (v / totalExpense) * 100 : 0);
 
-    return { expenses, incomes };
-  }, [state.expenses, state.cashMovements, filters]);
+  const byCategory = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of expenses) {
+      const key = t.categoryId ? categoryName(t.categoryId) : 'Sem categoria';
+      map.set(key, (map.get(key) ?? 0) + t.amountCents);
+    }
+    return [...map.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [expenses, categoryName]);
 
-  // --- 2. KPIS FINANCEIROS ---
-  const metrics = useMemo(() => {
-    // Total Despesas (Variáveis filtradas + Fixas proporcionais ao período não é trivial, 
-    // então vamos focar no que foi LANÇADO como expense + Pagamentos de Fixas Realizados)
-    
-    const totalExpenses = filteredData.expenses.reduce((acc, e) => acc + Number(e.amount), 0);
-    
-    // Total Receitas (Caixa + Fixas Recebidas nesse período)
-    const fixedReceiptsVal = state.fixedReceipts
-        .filter(r => isWithinInterval(new Date(r.receivedAt), { start: startOfDay(new Date(filters.startDate)), end: endOfDay(new Date(filters.endDate)) }))
-        .reduce((acc, r) => acc + Number(r.amount), 0);
-        
-    const totalIncome = filteredData.incomes.reduce((acc, i) => acc + Number(i.amount), 0) + fixedReceiptsVal;
+  const byAccount = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of expenses) map.set(accountName(t.accountId), (map.get(accountName(t.accountId)) ?? 0) + t.amountCents);
+    return [...map.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [expenses, accountName]);
 
-    const balance = totalIncome - totalExpenses;
-    const savingsRate = totalIncome > 0 ? (balance / totalIncome) * 100 : 0;
+  const evolution = useMemo(() => {
+    const end0 = new Date(range.b);
+    const out: { name: string; Despesas: number; Receitas: number; Saldo: number }[] = [];
+    for (let k = 5; k >= 0; k -= 1) {
+      const d = new Date(end0.getFullYear(), end0.getMonth() - k, 1);
+      const m = d.getMonth(); const y = d.getFullYear();
+      const key = lens === 'competencia'
+        ? (t: Transaction) => t.refMonth === m + 1 && t.refYear === y
+        : (t: Transaction) => isInMonth(t.date, m, y);
+      const exp = transactions.filter((t) => t.kind === 'expense' && t.status === 'cleared' && key(t)).reduce((s, t) => s + t.amountCents, 0);
+      const inc = transactions.filter((t) => t.kind === 'income' && t.status === 'cleared' && key(t)).reduce((s, t) => s + t.amountCents, 0);
+      out.push({ name: `${MONTHS_PT_SHORT[m]}/${String(y).slice(2)}`, Despesas: exp, Receitas: inc, Saldo: inc - exp });
+    }
+    return out;
+  }, [transactions, range.b, lens]);
 
-    return { totalExpenses, totalIncome, balance, savingsRate };
-  }, [filteredData, state.fixedReceipts, filters]);
+  // velocidade de gasto: acumulado por dia (sempre pela data-caixa)
+  const pace = useMemo(() => {
+    const daily = new Map<string, number>();
+    for (const t of expenses) daily.set(t.date, (daily.get(t.date) ?? 0) + t.amountCents);
+    const days: string[] = [];
+    const s = new Date(range.a); const e = new Date(range.b);
+    for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+      days.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    }
+    let acc = 0;
+    return days.map((iso) => { acc += daily.get(iso) ?? 0; return { day: iso.slice(8) + '/' + iso.slice(5, 7), acumulado: acc }; });
+  }, [expenses, range]);
 
-  // --- 3. GRÁFICO: EVOLUÇÃO MENSAL (Entradas vs Saídas) ---
-  const evolutionData = useMemo(() => {
-    // Pega os últimos 6 meses até a data final do filtro
-    const end = new Date(filters.endDate);
-    const start = subMonths(end, 5);
-    const months = eachDayOfInterval({ start, end }).filter(d => d.getDate() === 1); // Pega o dia 1 de cada mês
-
-    return months.map(monthDate => {
-        const m = monthDate.getMonth();
-        const y = monthDate.getFullYear();
-
-        // Despesas Variáveis do mês
-        const varExpenses = state.expenses
-            .filter(e => isSameMonth(new Date(e.date), monthDate))
-            .reduce((sum, e) => sum + Number(e.amount), 0);
-        
-        // Despesas Fixas (Ativas naquele mês)
-        const fixExpenses = getActiveFixedExpenses(m, y)
-            .reduce((sum, f) => sum + Number(f.amount), 0);
-
-        // Receitas (Caixa + Fixas Previstas/Realizadas)
-        const cashIn = state.cashMovements
-            .filter(mov => mov.type === 'income' && isSameMonth(new Date(mov.date), monthDate))
-            .reduce((sum, mov) => sum + Number(mov.amount), 0);
-        
-        const fixIn = getActiveFixedIncomes(m, y)
-            .reduce((sum, i) => sum + Number(i.amount), 0);
-
-        return {
-            name: format(monthDate, 'MMM', { locale: ptBR }).toUpperCase(),
-            Despesas: varExpenses + fixExpenses,
-            Receitas: cashIn + fixIn,
-            Saldo: (cashIn + fixIn) - (varExpenses + fixExpenses)
-        };
-    });
-  }, [state.expenses, state.cashMovements, filters.endDate, getActiveFixedExpenses, getActiveFixedIncomes]);
-
-  // --- 4. GRÁFICO: GASTO ACUMULADO (Diário no Período) ---
-  const dailyTrendData = useMemo(() => {
-    const days = eachDayOfInterval({ 
-        start: new Date(filters.startDate), 
-        end: new Date(filters.endDate) 
-    });
-
-    let cumulative = 0;
-    return days.map(day => {
-        const dayTotal = filteredData.expenses
-            .filter(e => format(new Date(e.date), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'))
-            .reduce((sum, e) => sum + Number(e.amount), 0);
-        
-        cumulative += dayTotal;
-        return {
-            day: format(day, 'dd/MM'),
-            accumulated: cumulative,
-            daily: dayTotal
-        };
-    });
-  }, [filteredData.expenses, filters.startDate, filters.endDate]);
-
-  // --- 5. GRÁFICO: CATEGORIAS E MÉTODOS ---
-  const categoryData = useMemo(() => {
-    return categories.map(cat => ({
-        name: cat.label,
-        value: filteredData.expenses.filter(e => e.category === cat.value).reduce((acc, e) => acc + Number(e.amount), 0)
-    })).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
-  }, [filteredData.expenses]);
-
-  const methodData = useMemo(() => {
-    const methods = Array.from(new Set(filteredData.expenses.map(e => e.paymentMethod)));
-    return methods.map(method => ({
-        name: method,
-        value: filteredData.expenses.filter(e => e.paymentMethod === method).reduce((acc, e) => acc + Number(e.amount), 0)
-    })).sort((a, b) => b.value - a.value);
-  }, [filteredData.expenses]);
-
-  // --- EXPORTAR ---
-  const exportToCsv = () => {
-    const headers = ['Data', 'Descricao', 'Categoria', 'Metodo', 'Valor', 'Usuario'];
-    const rows = filteredData.expenses.map(e => [
-      format(new Date(e.date), 'dd/MM/yyyy'),
-      e.description,
-      e.category,
-      e.paymentMethod,
-      e.amount.toFixed(2),
-      state.users.find(u => u.id === e.userId)?.name || 'N/A'
-    ]);
-    const csvContent = [headers, ...rows].map(r => r.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
+  const exportCsv = () => {
+    const rows = [
+      ['Data', 'Competencia', 'Descricao', 'Categoria', 'Conta', 'Responsavel', 'Valor'],
+      ...expenses.map((t) => [
+        t.date, `${String(t.refMonth).padStart(2, '0')}/${t.refYear}`,
+        (t.description || '').replace(/;/g, ','), categoryName(t.categoryId),
+        accountName(t.accountId), t.memberId ? memberName(t.memberId) : '', (t.amountCents / 100).toFixed(2),
+      ]),
+    ];
+    const csv = rows.map((r) => r.join(';')).join('\n');
+    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `relatorio-${filters.startDate}-a-${filters.endDate}.csv`;
+    a.href = url; a.download = `relatorio_${range.a}_a_${range.b}.csv`;
     a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const clearFilters = () => {
-    setFilters({ 
-        startDate: format(new Date().setDate(1), 'yyyy-MM-dd'), // Volta pro início do mês atual
-        endDate: format(new Date(), 'yyyy-MM-dd'),
-        category: '', paymentMethod: '', userId: '', description: '' 
-    });
+  const clear = () => {
+    setStart(firstOfMonth()); setEnd(today);
+    setCategory(''); setMemberId(''); setAccountId(''); setSearch('');
   };
+
+  if (loading) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
 
   return (
-    <div className="space-y-6 animate-fade-in pb-24">
-      
-      {/* HEADER & ACTIONS */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Relatórios</h1>
-          <p className="text-sm text-muted-foreground">Análise estratégica das suas finanças</p>
-        </div>
-        <div className="flex gap-2 w-full md:w-auto">
-            <Button variant="outline" onClick={clearFilters} className="flex-1 md:flex-none">
-                <RefreshCw className="w-4 h-4 mr-2" /> Resetar
-            </Button>
-            <Button onClick={exportToCsv} className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700">
-                <Download className="w-4 h-4 mr-2" /> Exportar
-            </Button>
-        </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Relatórios"
+        subtitle="Análise das suas finanças"
+        action={
+          <>
+            <Button variant="outline" onClick={clear}><RefreshCw className="mr-2 h-4 w-4" /> Resetar</Button>
+            <Button onClick={exportCsv} disabled={expenses.length === 0}><Download className="mr-2 h-4 w-4" /> Exportar</Button>
+          </>
+        }
+      />
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Tabs value={lens} onValueChange={(v) => setLens(v as Lens)}>
+          <TabsList>
+            <TabsTrigger value="competencia">Competência</TabsTrigger>
+            <TabsTrigger value="caixa">Caixa</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <span className="text-[11px] text-muted-foreground">
+          {lens === 'competencia' ? 'compra no cartão conta no mês da fatura' : 'conta na data em que o dinheiro se move'}
+        </span>
       </div>
 
-      {/* FILTROS AVANÇADOS */}
-      <Card className="shadow-card border-l-4 border-l-primary">
-        <CardHeader className="py-3 px-4 flex flex-row items-center justify-between cursor-pointer hover:bg-muted/5 transition-colors" onClick={() => setShowFilters(!showFilters)}>
-            <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-primary" />
-                <CardTitle className="text-sm font-medium">Filtros de Análise</CardTitle>
-            </div>
-            {showFilters ? <ChevronUp className="w-4 h-4 text-muted-foreground"/> : <ChevronDown className="w-4 h-4 text-muted-foreground"/>}
-        </CardHeader>
-        
-        {showFilters && (
-            <CardContent className="p-4 pt-0 animate-in slide-in-from-top-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
-                    <div className="space-y-1">
-                        <Label className="text-xs">De</Label>
-                        <div className="relative">
-                            <Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input type="date" className="pl-9 h-9" value={filters.startDate} onChange={e => setFilters({...filters, startDate: e.target.value})} />
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <Label className="text-xs">Até</Label>
-                        <div className="relative">
-                            <Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input type="date" className="pl-9 h-9" value={filters.endDate} onChange={e => setFilters({...filters, endDate: e.target.value})} />
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <Label className="text-xs">Categoria</Label>
-                        <Select value={filters.category} onValueChange={v => setFilters({...filters, category: v === 'all' ? '' : v})}>
-                            <SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todas</SelectItem>
-                                {categories.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-1">
-                        <Label className="text-xs">Busca</Label>
-                        <div className="relative">
-                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input placeholder="Uber, Mercado..." className="pl-9 h-9" value={filters.description} onChange={e => setFilters({...filters, description: e.target.value})} />
-                        </div>
-                    </div>
-                </div>
-            </CardContent>
-        )}
+      <Card>
+        <CardContent className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6">
+          <div className="space-y-1"><Label className="text-xs">De</Label>
+            <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">Até</Label>
+            <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">Categoria</Label>
+            <Select value={category || 'all'} onValueChange={(v) => setCategory(v === 'all' ? '' : v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {activeCategories.filter((c) => c.kind === 'expense').map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1"><Label className="text-xs">Responsável</Label>
+            <Select value={memberId || 'all'} onValueChange={(v) => setMemberId(v === 'all' ? '' : v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {members.map((m) => <SelectItem key={m.userId} value={m.userId}>{m.profile?.name ?? '—'}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1"><Label className="text-xs">Conta</Label>
+            <Select value={accountId || 'all'} onValueChange={(v) => setAccountId(v === 'all' ? '' : v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {accounts.filter((a) => !a.archived).map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1"><Label className="text-xs">Busca</Label>
+            <Input placeholder="Uber, mercado…" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
+        </CardContent>
       </Card>
 
-      {/* KPI CARDS - NOVOS INDICADORES */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="shadow-sm">
-            <CardContent className="p-4 flex flex-col justify-between h-full">
-                <span className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3 text-emerald-500" /> Receita (Período)
-                </span>
-                <span className="text-xl font-bold text-emerald-600">{formatCurrency(metrics.totalIncome)}</span>
-            </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-            <CardContent className="p-4 flex flex-col justify-between h-full">
-                <span className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-1">
-                    <TrendingDown className="w-3 h-3 text-red-500" /> Despesa (Período)
-                </span>
-                <span className="text-xl font-bold text-red-600">{formatCurrency(metrics.totalExpenses)}</span>
-            </CardContent>
-        </Card>
-        <Card className={`shadow-sm border-l-4 ${metrics.balance >= 0 ? 'border-l-emerald-500' : 'border-l-red-500'}`}>
-            <CardContent className="p-4 flex flex-col justify-between h-full">
-                <span className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-1">
-                    <Wallet className="w-3 h-3" /> Resultado
-                </span>
-                <span className={`text-xl font-bold ${metrics.balance >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                    {formatCurrency(metrics.balance)}
-                </span>
-            </CardContent>
-        </Card>
-        <Card className="shadow-sm bg-primary/5 border-primary/10">
-            <CardContent className="p-4 flex flex-col justify-between h-full">
-                <span className="text-xs font-medium text-primary uppercase">Taxa de Economia</span>
-                <div className="flex items-end gap-2">
-                    <span className="text-2xl font-bold text-primary">{metrics.savingsRate.toFixed(1)}%</span>
-                    <span className="text-[10px] text-muted-foreground mb-1">da renda</span>
-                </div>
-            </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi label="Receita" value={formatBRL(totalIncome)} className="text-emerald-600" />
+        <Kpi label="Despesa" value={formatBRL(totalExpense)} className="text-red-600" />
+        <Kpi label="Resultado" value={formatBRL(result)} className={result >= 0 ? 'text-emerald-600' : 'text-red-600'} />
+        <Kpi label="Taxa de economia" value={`${savingsRate.toFixed(1)}%`} className="text-primary" />
       </div>
 
-      {/* DASHBOARD GRÁFICO */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* 1. EVOLUÇÃO MENSAL (COMPARATIVO) */}
-        <Card className="shadow-card lg:col-span-2">
-            <CardHeader className="p-4 pb-2 border-b">
-                <CardTitle className="text-sm font-medium">Fluxo de Caixa (6 Meses)</CardTitle>
-                <CardDescription>Comparativo entre Entradas e Saídas</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={evolutionData} margin={{top: 20, right: 20, bottom: 0, left: 0}}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12}} dy={10} />
-                        <YAxis hide />
-                        <Tooltip 
-                            contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}}
-                            formatter={(value: any) => formatCurrency(value)}
-                        />
-                        <Legend verticalAlign="top" height={36} iconType="circle"/>
-                        <Bar dataKey="Despesas" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={20} />
-                        <Bar dataKey="Receitas" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
-                        <Line type="monotone" dataKey="Saldo" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} />
-                    </ComposedChart>
-                </ResponsiveContainer>
-            </CardContent>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="lg:col-span-2">
+          <CardHeader className="p-4 pb-0"><CardTitle className="text-sm">Fluxo de caixa (6 meses)</CardTitle>
+            <CardDescription>Entradas e saídas por {lens === 'competencia' ? 'competência' : 'data'}</CardDescription></CardHeader>
+          <CardContent className="h-[260px] p-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={evolution} margin={{ top: 16, right: 12, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                <YAxis hide />
+                <Tooltip formatter={(v: number) => formatBRL(v)} contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', fontSize: 12 }} />
+                <Legend verticalAlign="top" height={30} iconType="circle" />
+                <Bar dataKey="Despesas" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={18} />
+                <Bar dataKey="Receitas" fill="#10b981" radius={[4, 4, 0, 0]} barSize={18} />
+                <Line type="monotone" dataKey="Saldo" stroke="#3b82f6" strokeWidth={3} dot={{ r: 3 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </CardContent>
         </Card>
 
-        {/* 2. TENDÊNCIA DE GASTO DIÁRIO (NOVO) */}
-        <Card className="shadow-card">
-            <CardHeader className="p-4 pb-2 border-b">
-                <CardTitle className="text-sm font-medium">Velocidade de Gasto</CardTitle>
-                <CardDescription>Acumulado diário no período selecionado</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 h-[250px]">
-                <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={dailyTrendData}>
-                        <defs>
-                            <linearGradient id="colorTrend" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
-                                <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                            </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                        <XAxis dataKey="day" hide />
-                        <Tooltip 
-                            labelStyle={{color: '#6b7280'}}
-                            contentStyle={{borderRadius: '8px', border: 'none', fontSize: '12px'}}
-                            formatter={(val: any) => [formatCurrency(val), "Acumulado"]}
-                        />
-                        <Area type="monotone" dataKey="accumulated" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorTrend)" />
-                    </AreaChart>
-                </ResponsiveContainer>
-            </CardContent>
+        <Card className="lg:col-span-2">
+          <CardHeader className="p-4 pb-0"><CardTitle className="text-sm">Velocidade de gasto</CardTitle>
+            <CardDescription>Despesa acumulada no período (por data)</CardDescription></CardHeader>
+          <CardContent className="h-[220px] p-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={pace} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="pace" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                <XAxis dataKey="day" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                <YAxis hide />
+                <Tooltip formatter={(v: number) => formatBRL(v)} contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', fontSize: 12 }} />
+                <Area type="monotone" dataKey="acumulado" stroke="#f59e0b" strokeWidth={3} fill="url(#pace)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
         </Card>
 
-        {/* 3. CATEGORIAS (DONUT) */}
-        <Card className="shadow-card">
-            <CardHeader className="p-4 pb-2 border-b">
-                <CardTitle className="text-sm font-medium">Gastos por Categoria</CardTitle>
-                <CardDescription>Onde você mais gastou</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 flex flex-col md:flex-row items-center gap-4">
-                <div className="h-[200px] w-full md:w-1/2">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie
-                                data={categoryData}
-                                cx="50%" cy="50%"
-                                innerRadius={60}
-                                outerRadius={80}
-                                paddingAngle={5}
-                                dataKey="value"
-                            >
-                                {categoryData.map((_, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
-                                ))}
-                            </Pie>
-                            <Tooltip formatter={(v: any) => formatCurrency(v)} />
-                        </PieChart>
-                    </ResponsiveContainer>
-                </div>
-                {/* LEGENDA OTIMIZADA */}
-                <div className="w-full md:w-1/2 space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-                    {categoryData.map((entry, index) => (
-                        <div key={index} className="flex justify-between items-center text-xs">
-                            <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full" style={{backgroundColor: COLORS[index % COLORS.length]}} />
-                                <span className="font-medium truncate max-w-[100px]">{entry.name}</span>
-                            </div>
-                            <div className="flex flex-col items-end">
-                                <span className="font-bold">{formatCurrency(entry.value)}</span>
-                                <span className="text-[10px] text-muted-foreground">
-                                    {((entry.value / metrics.totalExpenses) * 100).toFixed(1)}%
-                                </span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </CardContent>
-        </Card>
-
-        {/* 4. MÉTODOS DE PAGAMENTO (NOVO) */}
-        <Card className="shadow-card lg:col-span-2">
-             <CardHeader className="p-4 pb-2 border-b">
-                <CardTitle className="text-sm font-medium">Uso por Método de Pagamento</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
-                <div className="space-y-4">
-                    {methodData.map((item, index) => (
-                        <div key={index} className="space-y-1">
-                            <div className="flex justify-between text-xs">
-                                <span className="flex items-center gap-2 font-medium">
-                                    <CreditCard className="w-3 h-3 text-muted-foreground" />
-                                    {item.name}
-                                </span>
-                                <span>{formatCurrency(item.value)}</span>
-                            </div>
-                            <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                                <div 
-                                    className="h-full bg-primary/80 transition-all duration-500" 
-                                    style={{ width: `${(item.value / metrics.totalExpenses) * 100}%` }}
-                                />
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </CardContent>
-        </Card>
-
-      </div>
-
-      {/* LISTA DETALHADA */}
-      <Card className="shadow-card overflow-hidden">
-        <CardHeader className="p-4 bg-muted/20">
-            <CardTitle className="text-sm font-bold">Extrato Detalhado do Filtro</CardTitle>
-        </CardHeader>
-        <div className="max-h-[400px] overflow-y-auto">
-            {filteredData.expenses.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground text-sm">
-                    Nenhum lançamento encontrado para este filtro.
-                </div>
+        <Card>
+          <CardHeader className="p-4 pb-0"><CardTitle className="text-sm">Gastos por categoria</CardTitle></CardHeader>
+          <CardContent className="flex flex-col items-center gap-4 p-4 md:flex-row">
+            {byCategory.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Sem dados no período.</p>
             ) : (
-                <table className="w-full text-xs md:text-sm text-left">
-                    <thead className="bg-muted sticky top-0 z-10 text-muted-foreground font-medium">
-                        <tr>
-                            <th className="p-3">Data</th>
-                            <th className="p-3">Descrição</th>
-                            <th className="p-3 hidden md:table-cell">Categoria</th>
-                            <th className="p-3 text-right">Valor</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                        {filteredData.expenses
-                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                            .map((e) => (
-                            <tr key={e.id} className="hover:bg-muted/5 transition-colors">
-                                <td className="p-3 whitespace-nowrap text-muted-foreground">
-                                    {format(new Date(e.date), 'dd/MM/yy')}
-                                </td>
-                                <td className="p-3">
-                                    <div className="font-medium line-clamp-1">{e.description}</div>
-                                    <div className="text-[10px] text-muted-foreground md:hidden">{e.category} • {e.paymentMethod}</div>
-                                </td>
-                                <td className="p-3 hidden md:table-cell">
-                                    <Badge variant="secondary" className="text-[10px] font-normal">{e.category}</Badge>
-                                </td>
-                                <td className="p-3 text-right font-semibold">
-                                    {formatCurrency(e.amount)}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+              <>
+                <div className="h-[180px] w-full md:w-1/2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={byCategory} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} dataKey="value">
+                        {byCategory.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="none" />)}
+                      </Pie>
+                      <Tooltip formatter={(v: number) => formatBRL(v)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="w-full space-y-1.5 md:w-1/2">
+                  {byCategory.slice(0, 8).map((e, i) => (
+                    <div key={e.name} className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-2 truncate">
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+                        {e.name}
+                      </span>
+                      <span className="font-medium tabular-nums">{pct(e.value).toFixed(0)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="p-4 pb-0"><CardTitle className="text-sm">Gastos por conta</CardTitle></CardHeader>
+          <CardContent className="space-y-3 p-4">
+            {byAccount.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Sem dados no período.</p>
+            ) : byAccount.map((item) => (
+              <div key={item.name} className="space-y-1">
+                <div className="flex justify-between text-xs"><span className="font-medium">{item.name}</span>
+                  <span className="tabular-nums">{formatBRL(item.value)}</span></div>
+                <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                  <div className="h-full bg-primary/80" style={{ width: `${Math.min(pct(item.value), 100)}%` }} />
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="overflow-hidden">
+        <CardHeader className="bg-muted/20 p-4"><CardTitle className="text-sm">Extrato do filtro ({expenses.length})</CardTitle></CardHeader>
+        <div className="max-h-[420px] overflow-y-auto">
+          {expenses.length === 0 ? (
+            <p className="p-8 text-center text-sm text-muted-foreground">Nenhum lançamento no filtro.</p>
+          ) : (
+            <table className="w-full text-left text-xs md:text-sm">
+              <thead className="sticky top-0 bg-muted text-muted-foreground">
+                <tr><th className="p-3">Data</th><th className="p-3">Descrição</th>
+                  <th className="hidden p-3 md:table-cell">Categoria</th><th className="p-3 text-right">Valor</th></tr>
+              </thead>
+              <tbody className="divide-y">
+                {[...expenses].sort((a, b) => (a.date < b.date ? 1 : -1)).map((t) => (
+                  <tr key={t.id} className="hover:bg-muted/20">
+                    <td className="whitespace-nowrap p-3 text-muted-foreground">{formatFullDate(t.date)}</td>
+                    <td className="p-3">{t.description || '—'}</td>
+                    <td className="hidden p-3 md:table-cell"><Badge variant="secondary" className="text-[10px]">{categoryName(t.categoryId)}</Badge></td>
+                    <td className="p-3 text-right font-semibold tabular-nums">{formatBRL(t.amountCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </Card>
-
     </div>
+  );
+}
+
+function Kpi({ label, value, className }: { label: string; value: string; className?: string }) {
+  return (
+    <Card><CardContent className="p-4">
+      <p className="text-[11px] font-medium uppercase text-muted-foreground">{label}</p>
+      <p className={`text-lg font-bold tabular-nums md:text-xl ${className ?? ''}`}>{value}</p>
+    </CardContent></Card>
   );
 }

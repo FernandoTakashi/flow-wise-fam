@@ -1,149 +1,118 @@
-import { ReactNode, useState } from 'react';
-import { Sidebar } from './Sidebar';
+import { useState, type ReactNode } from 'react';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { Button } from '@/components/ui/button';
-import { 
-  LogOut, Home, TrendingUp, PlusCircle, Settings, 
-  Menu as MenuIcon, X, CreditCard, Wallet, 
-  ArrowUpCircle, Calendar, BarChart3, Users, PiggyBank 
-} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { WalletSelector } from './WalletSelector';
-import MonthSelector from '@/components/MonthSelector'; 
-import { Link, useLocation } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { Sidebar, NAV_ITEMS } from './Sidebar';
+import { WalletSelector } from './WalletSelector';
+import MonthSelector from './MonthSelector';
+import {
+  LogOut, Menu as MenuIcon, X, LayoutDashboard, ArrowLeftRight, CreditCard, BarChart3,
+} from 'lucide-react';
 
-function MenuGridItem({ icon: Icon, label, path, onClick }: { icon: any, label: string, path: string, onClick: () => void }) {
-    const location = useLocation();
-    const isActive = location.pathname === path;
-    return (
-      <Link to={path} onClick={onClick} className={cn("flex flex-col items-center justify-center p-3 rounded-xl border transition-all active:scale-95", isActive ? "bg-primary/10 border-primary text-primary" : "bg-card border-border text-muted-foreground hover:bg-muted")}>
-        <Icon className="w-6 h-6 mb-2" />
-        <span className="text-xs font-medium text-center leading-tight">{label}</span>
-      </Link>
-    );
-}
+const MOBILE_PRIMARY = [
+  { title: 'Início', href: '/', icon: LayoutDashboard, exact: true },
+  { title: 'Lançar', href: '/lancamentos', icon: ArrowLeftRight },
+  { title: 'Cartões', href: '/cartoes', icon: CreditCard },
+  { title: 'Relatórios', href: '/relatorios', icon: BarChart3 },
+];
 
 function MobileNav() {
-    const location = useLocation();
-    const currentPath = location.pathname;
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const hiddenMenuItems = [
-      { label: 'Entradas Fixas', icon: ArrowUpCircle, path: '/fixed-incomes' },
-      { label: 'Gastos Fixos', icon: Calendar, path: '/fixed-expenses' },
-      { label: 'Cartões', icon: CreditCard, path: '/credit-cards' },
-      { label: 'Gestão Caixa', icon: Wallet, path: '/cash-management' },
-      { label: 'Investimentos', icon: PiggyBank, path: '/investments' },
-      { label: 'Relatórios', icon: BarChart3, path: '/reports' },
-      { label: 'Projeção', icon: TrendingUp, path: '/financial-projection' },
-      { label: 'Usuários', icon: Users, path: '/users' },
-      { label: 'Ajustes', icon: Settings, path: '/settings' },
-    ];
-    const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
-  
-    return (
-      <>
-        {isMenuOpen && (
-          <div className="md:hidden fixed inset-0 z-40 bg-background/95 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-10 flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b">
-              <span className="font-bold text-lg">Menu Completo</span>
-              <Button variant="ghost" size="icon" onClick={toggleMenu}><X className="w-6 h-6" /></Button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4"><div className="grid grid-cols-3 gap-3">{hiddenMenuItems.map((item) => (<MenuGridItem key={item.path} {...item} onClick={() => setIsMenuOpen(false)} />))}</div></div>
-            <div className="h-20" />
+  const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  return (
+    <>
+      {menuOpen && (
+        <div className="fixed inset-0 z-40 flex flex-col bg-background/97 backdrop-blur-sm md:hidden">
+          <div className="flex items-center justify-between border-b p-4">
+            <span className="text-lg font-bold">Menu</span>
+            <Button variant="ghost" size="icon" onClick={() => setMenuOpen(false)}><X className="h-6 w-6" /></Button>
           </div>
-        )}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-background border-t border-border z-50 px-2 pb-safe-area">
-          <div className="flex justify-around items-center h-full">
-            <Link to="/" onClick={() => setIsMenuOpen(false)} className={cn("flex flex-col items-center justify-center w-16 h-full space-y-1 transition-colors", currentPath === '/' ? "text-primary" : "text-muted-foreground")}>
-              <Home className={cn("w-6 h-6", currentPath === '/' && "fill-current/20")} /><span className="text-[10px] font-medium">Início</span>
-            </Link>
-            <Link to="/reports" onClick={() => setIsMenuOpen(false)} className={cn("flex flex-col items-center justify-center w-16 h-full space-y-1 transition-colors", currentPath === '/reports' ? "text-primary" : "text-muted-foreground")}>
-              <BarChart3 className={cn("w-6 h-6", currentPath === '/reports' && "fill-current/20")} /><span className="text-[10px] font-medium">Relatórios</span>
-            </Link>
-            <div className="relative -top-5">
-              <Link to="/variable-expenses" onClick={() => setIsMenuOpen(false)} className="flex items-center justify-center w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:scale-105 transition-transform active:scale-95 border-4 border-background">
-                <PlusCircle className="w-8 h-8" />
-              </Link>
-            </div>
-            <Link to="/investments" onClick={() => setIsMenuOpen(false)} className={cn("flex flex-col items-center justify-center w-16 h-full space-y-1 transition-colors", currentPath === '/investments' ? "text-primary" : "text-muted-foreground")}>
-              <PiggyBank className={cn("w-6 h-6", currentPath === '/investments' && "fill-current/20")} /><span className="text-[10px] font-medium">Investir</span>
-            </Link>
-            <button onClick={toggleMenu} className={cn("flex flex-col items-center justify-center w-16 h-full space-y-1 transition-colors", isMenuOpen ? "text-primary" : "text-muted-foreground")}>
-              <MenuIcon className="w-6 h-6" /><span className="text-[10px] font-medium">Menu</span>
-            </button>
+          <div className="grid flex-1 grid-cols-3 content-start gap-3 overflow-y-auto p-4">
+            {NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const active = item.exact ? location.pathname === item.href : location.pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  to={item.href}
+                  onClick={() => setMenuOpen(false)}
+                  className={cn(
+                    'flex flex-col items-center justify-center gap-2 rounded-xl border p-4 text-center transition-colors',
+                    active ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card text-muted-foreground',
+                  )}
+                >
+                  <Icon className="h-6 w-6" />
+                  <span className="text-xs font-medium leading-tight">{item.title}</span>
+                </Link>
+              );
+            })}
           </div>
         </div>
-      </>
-    );
+      )}
+
+      <div className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-border bg-background px-2 md:hidden">
+        {MOBILE_PRIMARY.map((item) => {
+          const Icon = item.icon;
+          const active = item.exact ? location.pathname === item.href : location.pathname.startsWith(item.href);
+          return (
+            <Link key={item.href} to={item.href} onClick={() => setMenuOpen(false)}
+              className={cn('flex w-16 flex-col items-center gap-1 text-[10px] font-medium',
+                active ? 'text-primary' : 'text-muted-foreground')}>
+              <Icon className="h-5 w-5" />
+              {item.title}
+            </Link>
+          );
+        })}
+        <button onClick={() => setMenuOpen((v) => !v)}
+          className={cn('flex w-16 flex-col items-center gap-1 text-[10px] font-medium',
+            menuOpen ? 'text-primary' : 'text-muted-foreground')}>
+          <MenuIcon className="h-5 w-5" />
+          Menu
+        </button>
+      </div>
+    </>
+  );
 }
 
-// --- LAYOUT PRINCIPAL ATUALIZADO ---
-interface LayoutProps {
-  children: ReactNode;
-}
-
-export function Layout({ children }: LayoutProps) {
+export function Layout({ children }: { children: ReactNode }) {
   const { toast } = useToast();
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast({ title: "Erro ao sair", description: error.message, variant: "destructive" });
-    }
+    if (error) toast({ title: 'Erro ao sair', description: error.message, variant: 'destructive' });
   };
 
   return (
-    <div className="min-h-screen flex w-full bg-background text-foreground">
-      {/* SIDEBAR (Desktop) */}
-      <div className="hidden md:block h-screen sticky top-0 border-r w-64 shrink-0">
+    <div className="flex min-h-screen w-full bg-background text-foreground">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-border md:block">
         <Sidebar />
-      </div>
+      </aside>
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        
-        {/* HEADER GLOBAL (Fixo no topo) */}
-        <header className="h-auto min-h-[64px] border-b bg-background/80 backdrop-blur-md flex flex-col gap-2 md:flex-row items-center justify-between px-4 py-2 md:px-6 sticky top-0 z-30 transition-all">
-          
-          {/* Linha Superior no Mobile / Esquerda no Desktop */}
-          <div className="flex items-center justify-between w-full md:w-auto gap-4">
-            {/* Wallet Selector */}
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex flex-col items-center gap-2 border-b border-border bg-background/80 px-4 py-2 backdrop-blur-md md:flex-row md:justify-between md:px-6">
+          <div className="flex w-full items-center justify-between gap-4 md:w-auto">
             <WalletSelector />
-
-            {/* Logout (Visível aqui no mobile para economizar espaço vertical) */}
-            <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={handleLogout}
-                className="md:hidden text-muted-foreground hover:text-destructive"
-            >
-                <LogOut className="w-5 h-5" />
+            <Button variant="ghost" size="icon" onClick={handleLogout}
+              className="text-muted-foreground hover:text-destructive md:hidden">
+              <LogOut className="h-5 w-5" />
             </Button>
           </div>
 
-          <div className="w-full md:w-auto flex justify-center md:absolute md:left-1/2 md:-translate-x-1/2">
-             <div className="scale-90 md:scale-100 origin-center">
-                <MonthSelector />
-             </div>
+          <div className="flex w-full justify-center md:absolute md:left-1/2 md:w-auto md:-translate-x-1/2">
+            <MonthSelector />
           </div>
 
-          <div className="hidden md:flex items-center gap-2">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={handleLogout}
-              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sair
-            </Button>
-          </div>
+          <Button variant="ghost" size="sm" onClick={handleLogout}
+            className="hidden text-muted-foreground hover:bg-destructive/10 hover:text-destructive md:inline-flex">
+            <LogOut className="mr-2 h-4 w-4" /> Sair
+          </Button>
         </header>
 
-        <main className="flex-1 overflow-auto pb-24 md:pb-8 pt-2">
-          <div className="p-4 md:p-8 max-w-7xl mx-auto w-full">
-            {children}
-          </div>
+        <main className="flex-1 overflow-auto pb-24 pt-2 md:pb-10">
+          <div className="mx-auto w-full max-w-6xl p-4 md:p-8">{children}</div>
         </main>
 
         <MobileNav />
