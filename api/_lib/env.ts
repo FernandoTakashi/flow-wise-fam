@@ -24,7 +24,13 @@ export const env = {
   supabaseServiceRole: () => required('SUPABASE_SERVICE_ROLE_KEY'),
   anthropicKey: () => optional('ANTHROPIC_API_KEY'),
   telegramToken: () => required('TELEGRAM_BOT_TOKEN'),
-  telegramWebhookSecret: () => optional('TELEGRAM_WEBHOOK_SECRET'),
+  // Telegram só aceita [A-Za-z0-9_-] no secret_token; limpa o valor e usa o
+  // mesmo resultado no setWebhook e na verificação do header.
+  telegramWebhookSecret: () => {
+    const v = optional('TELEGRAM_WEBHOOK_SECRET');
+    const clean = v ? v.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 256) : '';
+    return clean.length > 0 ? clean : undefined;
+  },
   telegramBotUsername: () => optional('TELEGRAM_BOT_USERNAME'),
   cronSecret: () => optional('CRON_SECRET'),
   publicAppUrl: () => optional('PUBLIC_APP_URL') ?? 'https://financeapp.vercel.app',
