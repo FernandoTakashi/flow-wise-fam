@@ -40,7 +40,7 @@ const mapRecurrence = (r: any): Recurrence => ({
   id: r.id, walletId: r.wallet_id, description: r.description, kind: r.kind,
   amountCents: Number(r.amount_cents), categoryId: r.category_id, accountId: r.account_id,
   day: r.day, frequency: r.frequency, startDate: r.start_date, endDate: r.end_date, active: !!r.active,
-  autopay: !!r.autopay,
+  autopay: !!r.autopay, variableAmount: !!r.variable_amount,
 });
 const mapInvoice = (r: any): CardInvoice => ({
   id: r.id, walletId: r.wallet_id, accountId: r.account_id, refMonth: r.ref_month, refYear: r.ref_year,
@@ -96,7 +96,7 @@ export interface NewTransaction {
 export interface NewRecurrence {
   description: string; kind: CategoryKind; amountCents: number;
   categoryId?: UUID | null; accountId?: UUID | null; day: number;
-  startDate: string; endDate?: string | null; autopay?: boolean;
+  startDate: string; endDate?: string | null; autopay?: boolean; variableAmount?: boolean;
 }
 export interface NewInvestment {
   description: string; amountCents: number; yieldRateBps: number; dateISO: string; memberId?: UUID | null;
@@ -726,7 +726,8 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     const { error } = await supabase.from('recurrences').insert({
       wallet_id: wid, description: r.description, kind: r.kind, amount_cents: r.amountCents,
       category_id: r.categoryId ?? null, account_id: r.accountId ?? null, day: r.day,
-      start_date: r.startDate, end_date: r.endDate ?? null, autopay: r.autopay ?? false,
+      start_date: r.startDate, end_date: r.endDate ?? null,
+      autopay: r.autopay ?? false, variable_amount: r.variableAmount ?? false,
     });
     if (error) throw error;
     await reload();
@@ -742,6 +743,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     if (patch.startDate !== undefined) row.start_date = patch.startDate;
     if (patch.endDate !== undefined) row.end_date = patch.endDate;
     if (patch.autopay !== undefined) row.autopay = patch.autopay;
+    if (patch.variableAmount !== undefined) row.variable_amount = patch.variableAmount;
     if (patch.active !== undefined) row.active = patch.active;
     const { error } = await supabase.from('recurrences').update(row).eq('id', id);
     if (error) throw error;

@@ -10,7 +10,6 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { formatBRL, splitInstallments } from '@/lib/money';
@@ -47,7 +46,7 @@ const emptyForm = (dateISO: string): FormState => {
   };
 };
 
-export default function Transactions() {
+export default function Transactions({ kind = 'expense' }: { kind?: Kind }) {
   const {
     loading, selectedMonth, today, transactions, accounts, spendingAccounts, cards, activeCategories,
     members, userId, accountName, categoryName, memberName, isPeriodLocked, wouldOverdraw, wouldExceedLimit,
@@ -56,10 +55,10 @@ export default function Transactions() {
   const { toast } = useToast();
   const { month, year } = selectedMonth;
   const locked = isPeriodLocked(month, year);
+  const isIncome = kind === 'income';
 
-  const [tab, setTab] = useState<Kind>('expense');
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<FormState>(emptyForm(today));
+  const [form, setForm] = useState<FormState>(() => ({ ...emptyForm(today), kind }));
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -69,9 +68,9 @@ export default function Transactions() {
     [transactions, month, year],
   );
   // "Saídas" = despesas + transferências (pagamento de fatura é saída de dinheiro)
-  const tabTx = useMemo(
-    () => monthTx.filter((t) => (tab === 'income' ? t.kind === 'income' : t.kind !== 'income')),
-    [monthTx, tab],
+  const kindTx = useMemo(
+    () => monthTx.filter((t) => (isIncome ? t.kind === 'income' : t.kind !== 'income')),
+    [monthTx, isIncome],
   );
   const totals = useMemo(() => {
     let income = 0; let expense = 0;
@@ -100,7 +99,7 @@ export default function Transactions() {
   const limitWarn = !editing && form.kind === 'expense' && isCard && form.accountId && form.amountCents > 0
     && wouldExceedLimit(form.accountId, form.amountCents);
 
-  const resetForm = () => { setForm(emptyForm(today)); setEditing(null); setShowForm(false); };
+  const resetForm = () => { setForm({ ...emptyForm(today), kind }); setEditing(null); setShowForm(false); };
 
   const evenShares = (total: number): Record<string, number> => {
     const ids = members.map((m) => m.userId);
@@ -111,7 +110,7 @@ export default function Transactions() {
 
   const openNew = () => {
     setForm({
-      ...emptyForm(today), kind: tab,
+      ...emptyForm(today), kind,
       accountId: spendingAccounts[0]?.id ?? accounts[0]?.id ?? '', memberId: userId ?? '',
     });
     setEditing(null);
@@ -193,9 +192,9 @@ export default function Transactions() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Lançamentos"
+        title={isIncome ? 'Entradas' : 'Saídas'}
         subtitle={`Competência de ${MONTHS_PT[month]} de ${year}`}
-        action={<Button onClick={openNew}><Plus className="mr-2 h-4 w-4" /> {tab === 'income' ? 'Nova entrada' : 'Nova saída'}</Button>}
+        action={<Button onClick={openNew}><Plus className="mr-2 h-4 w-4" /> {isIncome ? 'Nova entrada' : 'Nova saída'}</Button>}
       />
 
       {locked && (
@@ -204,27 +203,20 @@ export default function Transactions() {
         </div>
       )}
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as Kind)}>
-        <TabsList className="grid w-full max-w-xs grid-cols-2">
-          <TabsTrigger value="expense">Saídas</TabsTrigger>
-          <TabsTrigger value="income">Entradas</TabsTrigger>
-        </TabsList>
-      </Tabs>
-
       <div className="grid grid-cols-2 gap-3">
-        {tab === 'income'
+        {isIncome
           ? <MiniTile label={`Entradas de ${MONTHS_PT[month]}`} value={formatBRL(totals.income)} className="text-emerald-600" />
           : <MiniTile label={`Saídas de ${MONTHS_PT[month]}`} value={formatBRL(totals.expense)} className="text-red-600" />}
         <MiniTile label="Resultado do mês" value={formatBRL(totals.net)} className={totals.net >= 0 ? 'text-emerald-600' : 'text-red-600'} />
       </div>
 
-      {tabTx.length === 0 ? (
+      {kindTx.length === 0 ? (
         <EmptyState icon={<ArrowLeftRight className="h-10 w-10" />}
-          title={tab === 'income' ? 'Nenhuma entrada neste mês' : 'Nenhuma saída neste mês'}
-          hint={tab === 'income' ? 'Registre salário, freelas, reembolsos…' : 'Registre compras, contas, pagamentos…'} />
+          title={isIncome ? 'Nenhuma entrada neste mês' : 'Nenhuma saída neste mês'}
+          hint={isIncome ? 'Registre salário, freelas, reembolsos…' : 'Registre compras, contas, pagamentos…'} />
       ) : (
         <div className="space-y-2">
-          {tabTx.map((t) => (
+          {kindTx.map((t) => (
             <Card key={t.id} className={t.status === 'pending' ? 'border-dashed opacity-70' : ''}>
               <CardContent className="flex items-center justify-between gap-3 p-3">
                 <div className="flex min-w-0 items-center gap-3">
@@ -282,24 +274,12 @@ export default function Transactions() {
 
       <Dialog open={showForm} onOpenChange={(o) => (o ? setShowForm(true) : resetForm())}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader><DialogTitle>{editing ? 'Editar lançamento' : 'Novo lançamento'}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>
+              {editing ? 'Editar' : 'Nova'} {isIncome ? 'entrada' : 'saída'}
+            </DialogTitle>
+          </DialogHeader>
           <form onSubmit={submit} className="space-y-4">
-            {!editing && (
-              <div className="grid grid-cols-2 gap-2">
-                {(['expense', 'income'] as Kind[]).map((k) => (
-                  <button key={k} type="button"
-                    onClick={() => setForm((f) => ({ ...f, kind: k, categoryId: '' }))}
-                    className={`rounded-lg border p-3 text-sm font-medium transition-colors ${
-                      form.kind === k
-                        ? k === 'income' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-red-500 bg-red-50 text-red-700'
-                        : 'bg-background hover:bg-muted'
-                    }`}>
-                    {k === 'income' ? 'Entrada' : 'Saída'}
-                  </button>
-                ))}
-              </div>
-            )}
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Valor</Label>

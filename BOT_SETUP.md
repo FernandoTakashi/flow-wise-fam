@@ -2,11 +2,11 @@
 
 Implementa:
 
-- **Débito automático** (`recurrences.autopay`): o cron lança a recorrência sozinho
-  na data de vencimento — conta corrente = pago; cartão = linha na fatura.
-- **Lembretes diários** (Vercel Cron, 08:00 BRT): as contas manuais vencendo/atrasadas
-  chegam no Telegram com botão **[Paguei]**; os débitos automáticos chegam já lançados
-  com **[Ajustar valor]**.
+- **Débito automático** (`recurrences.autopay`): só um marcador visual — o cron NÃO
+  lança nada sozinho; o pagamento é sempre marcado à mão. Aparece como tag no lembrete.
+- **Lembretes diários** (Vercel Cron, 08:00 BRT): toda conta fixa de saída vencendo/
+  atrasada e não paga chega no Telegram com botão **[Paguei]** (um lembrete por conta
+  por dia).
 - **Lançamento por mensagem**: "ifood 42,90 crédito nubank" → resumo → **[Confirmar]**.
   Interpretação por Claude Haiku (cai num parser por regex se faltar a API key).
 
@@ -87,18 +87,17 @@ da geração do link.
 
 ## 7. Testar
 
-- **Lançamento:** mande `mercado 87,50` para o bot → confirmar → aparece em Lançamentos.
-- **Débito automático:** marque um fixo como "Débito automático" (Fixos → editar) com
-  vencimento hoje ou no passado, depois force o cron:
+- **Lançamento:** mande `mercado 87,50` para o bot → confirmar → aparece em Saídas.
+- **Lembrete:** cadastre um fixo de saída com vencimento hoje ou no passado e force o cron:
   ```
   https://SEU-APP.vercel.app/api/cron/reminders?key=<CRON_SECRET>
   ```
-  (`&date=2026-09-10` simula outro dia). Retorna um resumo JSON.
-- **Lembrete:** um fixo manual vencendo hoje aparece na mesma chamada do cron.
+  (`&date=2026-09-10` simula outro dia). Retorna um resumo JSON; o Telegram recebe a
+  lista com botões **[Paguei]**.
 
 ## Limitações conhecidas (v1)
 
-- Lembrete/autopay olham só a ocorrência do **mês corrente** — uma conta que virou o mês
+- O lembrete olha só a ocorrência do **mês corrente** — uma conta que virou o mês
   sem pagar não é re-cobrada pelo bot (continua visível no Dashboard).
 - Vercel Hobby: cron **1×/dia**, com possível atraso de alguns minutos.
 - `[Editar]` no resumo de lançamento não existe: se o parse errou, é só mandar de novo.

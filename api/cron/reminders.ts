@@ -1,6 +1,6 @@
-// Alvo do Vercel Cron (1x/dia). Lança débitos automáticos vencidos e envia os
-// lembretes das contas manuais. Também aceita chamada manual com ?key=<CRON_SECRET>
-// (e ?date=yyyy-mm-dd para testar um dia específico).
+// Alvo do Vercel Cron (1x/dia). Envia os lembretes das contas fixas de saída em
+// aberto (não lança nada sozinho). Também aceita chamada manual com
+// ?key=<CRON_SECRET> (e ?date=yyyy-mm-dd para testar um dia específico).
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { env } from '../_lib/env.js';
 import { runReminders } from '../_lib/reminders.js';

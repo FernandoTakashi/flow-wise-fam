@@ -30,11 +30,15 @@ export default function Dashboard() {
     () => recurrenceOccurrences(month, year).filter((o) => o.status !== 'paid'),
     [recurrenceOccurrences, month, year],
   );
-  const pendingExpenses = useMemo(() => pending.filter((o) => o.recurrence.kind === 'expense'), [pending]);
+  // fixos de cartão não aparecem soltos: entram na linha da fatura (evita duplicar o valor)
+  const pendingExpenses = useMemo(
+    () => pending.filter((o) => o.recurrence.kind === 'expense' && !o.onCard),
+    [pending],
+  );
   const pendingIncomes = useMemo(() => pending.filter((o) => o.recurrence.kind === 'income'), [pending]);
   const openInvoices = useMemo(
     () => cards.map((c) => ({ card: c, view: invoiceView(c.id, month, year) }))
-      .filter((x) => x.view.status !== 'paid' && x.view.postedCents > 0),
+      .filter((x) => x.view.status !== 'paid' && (x.view.postedCents > 0 || x.view.projectedCents > 0)),
     [cards, invoiceView, month, year],
   );
   const balances = useMemo(() => memberBalances().filter((b) => b.netCents !== 0), [memberBalances]);
@@ -263,8 +267,10 @@ export default function Dashboard() {
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Valor real</Label>
-                <MoneyInput valueCents={fixoAmount} onChangeCents={setFixoAmount} autoFocus />
+                <Label>Valor</Label>
+                {fixo?.recurrence.variableAmount
+                  ? <MoneyInput valueCents={fixoAmount} onChangeCents={setFixoAmount} autoFocus />
+                  : <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm font-semibold tabular-nums">{formatBRL(fixoAmount)}</div>}
               </div>
               <div className="space-y-2">
                 <Label>{fixo?.recurrence.kind === 'income' ? 'Data' : 'Data da baixa'}</Label>

@@ -1,5 +1,5 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
@@ -70,7 +70,9 @@ const App = () => {
               <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Carregando seção…</div>}>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
-                  <Route path="/lancamentos" element={<Transactions />} />
+                  <Route path="/saidas" element={<Transactions kind="expense" />} />
+                  <Route path="/entradas" element={<Transactions kind="income" />} />
+                  <Route path="/lancamentos" element={<Navigate to="/saidas" replace />} />
                   <Route path="/fixos" element={<Recurrences />} />
                   <Route path="/cartoes" element={<Cards />} />
                   <Route path="/investimentos" element={<Investments />} />

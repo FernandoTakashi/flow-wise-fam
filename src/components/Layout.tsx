@@ -8,14 +8,14 @@ import { Sidebar, NAV_ITEMS } from './Sidebar';
 import { WalletSelector } from './WalletSelector';
 import MonthSelector from './MonthSelector';
 import {
-  LogOut, Menu as MenuIcon, X, LayoutDashboard, ArrowLeftRight, CreditCard, BarChart3,
+  LogOut, Menu as MenuIcon, X, LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard,
 } from 'lucide-react';
 
 const MOBILE_PRIMARY = [
   { title: 'Início', href: '/', icon: LayoutDashboard, exact: true },
-  { title: 'Lançar', href: '/lancamentos', icon: ArrowLeftRight },
+  { title: 'Saídas', href: '/saidas', icon: ArrowDownCircle },
+  { title: 'Entradas', href: '/entradas', icon: ArrowUpCircle },
   { title: 'Cartões', href: '/cartoes', icon: CreditCard },
-  { title: 'Relatórios', href: '/relatorios', icon: BarChart3 },
 ];
 
 function MobileNav() {
@@ -78,7 +78,7 @@ function MobileNav() {
 }
 
 // Só as páginas que realmente reagem ao mês selecionado mostram o seletor.
-const MONTH_SCOPED_ROUTES = ['/', '/lancamentos', '/fixos', '/cartoes'];
+const MONTH_SCOPED_ROUTES = ['/', '/saidas', '/entradas', '/fixos', '/cartoes'];
 
 export function Layout({ children }: { children: ReactNode }) {
   const { toast } = useToast();

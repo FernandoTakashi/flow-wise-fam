@@ -69,8 +69,10 @@ export interface Recurrence {
   startDate: string;
   endDate?: string | null;
   active: boolean;
-  /** débito automático: o lançamento é criado sozinho na data de vencimento */
+  /** informativo: fixo em débito automático (pagamento ainda é marcado à mão) */
   autopay: boolean;
+  /** valor muda mês a mês (luz, água…): pede confirmar o valor na baixa */
+  variableAmount: boolean;
 }
 
 export interface CardInvoice {

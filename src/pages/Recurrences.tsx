@@ -13,19 +13,19 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { formatBRL } from '@/lib/money';
-import { MONTHS_PT, todayISO } from '@/lib/dates';
+import { MONTHS_PT, todayISO, dayOfMonthISO } from '@/lib/dates';
 import type { CategoryKind, Recurrence } from '@/types';
 import { Switch } from '@/components/ui/switch';
 import { Plus, Pencil, Trash2, Check, X, Repeat, Lock, Receipt, Zap } from 'lucide-react';
 
 interface FormState {
   description: string; kind: CategoryKind; amountCents: number;
-  categoryId: string; accountId: string; day: string; startDate: string; endDate: string;
-  autopay: boolean;
+  categoryId: string; accountId: string; day: string;
+  autopay: boolean; variableAmount: boolean;
 }
 const emptyForm = (): FormState => ({
   description: '', kind: 'expense', amountCents: 0, categoryId: '', accountId: '',
-  day: '5', startDate: todayISO(), endDate: '', autopay: false,
+  day: '5', autopay: false, variableAmount: false,
 });
 
 export default function Recurrences() {
@@ -74,7 +74,7 @@ export default function Recurrences() {
     setForm({
       description: r.description, kind: r.kind, amountCents: r.amountCents,
       categoryId: r.categoryId ?? '', accountId: r.accountId ?? '',
-      day: String(r.day), startDate: r.startDate, endDate: r.endDate ?? '', autopay: r.autopay,
+      day: String(r.day), autopay: r.autopay, variableAmount: r.variableAmount,
     });
     setShowForm(true);
   };
@@ -85,16 +85,27 @@ export default function Recurrences() {
       toast({ title: 'Preencha descrição, valor e dia', variant: 'destructive' });
       return;
     }
+    if (form.kind === 'expense' && !form.accountId) {
+      toast({ title: 'Escolha a forma de pagamento', variant: 'destructive' });
+      return;
+    }
     setBusy(true);
-    const payload: NewRecurrence = {
+    const base = {
       description: form.description, kind: form.kind, amountCents: form.amountCents,
       categoryId: form.categoryId || null, accountId: form.accountId || null,
-      day: parseInt(form.day, 10), startDate: form.startDate, endDate: form.endDate || null,
-      autopay: form.autopay,
+      day: parseInt(form.day, 10),
+      autopay: form.kind === 'expense' && form.autopay,
+      variableAmount: form.variableAmount,
     };
     try {
-      if (editing) { await updateRecurrence(editing.id, payload); toast({ title: 'Recorrência atualizada' }); }
-      else { await addRecurrence(payload); toast({ title: 'Recorrência criada' }); }
+      if (editing) {
+        await updateRecurrence(editing.id, base);
+        toast({ title: 'Recorrência atualizada' });
+      } else {
+        // começa a valer a partir do mês que está sendo visto
+        await addRecurrence({ ...base, startDate: dayOfMonthISO(year, month, 1), endDate: null });
+        toast({ title: 'Recorrência criada' });
+      }
       reset();
     } catch (err) {
       toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' });
@@ -193,6 +204,7 @@ export default function Recurrences() {
                       <span>{o.recurrence.day <= 0 ? 'Último dia' : `Dia ${o.recurrence.day}`}</span>
                       {o.recurrence.accountId && <><span>·</span><span>{accountName(o.recurrence.accountId)}</span></>}
                       {o.recurrence.categoryId && <><span>·</span><span>{categoryName(o.recurrence.categoryId)}</span></>}
+                      {o.recurrence.variableAmount && <><span>·</span><span className="text-amber-600">valor variável</span></>}
                       {o.recurrence.autopay && <><span>·</span><span className="inline-flex items-center gap-0.5 text-sky-600"><Zap className="h-3 w-3" /> débito automático</span></>}
                     </div>
                   </div>
@@ -201,7 +213,7 @@ export default function Recurrences() {
                       <span className="text-sm font-bold tabular-nums">{formatBRL(done || informed ? o.amountCents : o.estimatedCents)}</span>
                       {changed && <span className="ml-1 text-[11px] text-muted-foreground line-through">{formatBRL(o.estimatedCents)}</span>}
                     </div>
-                    {!done && !o.onCard && (
+                    {!done && !o.onCard && o.recurrence.variableAmount && (
                       <Button variant="ghost" size="sm" className="h-8 px-2 text-[11px]" disabled={locked}
                         onClick={() => openInform(o)}>
                         <Receipt className="mr-1 h-3.5 w-3.5" /> {informed ? 'Editar valor' : 'Informar valor'}
@@ -240,8 +252,10 @@ export default function Recurrences() {
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Valor real {tab === 'income' ? 'recebido' : 'pago'}</Label>
-                <MoneyInput valueCents={markAmount} onChangeCents={setMarkAmount} autoFocus />
+                <Label>Valor {tab === 'income' ? 'recebido' : 'pago'}</Label>
+                {mark?.recurrence.variableAmount
+                  ? <MoneyInput valueCents={markAmount} onChangeCents={setMarkAmount} autoFocus />
+                  : <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm font-semibold tabular-nums">{formatBRL(markAmount)}</div>}
               </div>
               <div className="space-y-2">
                 <Label>{tab === 'income' ? 'Data do recebimento' : 'Data da baixa'}</Label>
@@ -249,8 +263,8 @@ export default function Recurrences() {
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Ajuste o valor se a conta veio diferente do previsto.
-              {mark?.onCard && ' A data da baixa decide em qual fatura este lançamento entra.'}
+              {mark?.recurrence.variableAmount && 'Ajuste o valor se a conta veio diferente do previsto. '}
+              {mark?.onCard && 'A data da baixa decide em qual fatura este lançamento entra.'}
             </p>
             <div className="space-y-2">
               <Label>{tab === 'income' ? 'Quem recebeu' : 'Quem pagou'}</Label>
@@ -332,12 +346,16 @@ export default function Recurrences() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Conta padrão</Label>
+                <Label>{form.kind === 'expense' ? 'Forma de pagamento' : 'Conta de recebimento'}</Label>
                 <Select value={form.accountId} onValueChange={(v) => setForm((f) => ({ ...f, accountId: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={form.kind === 'expense' ? 'Selecione' : 'Opcional'} /></SelectTrigger>
                   <SelectContent>
-                    {spendingAccounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
                     {form.kind === 'expense' && cards.map((a) => <SelectItem key={a.id} value={a.id}>💳 {a.name}</SelectItem>)}
+                    {spendingAccounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {form.kind === 'expense' ? `Débito · ${a.name}` : a.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -349,25 +367,26 @@ export default function Recurrences() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Início</Label>
-                <Input type="date" value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} required />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Fim (opcional)</Label>
-                <Input type="date" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
-              </div>
-            </div>
             <label className="flex items-start gap-3 rounded-lg border p-3">
-              <Switch checked={form.autopay} onCheckedChange={(v) => setForm((f) => ({ ...f, autopay: v }))} className="mt-0.5" />
+              <Switch checked={form.variableAmount} onCheckedChange={(v) => setForm((f) => ({ ...f, variableAmount: v }))} className="mt-0.5" />
               <span className="text-sm">
-                <span className="font-medium">Débito automático</span>
+                <span className="font-medium">Valor variável</span>
                 <span className="block text-[11px] text-muted-foreground">
-                  Lança sozinho na data de vencimento (conta = pago; cartão = na fatura). Você só confirma o valor se vier diferente.
+                  Conta que muda mês a mês (luz, água, gás). Aí você informa o valor real do mês antes de dar baixa.
                 </span>
               </span>
             </label>
+            {form.kind === 'expense' && (
+              <label className="flex items-start gap-3 rounded-lg border p-3">
+                <Switch checked={form.autopay} onCheckedChange={(v) => setForm((f) => ({ ...f, autopay: v }))} className="mt-0.5" />
+                <span className="text-sm">
+                  <span className="font-medium">Débito automático</span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    Só um marcador visual — o débito sai sozinho no banco, mas você continua marcando o pagamento aqui na mão.
+                  </span>
+                </span>
+              </label>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={reset}>Cancelar</Button>
               <Button type="submit" disabled={busy}>{busy ? 'Salvando…' : editing ? 'Salvar' : 'Criar'}</Button>

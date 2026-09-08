@@ -1,33 +1,27 @@
-// Rotina diária: lança os débitos automáticos vencidos e monta o lembrete das
-// contas manuais em aberto. Idempotente via notification_log.
+// Rotina diária: monta o lembrete das contas fixas de saída em aberto.
+// NÃO lança nada sozinho (débito automático é só informativo). Idempotente
+// via notification_log (um lembrete por conta por dia).
 import { admin } from './supabaseAdmin.js';
 import { sendMessage, type InlineButton } from './telegram.js';
-import { loadWalletBundle, markOccurrence, occurrenceTx, type RecurrenceRow } from './finance.js';
-import { dayOfMonthISO, isoParts, recurrenceDueISO } from './shared.js';
-import { formatBRL } from './shared.js';
+import { loadWalletBundle, occurrenceTx, type RecurrenceRow } from './finance.js';
+import { dayOfMonthISO, isoParts, recurrenceDueISO, formatBRL } from './shared.js';
 
 export interface RunSummary {
   walletsChecked: number;
   messagesSent: number;
-  autopayLancados: number;
   lembretes: number;
   erros: string[];
 }
 
-async function loggedToday(recId: string, kind: string, m: number, y: number, todayISO: string): Promise<boolean> {
+async function loggedToday(recId: string, m: number, y: number, todayISO: string): Promise<boolean> {
   const { data } = await admin().from('notification_log').select('id')
-    .eq('recurrence_id', recId).eq('kind', kind).eq('ref_month', m).eq('ref_year', y)
+    .eq('recurrence_id', recId).eq('kind', 'due').eq('ref_month', m).eq('ref_year', y)
     .eq('sent_on', todayISO).limit(1).maybeSingle();
   return !!data;
 }
-async function loggedEver(recId: string, kind: string, m: number, y: number): Promise<boolean> {
-  const { data } = await admin().from('notification_log').select('id')
-    .eq('recurrence_id', recId).eq('kind', kind).eq('ref_month', m).eq('ref_year', y).limit(1).maybeSingle();
-  return !!data;
-}
-async function writeLog(walletId: string, recId: string, kind: string, m: number, y: number, todayISO: string): Promise<void> {
+async function writeLog(walletId: string, recId: string, m: number, y: number, todayISO: string): Promise<void> {
   await admin().from('notification_log')
-    .insert({ wallet_id: walletId, recurrence_id: recId, kind, ref_month: m, ref_year: y, sent_on: todayISO })
+    .insert({ wallet_id: walletId, recurrence_id: recId, kind: 'due', ref_month: m, ref_year: y, sent_on: todayISO })
     .then(() => undefined, () => undefined);
 }
 
@@ -37,7 +31,7 @@ function inWindow(r: RecurrenceRow, mStart: string, mEnd: string): boolean {
 
 export async function runReminders(todayISO: string): Promise<RunSummary> {
   const db = admin();
-  const summary: RunSummary = { walletsChecked: 0, messagesSent: 0, autopayLancados: 0, lembretes: 0, erros: [] };
+  const summary: RunSummary = { walletsChecked: 0, messagesSent: 0, lembretes: 0, erros: [] };
 
   const { data: links, error } = await db.from('chat_links').select('provider, external_id, wallet_id');
   if (error) throw error;
@@ -61,60 +55,31 @@ export async function runReminders(todayISO: string): Promise<RunSummary> {
       const bundle = await loadWalletBundle(walletId);
       const expenses = bundle.recurrences.filter((r) => r.kind === 'expense' && inWindow(r, mStart, mEnd));
 
-      const dueManual: { rec: RecurrenceRow; amount: number }[] = [];
-      const autopayDone: { rec: RecurrenceRow; amount: number; onCard: boolean }[] = [];
+      const due: { rec: RecurrenceRow; amount: number }[] = [];
 
       for (const rec of expenses) {
         const dueISO = recurrenceDueISO(y, m, rec.day);
         if (dueISO > todayISO) continue;                       // ainda não venceu
-
         const occ = await occurrenceTx(rec.id, m, y);
-        if (occ && occ.status === 'cleared') continue;         // já pago/lançado
+        if (occ && occ.status === 'cleared') continue;         // já pago
+        if (await loggedToday(rec.id, refMonth, y, todayISO)) continue;
 
-        const amount = occ?.amount_cents ?? rec.amount_cents;  // usa "valor informado" se houver
-
-        if (rec.autopay) {
-          if (await loggedEver(rec.id, 'autopay', refMonth, y)) continue;
-          try {
-            const res = await markOccurrence(bundle, walletId, rec, m, y, amount, null, 'auto');
-            await writeLog(walletId, rec.id, 'autopay', refMonth, y, todayISO);
-            autopayDone.push({ rec, amount, onCard: res.onCard });
-            summary.autopayLancados += 1;
-          } catch (e) {
-            summary.erros.push(`autopay ${rec.description}: ${(e as Error).message}`);
-          }
-        } else {
-          if (await loggedToday(rec.id, 'due', refMonth, y, todayISO)) continue;
-          dueManual.push({ rec, amount });
-          await writeLog(walletId, rec.id, 'due', refMonth, y, todayISO);
-          summary.lembretes += 1;
-        }
+        due.push({ rec, amount: occ?.amount_cents ?? rec.amount_cents });
+        await writeLog(walletId, rec.id, refMonth, y, todayISO);
+        summary.lembretes += 1;
       }
 
-      if (dueManual.length === 0 && autopayDone.length === 0) continue;
+      if (due.length === 0) continue;
 
-      const lines: string[] = [];
+      const lines = ['🔔 <b>Contas a pagar</b>'];
       const buttons: InlineButton[][] = [];
-
-      if (dueManual.length) {
-        lines.push('🔔 <b>Contas a pagar</b>');
-        for (const d of dueManual) {
-          const atraso = recurrenceDueISO(y, m, d.rec.day) < todayISO ? ' (em atraso)' : '';
-          const diaTxt = d.rec.day <= 0 ? 'no último dia' : `dia ${d.rec.day}`;
-          lines.push(`• ${escapeHtml(d.rec.description)} — <b>${formatBRL(d.amount)}</b> · vence ${diaTxt}${atraso}`);
-          if (buttons.length < 6) {
-            buttons.push([{ text: `✅ Paguei: ${d.rec.description}`.slice(0, 60), callback_data: `pay:${d.rec.id}:${refMonth}:${y}` }]);
-          }
-        }
-      }
-      if (autopayDone.length) {
-        if (lines.length) lines.push('');
-        lines.push('💳 <b>Débito automático lançado</b>');
-        for (const a of autopayDone) {
-          lines.push(`• ${escapeHtml(a.rec.description)} — <b>${formatBRL(a.amount)}</b>${a.onCard ? ' · na fatura' : ''}`);
-          if (buttons.length < 6) {
-            buttons.push([{ text: `✏️ Ajustar valor: ${a.rec.description}`.slice(0, 60), callback_data: `adj:${a.rec.id}:${refMonth}:${y}` }]);
-          }
+      for (const d of due) {
+        const atraso = recurrenceDueISO(y, m, d.rec.day) < todayISO ? ' (em atraso)' : '';
+        const diaTxt = d.rec.day <= 0 ? 'no último dia' : `dia ${d.rec.day}`;
+        const auto = d.rec.autopay ? ' · débito automático' : '';
+        lines.push(`• ${escapeHtml(d.rec.description)} — <b>${formatBRL(d.amount)}</b> · vence ${diaTxt}${auto}${atraso}`);
+        if (buttons.length < 8) {
+          buttons.push([{ text: `✅ Paguei: ${d.rec.description}`.slice(0, 60), callback_data: `pay:${d.rec.id}:${refMonth}:${y}` }]);
         }
       }
 
