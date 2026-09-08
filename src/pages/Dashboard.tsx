@@ -119,7 +119,7 @@ export default function Dashboard() {
                   <div>
                     <div className="font-medium">{o.recurrence.description}</div>
                     <div className="text-[11px] text-muted-foreground">
-                      Vence dia {o.recurrence.day}{o.onCard && ' · no cartão'}{o.status === 'pending' && ' · conta chegou'}
+                      {o.recurrence.day <= 0 ? 'Vence no último dia' : `Vence dia ${o.recurrence.day}`}{o.onCard && ' · no cartão'}{o.status === 'pending' && ' · conta chegou'}
                     </div>
                   </div>
                 </div>
@@ -169,7 +169,7 @@ export default function Dashboard() {
                   <TrendingUp className="h-4 w-4 text-emerald-500" />
                   <div>
                     <div className="font-medium">{o.recurrence.description}</div>
-                    <div className="text-[11px] text-muted-foreground">Dia {o.recurrence.day}</div>
+                    <div className="text-[11px] text-muted-foreground">{o.recurrence.day <= 0 ? 'Último dia' : `Dia ${o.recurrence.day}`}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

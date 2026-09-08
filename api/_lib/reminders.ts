@@ -3,7 +3,7 @@
 import { admin } from './supabaseAdmin.js';
 import { sendMessage, type InlineButton } from './telegram.js';
 import { loadWalletBundle, markOccurrence, occurrenceTx, type RecurrenceRow } from './finance.js';
-import { dayOfMonthISO, isoParts } from './shared.js';
+import { dayOfMonthISO, isoParts, recurrenceDueISO } from './shared.js';
 import { formatBRL } from './shared.js';
 
 export interface RunSummary {
@@ -65,7 +65,7 @@ export async function runReminders(todayISO: string): Promise<RunSummary> {
       const autopayDone: { rec: RecurrenceRow; amount: number; onCard: boolean }[] = [];
 
       for (const rec of expenses) {
-        const dueISO = dayOfMonthISO(y, m, rec.day);
+        const dueISO = recurrenceDueISO(y, m, rec.day);
         if (dueISO > todayISO) continue;                       // ainda não venceu
 
         const occ = await occurrenceTx(rec.id, m, y);
@@ -99,8 +99,9 @@ export async function runReminders(todayISO: string): Promise<RunSummary> {
       if (dueManual.length) {
         lines.push('🔔 <b>Contas a pagar</b>');
         for (const d of dueManual) {
-          const atraso = dayOfMonthISO(y, m, d.rec.day) < todayISO ? ' (em atraso)' : '';
-          lines.push(`• ${escapeHtml(d.rec.description)} — <b>${formatBRL(d.amount)}</b> · vence dia ${d.rec.day}${atraso}`);
+          const atraso = recurrenceDueISO(y, m, d.rec.day) < todayISO ? ' (em atraso)' : '';
+          const diaTxt = d.rec.day <= 0 ? 'no último dia' : `dia ${d.rec.day}`;
+          lines.push(`• ${escapeHtml(d.rec.description)} — <b>${formatBRL(d.amount)}</b> · vence ${diaTxt}${atraso}`);
           if (buttons.length < 6) {
             buttons.push([{ text: `✅ Paguei: ${d.rec.description}`.slice(0, 60), callback_data: `pay:${d.rec.id}:${refMonth}:${y}` }]);
           }

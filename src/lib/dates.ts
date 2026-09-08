@@ -54,6 +54,10 @@ export const dayOfMonthISO = (year: number, month: number, day: number): string 
   return toISO(new Date(year, month, Math.min(day, lastDay)));
 };
 
+/** Vencimento de uma recorrência no mês (m 0-11). `day <= 0` → último dia do mês. */
+export const recurrenceDueISO = (year: number, month: number, day: number): string =>
+  day <= 0 ? toISO(new Date(year, month + 1, 0)) : dayOfMonthISO(year, month, day);
+
 export const isInMonth = (iso: string, month: number, year: number): boolean => {
   const { y, m } = isoParts(iso);
   return m === month && y === year;

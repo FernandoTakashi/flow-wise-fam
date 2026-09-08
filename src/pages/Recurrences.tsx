@@ -187,7 +187,7 @@ export default function Recurrences() {
                       </Badge>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
-                      <span>Dia {o.recurrence.day}</span>
+                      <span>{o.recurrence.day <= 0 ? 'Último dia' : `Dia ${o.recurrence.day}`}</span>
                       {o.recurrence.accountId && <><span>·</span><span>{accountName(o.recurrence.accountId)}</span></>}
                       {o.recurrence.categoryId && <><span>·</span><span>{categoryName(o.recurrence.categoryId)}</span></>}
                       {o.recurrence.autopay && <><span>·</span><span className="inline-flex items-center gap-0.5 text-sky-600"><Zap className="h-3 w-3" /> débito automático</span></>}
@@ -308,8 +308,14 @@ export default function Recurrences() {
               </div>
               <div className="space-y-1.5">
                 <Label>Dia do mês</Label>
-                <Input type="number" min="1" max="31" value={form.day}
-                  onChange={(e) => setForm((f) => ({ ...f, day: e.target.value }))} required />
+                <Input type="number" min="1" max="31" value={form.day === '0' ? '' : form.day}
+                  disabled={form.day === '0'} placeholder={form.day === '0' ? 'último dia' : ''}
+                  onChange={(e) => setForm((f) => ({ ...f, day: e.target.value }))} required={form.day !== '0'} />
+                <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <input type="checkbox" checked={form.day === '0'}
+                    onChange={(e) => setForm((f) => ({ ...f, day: e.target.checked ? '0' : '5' }))} />
+                  Último dia do mês (ajusta a 28/29/30/31)
+                </label>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">

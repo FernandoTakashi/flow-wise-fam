@@ -4,7 +4,7 @@ import {
 } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  addMonthsISO, dayOfMonthISO, invoiceDates, isInMonth, isoParts, resolveInvoiceRef, spDateISO, todayISO,
+  addMonthsISO, dayOfMonthISO, invoiceDates, isInMonth, isoParts, recurrenceDueISO, resolveInvoiceRef, spDateISO, todayISO,
 } from '@/lib/dates';
 import { splitInstallments } from '@/lib/money';
 import type {
@@ -774,7 +774,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     }
     const account = rec.accountId ? accounts.find((a) => a.id === rec.accountId) : spendingAccountsMemo[0];
     if (!account) throw new Error('Defina uma conta padrão para esta recorrência (Fixos → editar).');
-    const dISO = dayOfMonthISO(year, month, rec.day);
+    const dISO = recurrenceDueISO(year, month, rec.day);
     const invoiceId = account.kind === 'card' ? await ensureInvoice(account, dISO) : null;
     const ref = refFor(dISO, account);
     const { error } = await supabase.from('transactions').insert({
@@ -912,7 +912,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       for (const r of recurrences) {
         if (r.accountId !== cardId || r.kind !== 'expense' || !r.active) continue;
         if (r.startDate > mEnd || (r.endDate && r.endDate < mStart)) continue;
-        const dueISO = dayOfMonthISO(oY, oM, r.day);
+        const dueISO = recurrenceDueISO(oY, oM, r.day);
         const inv = resolveInvoiceRef(dueISO, closing);
         if (inv.refMonth !== month + 1 || inv.refYear !== year) continue;
         const already = transactions.some((t) => t.recurrenceId === r.id && t.refMonth === month + 1 && t.refYear === year);
@@ -970,7 +970,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
         const acc = r.accountId ? accounts.find((a) => a.id === r.accountId) : null;
         return {
           recurrence: r,
-          dueDateISO: dayOfMonthISO(year, month, r.day),
+          dueDateISO: recurrenceDueISO(year, month, r.day),
           txId: tx?.id ?? null,
           status: tx ? (tx.status === 'cleared' ? 'paid' : 'pending') : 'none',
           amountCents: tx?.amountCents ?? r.amountCents,

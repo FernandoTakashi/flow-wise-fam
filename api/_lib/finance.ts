@@ -2,7 +2,7 @@
 // Espelha a lógica de FinanceContext.tsx (refFor / ensureInvoice / markRecurrence).
 import { admin } from './supabaseAdmin.js';
 import {
-  dayOfMonthISO, invoiceDates, isoParts, resolveInvoiceRef,
+  dayOfMonthISO, invoiceDates, isoParts, recurrenceDueISO, resolveInvoiceRef,
 } from './shared.js';
 
 export interface AccountRow {
@@ -140,7 +140,7 @@ export async function markOccurrence(
   if (!account) throw new Error('Defina uma conta padrão para esta recorrência.');
 
   const onCard = account.kind === 'card';
-  const dISO = dayOfMonthISO(year, month, rec.day);
+  const dISO = recurrenceDueISO(year, month, rec.day);
   const invoiceId = onCard ? await ensureInvoice(walletId, account, dISO) : null;
   const ref = refFor(dISO, account);
 

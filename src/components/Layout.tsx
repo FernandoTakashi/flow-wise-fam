@@ -77,8 +77,13 @@ function MobileNav() {
   );
 }
 
+// Só as páginas que realmente reagem ao mês selecionado mostram o seletor.
+const MONTH_SCOPED_ROUTES = ['/', '/lancamentos', '/fixos', '/cartoes'];
+
 export function Layout({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+  const { pathname } = useLocation();
+  const showMonthSelector = MONTH_SCOPED_ROUTES.includes(pathname);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -101,9 +106,11 @@ export function Layout({ children }: { children: ReactNode }) {
             </Button>
           </div>
 
-          <div className="flex w-full justify-center md:absolute md:left-1/2 md:w-auto md:-translate-x-1/2">
-            <MonthSelector />
-          </div>
+          {showMonthSelector && (
+            <div className="flex w-full justify-center md:absolute md:left-1/2 md:w-auto md:-translate-x-1/2">
+              <MonthSelector />
+            </div>
+          )}
 
           <Button variant="ghost" size="sm" onClick={handleLogout}
             className="hidden text-muted-foreground hover:bg-destructive/10 hover:text-destructive md:inline-flex">
