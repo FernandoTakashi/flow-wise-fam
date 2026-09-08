@@ -27,8 +27,12 @@ export async function redeemToken(
   provider: string, externalId: string, token: string,
 ): Promise<{ ok: true; walletName: string; userName: string } | { ok: false; reason: string }> {
   const db = admin();
-  const { data: tok } = await db.from('chat_link_tokens').select('*').eq('token', token).maybeSingle();
-  if (!tok) return { ok: false, reason: 'Token inválido. Gere um novo no app.' };
+  const { data: tok, error: readErr } = await db.from('chat_link_tokens').select('*').eq('token', token).maybeSingle();
+  if (readErr) {
+    console.error('[redeemToken] leitura falhou:', readErr);
+    return { ok: false, reason: `Erro no banco: ${readErr.message}. A migração 20260908000001 foi aplicada?` };
+  }
+  if (!tok) return { ok: false, reason: 'Token inválido ou já usado. Gere um novo no app.' };
   if (new Date(tok.expires_at).getTime() < Date.now()) {
     await db.from('chat_link_tokens').delete().eq('token', token);
     return { ok: false, reason: 'Token expirado. Gere um novo no app.' };

@@ -464,7 +464,8 @@ function IntegrationsTab() {
     if (!userId || !walletId) return;
     setBusy(true);
     try {
-      const t = (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, '');
+      // 32 chars hex — bem abaixo do limite de 64 do parâmetro start do Telegram
+      const t = crypto.randomUUID().replace(/-/g, '');
       const { error } = await supabase.from('chat_link_tokens').insert({
         token: t, provider: 'telegram', user_id: userId, wallet_id: walletId,
         expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
