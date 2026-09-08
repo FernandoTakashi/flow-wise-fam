@@ -12,8 +12,15 @@ function optional(name: string): string | undefined {
   return v && v.length > 0 ? v : undefined;
 }
 
+/** Tolera valor colado com aspas/espaços e sem esquema. */
+function normalizeUrl(raw: string): string {
+  let v = raw.trim().replace(/^["']|["']$/g, '').replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(v)) v = `https://${v}`;
+  return v;
+}
+
 export const env = {
-  supabaseUrl: () => required('SUPABASE_URL'),
+  supabaseUrl: () => normalizeUrl(required('SUPABASE_URL')),
   supabaseServiceRole: () => required('SUPABASE_SERVICE_ROLE_KEY'),
   anthropicKey: () => optional('ANTHROPIC_API_KEY'),
   telegramToken: () => required('TELEGRAM_BOT_TOKEN'),
