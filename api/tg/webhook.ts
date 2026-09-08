@@ -12,11 +12,13 @@ import { spDateISO } from '../_lib/shared.js';
 import { formatBRL, toCents } from '../_lib/shared.js';
 
 const HELP =
-  'Manda um gasto em uma linha, ex.:\n' +
+  'Manda um gasto assim: <b>descrição valor forma de pagamento</b>\n' +
   '<code>mercado 87,50 nubank</code>\n' +
-  '<code>ifood 42,90 crédito</code>\n' +
-  '<code>recebi 200 de freela ontem</code>\n\n' +
-  'Eu mostro um resumo e você confirma. Os lembretes de contas chegam aqui também.';
+  '<code>uber 23 itau</code>\n' +
+  '<code>farmácia 45,90 pix</code>\n\n' +
+  'A forma de pagamento casa com o nome da sua conta; se não casar (ex.: “pix”) ' +
+  'vai pra conta padrão e fica anotado. Eu mostro um resumo e você confirma. ' +
+  'Os lembretes de contas chegam aqui também.';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }

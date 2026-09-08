@@ -35,6 +35,21 @@ const Schema = z.object({
   note: z.string().nullable(),
 });
 
+const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+
+/** Casa o texto após o valor ("nubank", "itau", "pix bradesco") com uma conta da carteira. */
+function matchAccount(rest: string, accounts: ParseContext['accounts']): string | null {
+  const r = norm(rest);
+  if (!r) return null;
+  const hit = accounts.find((a) => {
+    const n = norm(a.name);
+    return n.length >= 3 && (r.includes(n) || n.includes(r));
+  });
+  return hit ? hit.id : null;
+}
+
+// Formato: "<descrição> <valor> [forma de pagamento]"
+//   ex.: "mercado 87,50 nubank" · "uber 23 itau" · "farmácia 45,90 pix"
 function regexFallback(text: string, ctx: ParseContext): ParsedEntry {
   const m = text.match(/^(.*?)[\s:]*([\d.]+,\d{2}|\d+[.,]\d{1,2}|\d+)\s*(.*)$/);
   if (!m) {
@@ -45,15 +60,18 @@ function regexFallback(text: string, ctx: ParseContext): ParsedEntry {
   }
   const desc = m[1].trim() || 'Lançamento';
   const cents = toCents(m[2]);
+  const rest = m[3].trim();
+  const accountId = matchAccount(rest, ctx.accounts);
   return {
     understood: cents > 0,
     kind: 'expense',
     description: desc.charAt(0).toUpperCase() + desc.slice(1),
     amountCents: cents,
-    accountId: null,
+    accountId,
     categoryId: null,
     dateISO: ctx.todayISO,
-    note: null,
+    // guarda a forma de pagamento no note quando não casou com nenhuma conta (ex.: "pix")
+    note: rest && !accountId ? rest.slice(0, 60) : null,
   };
 }
 
