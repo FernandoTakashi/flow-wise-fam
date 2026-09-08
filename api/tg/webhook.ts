@@ -151,7 +151,7 @@ async function onCallback(cq: TgCallbackQuery) {
       if (!rec) { await answerCallback(cq.id, 'Recorrência não encontrada'); return; }
       const occ = await occurrenceTx(rec.id, month0, year);
       const amount = occ?.amount_cents ?? rec.amount_cents;
-      await markOccurrence(bundle, link.wallet_id, rec, month0, year, amount, link.user_id, 'telegram');
+      await markOccurrence(bundle, link.wallet_id, rec, month0, year, amount, link.user_id, 'telegram', spDateISO(new Date()));
       if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
       await answerCallback(cq.id, 'Pago ✅');
       await setPending(link.id, 'adjust_recurrence', { recId: rec.id, m: Number(a2), y: year });

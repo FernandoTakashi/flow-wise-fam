@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MoneyInput } from '@/components/MoneyInput';
 import { useToast } from '@/hooks/use-toast';
@@ -46,6 +47,7 @@ export default function Dashboard() {
   const [fixo, setFixo] = useState<OccurrenceView | null>(null);
   const [fixoAmount, setFixoAmount] = useState(0);
   const [fixoPayer, setFixoPayer] = useState(userId ?? '');
+  const [fixoDate, setFixoDate] = useState(today);
 
   if (loading) return <DashboardSkeleton />;
 
@@ -63,7 +65,7 @@ export default function Dashboard() {
   const confirmFixo = async () => {
     if (!fixo || fixoAmount <= 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
     try {
-      await markRecurrenceOccurrence(fixo.recurrence.id, month, year, fixoAmount, fixoPayer || null);
+      await markRecurrenceOccurrence(fixo.recurrence.id, month, year, fixoAmount, fixoPayer || null, fixoDate || undefined);
       toast({ title: fixo.onCard ? 'Lançado no cartão' : 'Marcado como pago' });
       setFixo(null);
     } catch (err) {
@@ -72,7 +74,7 @@ export default function Dashboard() {
   };
 
   const openFixo = (o: OccurrenceView) => {
-    setFixo(o); setFixoAmount(o.amountCents); setFixoPayer(userId ?? '');
+    setFixo(o); setFixoAmount(o.amountCents); setFixoPayer(userId ?? ''); setFixoDate(today);
   };
 
   return (
@@ -259,10 +261,19 @@ export default function Dashboard() {
             <p className="text-sm text-muted-foreground">
               {fixo?.recurrence.description} · previsto {fixo && formatBRL(fixo.estimatedCents)}
             </p>
-            <div className="space-y-2">
-              <Label>Valor real</Label>
-              <MoneyInput valueCents={fixoAmount} onChangeCents={setFixoAmount} autoFocus />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Valor real</Label>
+                <MoneyInput valueCents={fixoAmount} onChangeCents={setFixoAmount} autoFocus />
+              </div>
+              <div className="space-y-2">
+                <Label>{fixo?.recurrence.kind === 'income' ? 'Data' : 'Data da baixa'}</Label>
+                <Input type="date" value={fixoDate} onChange={(e) => setFixoDate(e.target.value)} />
+              </div>
             </div>
+            {fixo?.onCard && (
+              <p className="text-[11px] text-muted-foreground">A data da baixa decide em qual fatura o lançamento entra.</p>
+            )}
             <div className="space-y-2">
               <Label>{fixo?.recurrence.kind === 'income' ? 'Quem recebeu' : 'Quem pagou'}</Label>
               <Select value={fixoPayer} onValueChange={setFixoPayer}>

@@ -120,33 +120,39 @@ function monthRange(month: number, year: number): { start: string; end: string }
 export async function markOccurrence(
   bundle: WalletBundle, walletId: string, rec: RecurrenceRow,
   month: number, year: number, amountCents: number, memberId: string | null, source: string,
+  paidOnISO?: string,
 ): Promise<{ created: boolean; onCard: boolean }> {
   const db = admin();
   const { start, end } = monthRange(month, year);
+
+  const spending = bundle.accounts.filter((a) => a.kind !== 'card' && !a.archived);
+  const account = (rec.account_id && bundle.accounts.find((a) => a.id === rec.account_id)) || spending[0];
+  if (!account) throw new Error('Defina uma conta padrão para esta recorrência.');
+  const onCard = account.kind === 'card';
+
+  const dueISO = recurrenceDueISO(year, month, rec.day);           // chave estável da ocorrência
+  const chargeISO = paidOnISO ?? dueISO;                            // dia da baixa
+  const ref = onCard ? refFor(chargeISO, account) : { refMonth: month + 1, refYear: year };
 
   const existing = await db.from('transactions').select('id, status')
     .eq('recurrence_id', rec.id).gte('date', start).lte('date', end).maybeSingle();
 
   if (existing.data) {
-    const { error } = await db.from('transactions')
-      .update({ amount_cents: amountCents, member_id: memberId, status: 'cleared', source })
-      .eq('id', existing.data.id);
+    const patch: Record<string, unknown> = { amount_cents: amountCents, member_id: memberId, status: 'cleared', source };
+    if (paidOnISO) {
+      patch.ref_month = ref.refMonth;
+      patch.ref_year = ref.refYear;
+      if (onCard) patch.card_invoice_id = await ensureInvoice(walletId, account, chargeISO);
+    }
+    const { error } = await db.from('transactions').update(patch).eq('id', existing.data.id);
     if (error) throw error;
-    return { created: false, onCard: false };
+    return { created: false, onCard };
   }
 
-  const spending = bundle.accounts.filter((a) => a.kind !== 'card' && !a.archived);
-  const account = (rec.account_id && bundle.accounts.find((a) => a.id === rec.account_id)) || spending[0];
-  if (!account) throw new Error('Defina uma conta padrão para esta recorrência.');
-
-  const onCard = account.kind === 'card';
-  const dISO = recurrenceDueISO(year, month, rec.day);
-  const invoiceId = onCard ? await ensureInvoice(walletId, account, dISO) : null;
-  const ref = refFor(dISO, account);
-
+  const invoiceId = onCard ? await ensureInvoice(walletId, account, chargeISO) : null;
   const { error } = await db.from('transactions').insert({
     wallet_id: walletId, account_id: account.id, kind: rec.kind, amount_cents: amountCents,
-    date: dISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: 'cleared',
+    date: dueISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: 'cleared',
     description: rec.description, category_id: rec.category_id, member_id: memberId,
     recurrence_id: rec.id, card_invoice_id: invoiceId, created_by: memberId, source,
   });

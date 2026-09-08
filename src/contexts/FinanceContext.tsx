@@ -212,7 +212,8 @@ interface FinanceApi {
   addRecurrence(r: NewRecurrence): Promise<void>;
   updateRecurrence(id: UUID, patch: Partial<NewRecurrence> & { active?: boolean }): Promise<void>;
   deleteRecurrence(id: UUID): Promise<void>;
-  markRecurrenceOccurrence(recurrenceId: UUID, month: number, year: number, amountCents: number, memberId: UUID | null): Promise<void>;
+  /** `paidOnISO` = dia da baixa (default hoje); num fixo de cartão decide a fatura. */
+  markRecurrenceOccurrence(recurrenceId: UUID, month: number, year: number, amountCents: number, memberId: UUID | null, paidOnISO?: string): Promise<void>;
   /** Registra o valor real do mês sem marcar como pago (transação `pending`). Não mexe no saldo, mas entra na projeção. */
   setRecurrenceOccurrenceAmount(recurrenceId: UUID, month: number, year: number, amountCents: number): Promise<void>;
   unmarkRecurrenceOccurrence(recurrenceId: UUID, month: number, year: number): Promise<void>;
@@ -754,10 +755,16 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     await reload();
   };
 
-  /** Cria/atualiza a transação de uma ocorrência de recorrência. `pending` = valor informado sem pagar. */
+  /**
+   * Cria/atualiza a transação de uma ocorrência de recorrência.
+   * `pending` = valor informado sem pagar.
+   * `paidOnISO` = dia da baixa: para fixo de cartão, é ele que decide em qual
+   * fatura (e competência) o lançamento entra. `date` fica na data nominal da
+   * ocorrência (chave estável para casar a ocorrência com a transação).
+   */
   const upsertRecurrenceTx = async (
     recurrenceId: UUID, month: number, year: number,
-    amountCents: number, memberId: UUID | null, status: TxStatus,
+    amountCents: number, memberId: UUID | null, status: TxStatus, paidOnISO?: string,
   ) => {
     const wid = requireWallet();
     const rec = recurrences.find((r) => r.id === recurrenceId);
@@ -765,21 +772,32 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     const existing = transactions.find((t) => t.recurrenceId === recurrenceId && isInMonth(t.date, month, year));
     // nunca rebaixa uma ocorrência já paga para pendente
     const nextStatus: TxStatus = existing?.status === 'cleared' ? 'cleared' : status;
+
+    const account = rec.accountId ? accounts.find((a) => a.id === rec.accountId) : spendingAccountsMemo[0];
+    if (!account) throw new Error('Defina uma conta padrão para esta recorrência (Fixos → editar).');
+    const onCard = account.kind === 'card';
+    const dueISO = recurrenceDueISO(year, month, rec.day);
+    const chargeISO = paidOnISO ?? dueISO;
+    // cartão: fatura/competência seguem o dia da baixa; senão competência = mês da ocorrência
+    const ref = onCard ? refFor(chargeISO, account) : { refMonth: month + 1, refYear: year };
+
     if (existing) {
       const patch: Record<string, unknown> = { amount_cents: amountCents, status: nextStatus };
       if (nextStatus === 'cleared') patch.member_id = memberId;
+      if (paidOnISO) {
+        patch.ref_month = ref.refMonth;
+        patch.ref_year = ref.refYear;
+        if (onCard) patch.card_invoice_id = await ensureInvoice(account, chargeISO);
+      }
       await supabase.from('transactions').update(patch).eq('id', existing.id);
       await reload();
       return;
     }
-    const account = rec.accountId ? accounts.find((a) => a.id === rec.accountId) : spendingAccountsMemo[0];
-    if (!account) throw new Error('Defina uma conta padrão para esta recorrência (Fixos → editar).');
-    const dISO = recurrenceDueISO(year, month, rec.day);
-    const invoiceId = account.kind === 'card' ? await ensureInvoice(account, dISO) : null;
-    const ref = refFor(dISO, account);
+
+    const invoiceId = onCard ? await ensureInvoice(account, chargeISO) : null;
     const { error } = await supabase.from('transactions').insert({
       wallet_id: wid, account_id: account.id, kind: rec.kind, amount_cents: amountCents,
-      date: dISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: nextStatus,
+      date: dueISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: nextStatus,
       description: rec.description, category_id: rec.categoryId,
       member_id: nextStatus === 'cleared' ? memberId : null,
       recurrence_id: rec.id, card_invoice_id: invoiceId, created_by: userId,
@@ -788,8 +806,8 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     await reload();
   };
 
-  const markRecurrenceOccurrence: FinanceApi['markRecurrenceOccurrence'] = (recurrenceId, month, year, amountCents, memberId) =>
-    upsertRecurrenceTx(recurrenceId, month, year, amountCents, memberId, 'cleared');
+  const markRecurrenceOccurrence: FinanceApi['markRecurrenceOccurrence'] = (recurrenceId, month, year, amountCents, memberId, paidOnISO) =>
+    upsertRecurrenceTx(recurrenceId, month, year, amountCents, memberId, 'cleared', paidOnISO ?? today);
 
   const setRecurrenceOccurrenceAmount: FinanceApi['setRecurrenceOccurrenceAmount'] = (recurrenceId, month, year, amountCents) =>
     upsertRecurrenceTx(recurrenceId, month, year, amountCents, null, 'pending');

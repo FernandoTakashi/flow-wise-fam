@@ -30,7 +30,7 @@ const emptyForm = (): FormState => ({
 
 export default function Recurrences() {
   const {
-    loading, selectedMonth, recurrenceOccurrences, spendingAccounts, cards,
+    loading, selectedMonth, today, recurrenceOccurrences, spendingAccounts, cards,
     activeCategories, accountName, categoryName, userId, members, isPeriodLocked,
     addRecurrence, updateRecurrence, deleteRecurrence,
     markRecurrenceOccurrence, setRecurrenceOccurrenceAmount, unmarkRecurrenceOccurrence,
@@ -48,6 +48,7 @@ export default function Recurrences() {
   const [mark, setMark] = useState<OccurrenceView | null>(null);
   const [markAmount, setMarkAmount] = useState(0);
   const [markPayer, setMarkPayer] = useState(userId ?? '');
+  const [markDate, setMarkDate] = useState(todayISO());
 
   const [inform, setInform] = useState<OccurrenceView | null>(null);
   const [informAmount, setInformAmount] = useState(0);
@@ -100,7 +101,9 @@ export default function Recurrences() {
     } finally { setBusy(false); }
   };
 
-  const openMark = (o: OccurrenceView) => { setMark(o); setMarkAmount(o.amountCents); setMarkPayer(userId ?? ''); };
+  const openMark = (o: OccurrenceView) => {
+    setMark(o); setMarkAmount(o.amountCents); setMarkPayer(userId ?? ''); setMarkDate(today);
+  };
   const openInform = (o: OccurrenceView) => { setInform(o); setInformAmount(o.amountCents); };
   const confirmInform = async () => {
     if (!inform || informAmount <= 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
@@ -120,7 +123,7 @@ export default function Recurrences() {
   const confirmMark = async () => {
     if (!mark || markAmount <= 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
     try {
-      await markRecurrenceOccurrence(mark.recurrence.id, month, year, markAmount, markPayer || null);
+      await markRecurrenceOccurrence(mark.recurrence.id, month, year, markAmount, markPayer || null, markDate || undefined);
       toast({ title: mark.onCard ? 'Lançado no cartão' : tab === 'income' ? 'Recebimento confirmado' : 'Pagamento confirmado' });
       setMark(null);
     } catch (err) {
@@ -235,11 +238,20 @@ export default function Recurrences() {
             <p className="text-sm text-muted-foreground">
               {mark?.recurrence.description} · previsto {mark && formatBRL(mark.estimatedCents)}
             </p>
-            <div className="space-y-2">
-              <Label>Valor real {tab === 'income' ? 'recebido' : 'pago'}</Label>
-              <MoneyInput valueCents={markAmount} onChangeCents={setMarkAmount} autoFocus />
-              <p className="text-[11px] text-muted-foreground">Ajuste se a conta veio diferente do previsto.</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Valor real {tab === 'income' ? 'recebido' : 'pago'}</Label>
+                <MoneyInput valueCents={markAmount} onChangeCents={setMarkAmount} autoFocus />
+              </div>
+              <div className="space-y-2">
+                <Label>{tab === 'income' ? 'Data do recebimento' : 'Data da baixa'}</Label>
+                <Input type="date" value={markDate} onChange={(e) => setMarkDate(e.target.value)} />
+              </div>
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              Ajuste o valor se a conta veio diferente do previsto.
+              {mark?.onCard && ' A data da baixa decide em qual fatura este lançamento entra.'}
+            </p>
             <div className="space-y-2">
               <Label>{tab === 'income' ? 'Quem recebeu' : 'Quem pagou'}</Label>
               <Select value={markPayer} onValueChange={setMarkPayer}>
