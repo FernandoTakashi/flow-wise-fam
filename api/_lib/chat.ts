@@ -1,5 +1,5 @@
 // Helpers de vínculo de chat e do passo de confirmação (chat_pending).
-import { admin } from './supabaseAdmin.ts';
+import { admin } from './supabaseAdmin';
 
 export interface ChatLink {
   id: string;

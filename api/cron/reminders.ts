@@ -2,9 +2,9 @@
 // lembretes das contas manuais. Também aceita chamada manual com ?key=<CRON_SECRET>
 // (e ?date=yyyy-mm-dd para testar um dia específico).
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { env } from '../_lib/env.ts';
-import { runReminders } from '../_lib/reminders.ts';
-import { spDateISO } from '../../src/lib/dates.ts';
+import { env } from '../_lib/env';
+import { runReminders } from '../_lib/reminders';
+import { spDateISO } from '../../src/lib/dates';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const secret = env.cronSecret();

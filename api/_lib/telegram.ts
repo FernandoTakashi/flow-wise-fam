@@ -1,6 +1,6 @@
 // Adaptador fino do canal. Hoje só Telegram; a interface `sendMessage` é o
 // ponto de extensão para o WhatsApp Cloud API mais tarde.
-import { env } from './env.ts';
+import { env } from './env';
 
 const API = (method: string) => `https://api.telegram.org/bot${env.telegramToken()}/${method}`;
 

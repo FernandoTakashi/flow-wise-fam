@@ -4,8 +4,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import * as z from 'zod/v4';
-import { env } from './env.ts';
-import { toCents } from '../../src/lib/money.ts';
+import { env } from './env';
+import { toCents } from '../../src/lib/money';
 
 export interface ParseContext {
   todayISO: string;

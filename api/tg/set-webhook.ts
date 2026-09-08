@@ -1,8 +1,8 @@
 // Registra o webhook do bot no Telegram. Chame uma vez após o deploy:
 //   https://SEU-APP.vercel.app/api/tg/set-webhook?key=<CRON_SECRET>
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { env } from '../_lib/env.ts';
-import { setWebhook, getMe } from '../_lib/telegram.ts';
+import { env } from '../_lib/env';
+import { setWebhook, getMe } from '../_lib/telegram';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const secret = env.cronSecret();

@@ -1,9 +1,9 @@
 // Operações de escrita no domínio financeiro a partir do backend (bot / cron).
 // Espelha a lógica de FinanceContext.tsx (refFor / ensureInvoice / markRecurrence).
-import { admin } from './supabaseAdmin.ts';
+import { admin } from './supabaseAdmin';
 import {
   dayOfMonthISO, invoiceDates, isoParts, resolveInvoiceRef,
-} from '../../src/lib/dates.ts';
+} from '../../src/lib/dates';
 
 export interface AccountRow {
   id: string; wallet_id: string; name: string; kind: 'cash' | 'checking' | 'card';

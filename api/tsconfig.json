@@ -10,7 +10,6 @@
     "noEmit": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "allowImportingTsExtensions": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },

@@ -1,10 +1,10 @@
 // Rotina diária: lança os débitos automáticos vencidos e monta o lembrete das
 // contas manuais em aberto. Idempotente via notification_log.
-import { admin } from './supabaseAdmin.ts';
-import { sendMessage, type InlineButton } from './telegram.ts';
-import { loadWalletBundle, markOccurrence, occurrenceTx, type RecurrenceRow } from './finance.ts';
-import { dayOfMonthISO, isoParts } from '../../src/lib/dates.ts';
-import { formatBRL } from '../../src/lib/money.ts';
+import { admin } from './supabaseAdmin';
+import { sendMessage, type InlineButton } from './telegram';
+import { loadWalletBundle, markOccurrence, occurrenceTx, type RecurrenceRow } from './finance';
+import { dayOfMonthISO, isoParts } from '../../src/lib/dates';
+import { formatBRL } from '../../src/lib/money';
 
 export interface RunSummary {
   walletsChecked: number;
