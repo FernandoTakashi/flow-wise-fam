@@ -24,6 +24,17 @@ export default {
 				ring: 'hsl(var(--ring))',
 				background: 'hsl(var(--background))',
 				foreground: 'hsl(var(--foreground))',
+				ink: {
+					DEFAULT: 'hsl(var(--ink))',
+					2: 'hsl(var(--ink-2))',
+					border: 'hsl(var(--ink-border))'
+				},
+				'on-ink': {
+					DEFAULT: 'hsl(var(--on-ink))',
+					muted: 'hsl(var(--on-ink-muted))'
+				},
+				pos: 'hsl(var(--pos))',
+				neg: 'hsl(var(--neg))',
 				primary: {
 					DEFAULT: 'hsl(var(--primary))',
 					foreground: 'hsl(var(--primary-foreground))',

@@ -16,9 +16,9 @@ export function WalletSelector() {
         else setWallet(v);
       }}
     >
-      <SelectTrigger className="h-9 w-[150px] rounded-full border-primary/20 bg-background/50 px-3 text-xs font-medium md:w-[190px] md:text-sm">
+      <SelectTrigger className="h-[38px] w-[150px] rounded-full border-border bg-card px-3.5 text-[13.5px] font-semibold text-foreground md:w-[200px]">
         <div className="flex items-center gap-2 truncate">
-          <Wallet className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <Wallet className="h-[17px] w-[17px] shrink-0 text-primary" />
           <SelectValue placeholder="Carteira" />
         </div>
       </SelectTrigger>

@@ -1,5 +1,4 @@
 import { useFinance } from '@/contexts/FinanceContext';
-import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { MONTHS_PT } from '@/lib/dates';
 
@@ -21,20 +20,28 @@ export default function MonthSelector() {
   };
 
   return (
-    <div className="flex items-center gap-1 rounded-full border border-border bg-card px-1.5 py-1">
-      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => shift(-1)} aria-label="Mês anterior">
+    <div className="flex items-center gap-1 rounded-full border border-border bg-card p-1">
+      <button
+        onClick={() => shift(-1)}
+        aria-label="Mês anterior"
+        className="flex h-[30px] w-[30px] items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-[#F3EBE5]"
+      >
         <ChevronLeft className="h-4 w-4" />
-      </Button>
+      </button>
       <button
         onClick={goToday}
-        className="min-w-[112px] text-center text-sm font-semibold capitalize"
         title="Voltar para o mês atual"
+        className="min-w-[124px] text-center text-[13.5px] font-semibold capitalize text-foreground"
       >
         {MONTHS_PT[month]} <span className="font-normal text-muted-foreground">{year}</span>
       </button>
-      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => shift(1)} aria-label="Próximo mês">
+      <button
+        onClick={() => shift(1)}
+        aria-label="Próximo mês"
+        className="flex h-[30px] w-[30px] items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-[#F3EBE5]"
+      >
         <ChevronRight className="h-4 w-4" />
-      </Button>
+      </button>
     </div>
   );
 }

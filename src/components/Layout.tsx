@@ -1,15 +1,30 @@
 import { useState, type ReactNode } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/hooks/use-toast';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Sidebar, NAV_ITEMS } from './Sidebar';
 import { WalletSelector } from './WalletSelector';
 import MonthSelector from './MonthSelector';
+import { PageHeaderProvider, usePageHeader } from './PageHeader';
+import { Button } from '@/components/ui/button';
 import {
-  LogOut, Menu as MenuIcon, X, LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard,
+  Menu as MenuIcon, X, LogOut, LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard,
 } from 'lucide-react';
+
+const MONTH_SCOPED_ROUTES = ['/', '/lancamentos', '/receitas', '/fixos', '/cartoes'];
+
+const ROUTE_TITLES: Record<string, string> = {
+  '/': 'Dashboard',
+  '/lancamentos': 'Lançamentos',
+  '/receitas': 'Receitas',
+  '/fixos': 'Gastos fixos',
+  '/cartoes': 'Cartões',
+  '/investimentos': 'Investimentos',
+  '/projecao': 'Projeção',
+  '/relatorios': 'Relatórios',
+  '/acerto': 'Acerto de contas',
+  '/ajustes': 'Ajustes',
+};
 
 const MOBILE_PRIMARY = [
   { title: 'Início', href: '/', icon: LayoutDashboard, exact: true },
@@ -27,7 +42,7 @@ function MobileNav() {
       {menuOpen && (
         <div className="fixed inset-0 z-40 flex flex-col bg-background md:hidden">
           <div className="flex items-center justify-between border-b p-4">
-            <span className="text-lg font-bold">Menu</span>
+            <span className="font-display text-lg font-bold">Menu</span>
             <Button variant="ghost" size="icon" onClick={() => setMenuOpen(false)}><X className="h-6 w-6" /></Button>
           </div>
           <div className="grid flex-1 grid-cols-3 content-start gap-3 overflow-y-auto p-4">
@@ -40,7 +55,7 @@ function MobileNav() {
                   to={item.href}
                   onClick={() => setMenuOpen(false)}
                   className={cn(
-                    'flex flex-col items-center justify-center gap-2 rounded-xl border p-4 text-center transition-colors',
+                    'flex flex-col items-center justify-center gap-2 rounded-[14px] border p-4 text-center transition-colors',
                     active ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card text-muted-foreground',
                   )}
                 >
@@ -49,6 +64,12 @@ function MobileNav() {
                 </Link>
               );
             })}
+          </div>
+          <div className="border-t p-4">
+            <Button variant="outline" className="w-full text-muted-foreground"
+              onClick={() => { setMenuOpen(false); void supabase.auth.signOut(); }}>
+              <LogOut className="mr-2 h-4 w-4" /> Sair
+            </Button>
           </div>
         </div>
       )}
@@ -77,53 +98,53 @@ function MobileNav() {
   );
 }
 
-// Só as páginas que realmente reagem ao mês selecionado mostram o seletor.
-const MONTH_SCOPED_ROUTES = ['/', '/lancamentos', '/receitas', '/fixos', '/cartoes'];
-
-export function Layout({ children }: { children: ReactNode }) {
-  const { toast } = useToast();
+function Shell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
+  const { subtitle } = usePageHeader();
   const showMonthSelector = MONTH_SCOPED_ROUTES.includes(pathname);
-
-  const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) toast({ title: 'Erro ao sair', description: error.message, variant: 'destructive' });
-  };
+  const title = ROUTE_TITLES[pathname] ?? '';
 
   return (
-    <div className="flex min-h-screen w-full bg-background text-foreground">
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-border md:block">
+    <div className="min-h-screen bg-background text-foreground md:grid md:h-screen md:grid-cols-[252px_minmax(0,1fr)]">
+      <aside className="hidden md:block md:h-screen md:overflow-hidden">
         <Sidebar />
       </aside>
 
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex flex-col items-center gap-2 border-b border-border bg-background px-4 py-2 md:flex-row md:justify-between md:px-6">
-          <div className="flex w-full items-center justify-between gap-4 md:w-auto">
-            <WalletSelector />
-            <Button variant="ghost" size="icon" onClick={handleLogout}
-              className="text-muted-foreground hover:text-destructive md:hidden">
-              <LogOut className="h-5 w-5" />
-            </Button>
+      <div className="flex min-w-0 flex-col md:h-screen md:overflow-hidden">
+        {/* header desktop — título da página vem para cá */}
+        <header className="hidden h-16 shrink-0 items-center gap-4 border-b border-border bg-background px-8 md:flex">
+          <div className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate font-display text-[19px] font-bold leading-tight text-foreground">{title}</span>
+            {subtitle && <span className="truncate text-[12px] text-muted-foreground">{subtitle}</span>}
           </div>
-
-          {showMonthSelector && (
-            <div className="flex w-full justify-center md:absolute md:left-1/2 md:w-auto md:-translate-x-1/2">
-              <MonthSelector />
-            </div>
-          )}
-
-          <Button variant="ghost" size="sm" onClick={handleLogout}
-            className="hidden text-muted-foreground hover:bg-destructive/10 hover:text-destructive md:inline-flex">
-            <LogOut className="mr-2 h-4 w-4" /> Sair
-          </Button>
+          {showMonthSelector && <MonthSelector />}
+          <div className="flex flex-1 justify-end">
+            <WalletSelector />
+          </div>
         </header>
 
-        <main className="flex-1 overflow-auto pb-24 pt-2 md:pb-10">
-          <div className="mx-auto w-full max-w-6xl p-4 md:p-8">{children}</div>
+        {/* header mobile */}
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4 py-2 md:hidden">
+          <WalletSelector />
+          {showMonthSelector && <MonthSelector />}
+        </header>
+
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-6xl px-4 pb-24 pt-4 md:px-8 md:pb-10 md:pt-7">
+            {children}
+          </div>
         </main>
 
         <MobileNav />
       </div>
     </div>
+  );
+}
+
+export function Layout({ children }: { children: ReactNode }) {
+  return (
+    <PageHeaderProvider>
+      <Shell>{children}</Shell>
+    </PageHeaderProvider>
   );
 }
