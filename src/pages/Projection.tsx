@@ -1,14 +1,19 @@
 import { useMemo } from 'react';
 import { useFinance } from '@/contexts/FinanceContext';
 import { PageHeader } from '@/components/PageHeader';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
+} from 'recharts';
 import { formatBRL } from '@/lib/money';
 import { MONTHS_PT_SHORT, isInMonth, parseISO } from '@/lib/dates';
-import { TrendingUp } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const HORIZON = 12;
+const brief = (c: number) => {
+  const v = c / 100;
+  if (Math.abs(v) >= 1000) return `${Math.round(v / 1000)}k`;
+  return `${Math.round(v)}`;
+};
 
 export default function Projection() {
   const {
@@ -22,13 +27,11 @@ export default function Projection() {
     const startYear = now.getFullYear();
     const cardIds = new Set(cards.map((c) => c.id));
 
-    // taxa mensal média ponderada da carteira de investimentos
     const invBase = investments.reduce((s, i) => s + i.amountCents, 0);
     const monthlyRate = invBase > 0
       ? investments.reduce((s, i) => s + i.amountCents * (i.yieldRateBps / 10000), 0) / invBase
       : 0;
 
-    // média das saídas variáveis (não-cartão, não recorrentes) dos últimos 3 meses
     let varSum = 0; let varCount = 0;
     for (let k = 1; k <= 3; k += 1) {
       const d = new Date(startYear, startMonth - k, 1);
@@ -44,7 +47,7 @@ export default function Projection() {
     let cash = cashBalanceCents();
     let invested = totalInvestedCents();
     const rows: {
-      label: string; balance: number; invested: number; cash: number;
+      label: string; total: number; invested: number; cash: number;
       income: number; expenses: number; yield: number; isCurrent: boolean;
     }[] = [];
 
@@ -57,11 +60,9 @@ export default function Projection() {
       const activeRec = recurrences.filter((r) => r.active
         && r.startDate <= monthEnd && (!r.endDate || r.endDate >= monthStart));
       const income = activeRec.filter((r) => r.kind === 'income').reduce((s, r) => s + r.amountCents, 0);
-      // só recorrências que saem da conta (as de cartão entram via a fatura, abaixo)
       const recExpense = activeRec
         .filter((r) => r.kind === 'expense' && !(r.accountId && cardIds.has(r.accountId)))
         .reduce((s, r) => s + r.amountCents, 0);
-      // fatura estimada de cada cartão nesse mês (lançado + fixos de cartão previstos)
       const futureCard = cards.reduce((s, c) => s + invoiceView(c.id, m, y).projectedCents, 0);
 
       const yieldAmount = invested > 0 ? Math.round(invested * monthlyRate) : 0;
@@ -74,9 +75,9 @@ export default function Projection() {
 
       rows.push({
         label: `${MONTHS_PT_SHORT[m]}/${String(y).slice(2)}`,
-        balance: cash + invested,
-        invested,
-        cash,
+        total: cash + invested,
+        invested: Math.max(invested, 0),
+        cash: Math.max(cash, 0),
         income,
         expenses,
         yield: yieldAmount,
@@ -86,74 +87,131 @@ export default function Projection() {
     return rows;
   }, [today, recurrences, transactions, investments, cards, invoiceView, cashBalanceCents, totalInvestedCents]);
 
-  if (loading) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
+  if (loading) return <div className="h-64 animate-pulse rounded-[18px] bg-muted" />;
 
-  const start = data[0]?.balance ?? 0;
-  const end = data[data.length - 1]?.balance ?? 0;
+  const start = data[0]?.total ?? 0;
+  const end = data[data.length - 1]?.total ?? 0;
   const growth = end - start;
   const growthPct = start !== 0 ? (growth / Math.abs(start)) * 100 : 0;
 
   return (
-    <div className="space-y-5">
-      <PageHeader title="Projeção financeira" subtitle="Cenário base para os próximos 12 meses" />
+    <div className="space-y-4">
+      <PageHeader title="Projeção" subtitle="Cenário base para os próximos 12 meses" />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         <Kpi label="Patrimônio hoje" value={formatBRL(start)} />
-        <Kpi label="Em 12 meses" value={formatBRL(end)} className="text-primary" />
-        <Kpi label="Crescimento" value={`${growth >= 0 ? '+' : ''}${formatBRL(growth)}`} className={growth >= 0 ? 'text-emerald-600' : 'text-red-600'} />
-        <Kpi label="Retorno" value={`${growthPct.toFixed(1)}%`} className={growthPct >= 0 ? 'text-emerald-600' : 'text-red-600'} />
+        <Kpi label="Em 12 meses" value={formatBRL(end)} dark />
+        <Kpi label="Crescimento" value={`${growth >= 0 ? '+' : ''}${formatBRL(growth)}`}
+          valueClass={growth >= 0 ? 'text-[#1F7A52]' : 'text-[#C8452F]'} />
+        <Kpi label="Retorno" value={`${growthPct.toFixed(1)}%`}
+          valueClass={growthPct >= 0 ? 'text-[#1F7A52]' : 'text-[#C8452F]'} />
       </div>
 
-      <Card>
-        <CardHeader className="p-4 pb-0"><CardTitle className="text-base">Curva de evolução</CardTitle></CardHeader>
-        <CardContent className="h-[280px] p-2 md:p-4">
+      {/* gráfico */}
+      <div className="rounded-[18px] border border-border bg-card px-6 py-5">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="font-display text-[15.5px] font-bold text-foreground">Curva de evolução</div>
+            <div className="text-[12px] text-muted-foreground">Cenário base para os próximos 12 meses</div>
+          </div>
+          <div className="flex items-center gap-4 text-[11.5px] text-muted-foreground">
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px] bg-primary" /> caixa</span>
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px] bg-[#2A8F63]" /> investido</span>
+          </div>
+        </div>
+        <div className="h-[240px]">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 12, right: 12, left: -16, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+            <BarChart data={data} margin={{ top: 20, right: 4, left: 4, bottom: 0 }} barCategoryGap="22%">
+              <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
+              <XAxis dataKey="label" tickLine={false} axisLine={false}
+                tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
               <YAxis hide />
-              <Tooltip formatter={(v: number) => formatBRL(v)} contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', fontSize: 12 }} />
-              <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="balance" name="Patrimônio" stroke="hsl(var(--primary))" strokeWidth={3} dot={false} />
-              <Line type="monotone" dataKey="invested" name="Investido" stroke="#10b981" strokeDasharray="4 4" strokeWidth={2} dot={false} />
-            </LineChart>
+              <Tooltip
+                formatter={(v: number, name) => [formatBRL(v), name === 'cash' ? 'Caixa' : 'Investido']}
+                labelFormatter={(l) => `Mês ${l}`}
+                contentStyle={{ borderRadius: 10, border: '1px solid hsl(var(--border))', fontSize: 12 }}
+                cursor={{ fill: 'hsl(var(--muted))' }}
+              />
+              <Bar dataKey="cash" stackId="a" radius={[0, 0, 3, 3]}>
+                {data.map((d) => <Cell key={d.label} fill={d.isCurrent ? '#D24E36' : '#EF6A52'} />)}
+              </Bar>
+              <Bar dataKey="invested" stackId="a" fill="#2A8F63" radius={[8, 8, 0, 0]}>
+                <LabelList
+                  position="top"
+                  content={({ x, y, width, index }) => {
+                    if (index == null) return null;
+                    const r = data[index];
+                    return (
+                      <text
+                        x={Number(x) + Number(width) / 2}
+                        y={Number(y) - 6}
+                        textAnchor="middle"
+                        fontSize={10.5}
+                        fontWeight={700}
+                        fill={r.isCurrent ? '#D24E36' : '#5C4C45'}
+                      >
+                        {brief(r.total)}
+                      </text>
+                    );
+                  }}
+                />
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-            <tr>
-              <th className="p-3 text-left">Mês</th>
-              <th className="p-3 text-right">Entradas</th>
-              <th className="p-3 text-right">Saídas</th>
-              <th className="p-3 text-right">Rendimento</th>
-              <th className="p-3 text-right">Investido</th>
-              <th className="p-3 text-right">Caixa</th>
-              <th className="p-3 text-right font-bold">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((r, i) => (
-              <tr key={i} className={`border-t tabular-nums ${r.isCurrent ? 'bg-muted/30' : ''}`}>
-                <td className="p-3 font-medium">
-                  {r.label}{r.isCurrent && <Badge variant="outline" className="ml-2 h-4 px-1 text-[9px]">Atual</Badge>}
-                </td>
-                <td className="p-3 text-right text-emerald-600">+{formatBRL(r.income)}</td>
-                <td className="p-3 text-right text-red-600">−{formatBRL(r.expenses)}</td>
-                <td className="p-3 text-right text-purple-600">{r.yield > 0 ? `+${formatBRL(r.yield)}` : '—'}</td>
-                <td className="p-3 text-right">{formatBRL(r.invested)}</td>
-                <td className="p-3 text-right text-muted-foreground">{formatBRL(r.cash)}</td>
-                <td className="p-3 text-right font-bold">{formatBRL(r.balance)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        </div>
       </div>
 
-      <p className="flex items-start gap-2 text-xs text-muted-foreground">
-        <TrendingUp className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      {/* tabela — desktop */}
+      <div className="hidden overflow-hidden rounded-[18px] border border-border bg-card md:block">
+        <div className="grid grid-cols-[96px_repeat(6,minmax(0,1fr))] gap-2.5 border-b border-border bg-[#FDFAF8] px-[22px] py-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#7E6E66]">
+          <span>Mês</span>
+          <span className="text-right">Entradas</span>
+          <span className="text-right">Saídas</span>
+          <span className="text-right">Rendimento</span>
+          <span className="text-right">Investido</span>
+          <span className="text-right">Caixa</span>
+          <span className="text-right">Total</span>
+        </div>
+        {data.map((r) => (
+          <div key={r.label}
+            className={cn('grid grid-cols-[96px_repeat(6,minmax(0,1fr))] gap-2.5 border-b border-[#F4EDE7] px-[22px] py-3 text-[13px] tabular-nums text-foreground last:border-0',
+              r.isCurrent && 'bg-[#FDFAF8]')}>
+            <span className="flex items-center gap-1.5 font-semibold">
+              {r.label}
+              {r.isCurrent && <span className="rounded-full bg-primary/10 px-1 text-[9.5px] font-bold uppercase text-primary">atual</span>}
+            </span>
+            <span className="text-right text-[#1F7A52]">+{formatBRL(r.income)}</span>
+            <span className="text-right text-[#C8452F]">−{formatBRL(r.expenses)}</span>
+            <span className="text-right text-[#5C4C45]">{r.yield > 0 ? `+${formatBRL(r.yield)}` : '—'}</span>
+            <span className="text-right">{formatBRL(r.invested)}</span>
+            <span className="text-right text-muted-foreground">{formatBRL(r.cash)}</span>
+            <span className="text-right font-bold">{formatBRL(r.total)}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* tabela — mobile card-list */}
+      <div className="space-y-2 md:hidden">
+        {data.map((r) => (
+          <div key={r.label} className={cn('rounded-[14px] border border-border bg-card p-3.5', r.isCurrent && 'border-primary')}>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 font-display font-bold text-foreground">
+                {r.label}
+                {r.isCurrent && <span className="rounded-full bg-primary/10 px-1 text-[9.5px] font-bold uppercase text-primary">atual</span>}
+              </span>
+              <span className="text-[15px] font-bold tabular-nums text-foreground">{formatBRL(r.total)}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] tabular-nums">
+              <span className="text-muted-foreground">Entradas</span><span className="text-right text-[#1F7A52]">+{formatBRL(r.income)}</span>
+              <span className="text-muted-foreground">Saídas</span><span className="text-right text-[#C8452F]">−{formatBRL(r.expenses)}</span>
+              <span className="text-muted-foreground">Rendimento</span><span className="text-right">{r.yield > 0 ? `+${formatBRL(r.yield)}` : '—'}</span>
+              <span className="text-muted-foreground">Investido / Caixa</span><span className="text-right">{formatBRL(r.invested)} / {formatBRL(r.cash)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="max-w-[720px] text-[12px] leading-relaxed text-[#7E6E66]">
         Estimativa: entradas e saídas fixas ativas de cada mês + parcelas de cartão já lançadas +
         média das saídas variáveis dos últimos 3 meses. Rendimento composto pela taxa média da carteira.
       </p>
@@ -161,11 +219,11 @@ export default function Projection() {
   );
 }
 
-function Kpi({ label, value, className }: { label: string; value: string; className?: string }) {
+function Kpi({ label, value, valueClass, dark }: { label: string; value: string; valueClass?: string; dark?: boolean }) {
   return (
-    <Card><CardContent className="p-4">
-      <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
-      <p className={`text-lg font-bold tabular-nums md:text-xl ${className ?? ''}`}>{value}</p>
-    </CardContent></Card>
+    <div className={cn('rounded-2xl border px-[18px] py-4', dark ? 'border-ink bg-ink' : 'border-border bg-card')}>
+      <p className={cn('text-[11.5px] font-semibold', dark ? 'text-[#9C8A80]' : 'text-[#7E6E66]')}>{label}</p>
+      <p className={cn('text-[22px] font-bold tabular-nums', dark ? 'text-on-ink' : 'text-foreground', valueClass)}>{value}</p>
+    </div>
   );
 }
