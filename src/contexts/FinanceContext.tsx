@@ -477,8 +477,13 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   const addMemberByEmail: FinanceApi['addMemberByEmail'] = async (email) => {
     const wid = requireWallet();
     const { data: uid, error } = await supabase.rpc('find_user_id_by_email', { p_email: email });
-    if (error) throw error;
-    if (!uid) throw new Error('Nenhuma conta com esse e-mail. A pessoa precisa criar a conta no app primeiro.');
+    if (error) {
+      if (error.code === 'PGRST202' || /function .*find_user_id_by_email/i.test(error.message)) {
+        throw new Error('Falta aplicar a migração 20260908000005 no Supabase.');
+      }
+      throw error;
+    }
+    if (!uid) throw new Error(`Nenhuma conta encontrada para "${email.trim()}". Confira o e-mail (Supabase → Authentication → Users) — precisa ser o mesmo do cadastro.`);
     const { error: mErr } = await supabase.from('wallet_members').insert({ wallet_id: wid, user_id: uid as string, role: 'member' });
     if (mErr) {
       if (mErr.code === '23505') throw new Error('Essa pessoa já é membro desta carteira.');
