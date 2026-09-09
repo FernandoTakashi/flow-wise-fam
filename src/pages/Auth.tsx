@@ -61,8 +61,8 @@ export default function AuthPage() {
         <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
           <Wallet className="h-6 w-6" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">FinanceApp</h1>
-        <p className="text-sm text-slate-500">Finanças compartilhadas, sem planilha</p>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">CaRe Wallet</h1>
+        <p className="text-sm text-slate-500">Finanças da família, sem planilha</p>
       </div>
 
       <Tabs defaultValue="login" className="w-full max-w-sm sm:max-w-md">
@@ -138,7 +138,7 @@ export default function AuthPage() {
       </Tabs>
 
       <p className="mt-8 text-center text-xs text-slate-400">
-        &copy; {new Date().getFullYear()} FinanceApp
+        &copy; {new Date().getFullYear()} CaRe Wallet
       </p>
     </div>
   );

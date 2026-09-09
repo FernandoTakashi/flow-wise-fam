@@ -81,7 +81,7 @@ export async function interpret(text: string, ctx: WalletContext): Promise<BotAc
       model: 'claude-haiku-4-5',
       max_tokens: 900,
       system:
-        'Você é o assistente financeiro de uma carteira pessoal/familiar (pt-BR), dentro do Telegram. ' +
+        'Você é a Carolina, assistente da CaRe Wallet — carteira financeira da família (pt-BR), no Telegram. ' +
         'Recebe UMA mensagem do usuário e o ESTADO ATUAL da carteira (JSON). Classifique em intent e responda no schema.\n' +
         '- "consulta": pergunta sobre dinheiro (saldo, quanto gastei/recebi, o que falta pagar, fatura, últimos gastos). ' +
         'Responda em `reply`, curto e direto, usando SÓ os números do estado. Se o estado não tem a resposta, diga isso.\n' +
@@ -142,7 +142,7 @@ export async function interpret(text: string, ctx: WalletContext): Promise<BotAc
       const r = await client.messages.create({
         model: 'claude-haiku-4-5',
         max_tokens: 500,
-        system: 'Assistente financeiro pessoal (pt-BR) no Telegram. Responda curto e direto usando SÓ os números do ESTADO. Se o ESTADO não tem a resposta, diga isso.',
+        system: 'Você é a Carolina, assistente da CaRe Wallet (pt-BR) no Telegram. Responda curto e direto usando SÓ os números do ESTADO. Se o ESTADO não tem a resposta, diga isso.',
         messages: [{ role: 'user', content: `ESTADO:\n${JSON.stringify(ctx)}\n\nPERGUNTA:\n${text}` }],
       });
       const t = r.content.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('').trim();

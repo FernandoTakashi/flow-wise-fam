@@ -12,11 +12,12 @@ import { interpret } from '../_lib/brain.js';
 import { spDateISO, formatBRL, toCents, isoParts } from '../_lib/shared.js';
 
 const HELP =
+  'Oi, eu sou a <b>Carolina</b> 👋 — a assistente da <b>CaRe Wallet</b>.\n\n' +
   'Manda um gasto em uma linha — <code>mercado 87,50 nubank</code>, ' +
-  '<code>uber 23</code>, <code>tv 3000 em 10x nubank</code> — que eu mostro um resumo pra confirmar.\n\n' +
-  'Também pergunta à vontade: <i>qual meu saldo?</i> · <i>quanto falta pagar esse mês?</i> · ' +
+  '<code>uber 23</code>, <code>tv 3000 em 10x nubank</code> — que eu mostro um resumo pra você confirmar.\n\n' +
+  'Pergunta à vontade: <i>qual meu saldo?</i> · <i>quanto falta pagar esse mês?</i> · ' +
   '<i>quanto gastei?</i> · <i>quando vence a fatura?</i>\n\n' +
-  'E dá pra dizer <i>paguei o aluguel</i> pra marcar um fixo. Os lembretes chegam aqui também.';
+  'E dá pra dizer <i>paguei o aluguel</i> pra marcar um fixo. Os lembretes de conta também chegam por aqui.';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }

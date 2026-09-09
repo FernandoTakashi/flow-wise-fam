@@ -26,8 +26,8 @@ export function Sidebar() {
           <Wallet className="h-4 w-4" />
         </div>
         <div>
-          <h1 className="font-semibold leading-tight text-foreground">FinanceApp</h1>
-          <p className="text-xs text-muted-foreground">Gestão compartilhada</p>
+          <h1 className="font-semibold leading-tight text-foreground">CaRe Wallet</h1>
+          <p className="text-xs text-muted-foreground">Finanças da família</p>
         </div>
       </div>
 

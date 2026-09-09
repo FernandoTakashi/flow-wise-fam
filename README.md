@@ -1,4 +1,4 @@
-# FinanceApp (flow-wise-fam)
+# CaRe Wallet (flow-wise-fam)
 
 Gestão financeira pessoal **colaborativa**: várias "carteiras" (contas), cada uma com
 múltiplos membros. Controle de saldo, gastos fixos e variáveis, entradas fixas,
