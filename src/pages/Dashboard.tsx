@@ -53,6 +53,7 @@ export default function Dashboard() {
   const [fixoPayer, setFixoPayer] = useState(userId ?? '');
   const [fixoDate, setFixoDate] = useState(today);
   const [fixoShared, setFixoShared] = useState(false);
+  const [fixoAccount, setFixoAccount] = useState('');
 
   if (loading) return <DashboardSkeleton />;
 
@@ -70,7 +71,10 @@ export default function Dashboard() {
   const confirmFixo = async () => {
     if (!fixo || fixoAmount <= 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
     try {
-      await markRecurrenceOccurrence(fixo.recurrence.id, month, year, fixoAmount, fixoPayer || null, fixoDate || undefined, fixoShared);
+      await markRecurrenceOccurrence(
+        fixo.recurrence.id, month, year, fixoAmount, fixoPayer || null,
+        fixoDate || undefined, fixoShared, fixo.onCard ? undefined : fixoAccount || undefined,
+      );
       toast({ title: fixo.onCard ? 'Lançado no cartão' : 'Marcado como pago' });
       setFixo(null);
     } catch (err) {
@@ -81,6 +85,8 @@ export default function Dashboard() {
   const openFixo = (o: OccurrenceView) => {
     setFixo(o); setFixoAmount(o.amountCents); setFixoPayer(userId ?? ''); setFixoDate(today);
     setFixoShared(o.recurrence.shared);
+    const recAcc = spendingAccounts.find((a) => a.id === o.recurrence.accountId);
+    setFixoAccount(recAcc?.id ?? spendingAccounts[0]?.id ?? '');
   };
 
   return (
@@ -281,6 +287,15 @@ export default function Dashboard() {
             </div>
             {fixo?.onCard && (
               <p className="text-[11px] text-muted-foreground">A data da baixa decide em qual fatura o lançamento entra.</p>
+            )}
+            {fixo && !fixo.onCard && (
+              <div className="space-y-2">
+                <Label>{fixo.recurrence.kind === 'income' ? 'Conta que recebeu' : 'Debitar de'}</Label>
+                <Select value={fixoAccount} onValueChange={setFixoAccount}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>{spendingAccounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
             )}
             <div className="space-y-2">
               <Label>{fixo?.recurrence.kind === 'income' ? 'Quem recebeu' : 'Quem pagou'}</Label>

@@ -214,8 +214,8 @@ interface FinanceApi {
   addRecurrence(r: NewRecurrence): Promise<void>;
   updateRecurrence(id: UUID, patch: Partial<NewRecurrence> & { active?: boolean }): Promise<void>;
   deleteRecurrence(id: UUID): Promise<void>;
-  /** `paidOnISO` = dia da baixa (default hoje); num fixo de cartão decide a fatura. `shared` (default = flag da recorrência) divide igual entre os membros. */
-  markRecurrenceOccurrence(recurrenceId: UUID, month: number, year: number, amountCents: number, memberId: UUID | null, paidOnISO?: string, shared?: boolean): Promise<void>;
+  /** `paidOnISO` = dia da baixa (default hoje); num fixo de cartão decide a fatura. `shared` (default = flag da recorrência) divide igual entre os membros. `accountId` = conta de débito escolhida no ato (só p/ fixo não-cartão). */
+  markRecurrenceOccurrence(recurrenceId: UUID, month: number, year: number, amountCents: number, memberId: UUID | null, paidOnISO?: string, shared?: boolean, accountId?: UUID): Promise<void>;
   /** Registra o valor real do mês sem marcar como pago (transação `pending`). Não mexe no saldo, mas entra na projeção. */
   setRecurrenceOccurrenceAmount(recurrenceId: UUID, month: number, year: number, amountCents: number): Promise<void>;
   unmarkRecurrenceOccurrence(recurrenceId: UUID, month: number, year: number): Promise<void>;
@@ -791,7 +791,8 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
   const upsertRecurrenceTx = async (
     recurrenceId: UUID, month: number, year: number,
-    amountCents: number, memberId: UUID | null, status: TxStatus, paidOnISO?: string, shared?: boolean,
+    amountCents: number, memberId: UUID | null, status: TxStatus,
+    paidOnISO?: string, shared?: boolean, accountIdOverride?: UUID,
   ) => {
     const wid = requireWallet();
     const rec = recurrences.find((r) => r.id === recurrenceId);
@@ -800,8 +801,12 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     // nunca rebaixa uma ocorrência já paga para pendente
     const nextStatus: TxStatus = existing?.status === 'cleared' ? 'cleared' : status;
 
-    const account = rec.accountId ? accounts.find((a) => a.id === rec.accountId) : spendingAccountsMemo[0];
-    if (!account) throw new Error('Defina uma conta padrão para esta recorrência (Fixos → editar).');
+    // conta: override do diálogo de pagamento > conta da recorrência > 1ª conta de dinheiro
+    const overrideAcc = accountIdOverride ? accounts.find((a) => a.id === accountIdOverride) : null;
+    const account = overrideAcc
+      ?? (rec.accountId ? accounts.find((a) => a.id === rec.accountId) : null)
+      ?? spendingAccountsMemo[0];
+    if (!account) throw new Error('Defina uma forma de pagamento para esta recorrência (Fixos → editar).');
     const onCard = account.kind === 'card';
     const dueISO = recurrenceDueISO(year, month, rec.day);
     const chargeISO = paidOnISO ?? dueISO;
@@ -812,6 +817,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     if (existing) {
       const patch: Record<string, unknown> = { amount_cents: amountCents, status: nextStatus };
       if (nextStatus === 'cleared') patch.member_id = memberId;
+      if (overrideAcc && !onCard) patch.account_id = account.id;
       if (paidOnISO) {
         patch.ref_month = ref.refMonth;
         patch.ref_year = ref.refYear;
@@ -836,8 +842,8 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     await reload();
   };
 
-  const markRecurrenceOccurrence: FinanceApi['markRecurrenceOccurrence'] = (recurrenceId, month, year, amountCents, memberId, paidOnISO, shared) =>
-    upsertRecurrenceTx(recurrenceId, month, year, amountCents, memberId, 'cleared', paidOnISO ?? today, shared);
+  const markRecurrenceOccurrence: FinanceApi['markRecurrenceOccurrence'] = (recurrenceId, month, year, amountCents, memberId, paidOnISO, shared, accountId) =>
+    upsertRecurrenceTx(recurrenceId, month, year, amountCents, memberId, 'cleared', paidOnISO ?? today, shared, accountId);
 
   const setRecurrenceOccurrenceAmount: FinanceApi['setRecurrenceOccurrenceAmount'] = (recurrenceId, month, year, amountCents) =>
     upsertRecurrenceTx(recurrenceId, month, year, amountCents, null, 'pending');

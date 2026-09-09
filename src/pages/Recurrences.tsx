@@ -51,6 +51,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
   const [markPayer, setMarkPayer] = useState(userId ?? '');
   const [markDate, setMarkDate] = useState(todayISO());
   const [markShared, setMarkShared] = useState(false);
+  const [markAccount, setMarkAccount] = useState('');
 
   const [inform, setInform] = useState<OccurrenceView | null>(null);
   const [informAmount, setInformAmount] = useState(0);
@@ -118,6 +119,8 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
   const openMark = (o: OccurrenceView) => {
     setMark(o); setMarkAmount(o.amountCents); setMarkPayer(userId ?? ''); setMarkDate(today);
     setMarkShared(o.recurrence.shared);
+    const recAcc = spendingAccounts.find((a) => a.id === o.recurrence.accountId);
+    setMarkAccount(recAcc?.id ?? spendingAccounts[0]?.id ?? '');
   };
   const openInform = (o: OccurrenceView) => { setInform(o); setInformAmount(o.amountCents); };
   const confirmInform = async () => {
@@ -138,7 +141,10 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
   const confirmMark = async () => {
     if (!mark || markAmount <= 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
     try {
-      await markRecurrenceOccurrence(mark.recurrence.id, month, year, markAmount, markPayer || null, markDate || undefined, markShared);
+      await markRecurrenceOccurrence(
+        mark.recurrence.id, month, year, markAmount, markPayer || null,
+        markDate || undefined, markShared, mark.onCard ? undefined : markAccount || undefined,
+      );
       toast({ title: mark.onCard ? 'Lançado no cartão' : tab === 'income' ? 'Recebimento confirmado' : 'Pagamento confirmado' });
       setMark(null);
     } catch (err) {
@@ -282,6 +288,15 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
               {mark?.recurrence.variableAmount && 'Ajuste o valor se a conta veio diferente do previsto. '}
               {mark?.onCard && 'A data da baixa decide em qual fatura este lançamento entra.'}
             </p>
+            {mark && !mark.onCard && (
+              <div className="space-y-2">
+                <Label>{tab === 'income' ? 'Conta que recebeu' : 'Debitar de'}</Label>
+                <Select value={markAccount} onValueChange={setMarkAccount}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>{spendingAccounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>{tab === 'income' ? 'Quem recebeu' : 'Quem pagou'}</Label>
               <Select value={markPayer} onValueChange={setMarkPayer}>
