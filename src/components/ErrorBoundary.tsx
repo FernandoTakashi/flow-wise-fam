@@ -23,17 +23,17 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-6 text-center">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
           <AlertTriangle className="h-6 w-6" />
         </div>
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">Algo deu errado nesta tela</h1>
-          <p className="mt-1 max-w-md text-sm text-slate-500">
+          <h1 className="text-lg font-semibold text-foreground">Algo deu errado nesta tela</h1>
+          <p className="mt-1 max-w-md text-sm text-muted-foreground">
             O erro foi registrado no console. Você pode tentar recarregar esta seção.
           </p>
         </div>
-        <pre className="max-w-md overflow-x-auto rounded-md bg-slate-100 p-3 text-left text-xs text-slate-600">
+        <pre className="max-w-md overflow-x-auto rounded-md bg-muted p-3 text-left text-xs text-muted-foreground">
           {this.state.error.message}
         </pre>
         <div className="flex gap-2">

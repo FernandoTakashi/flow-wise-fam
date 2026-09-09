@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Repeat, CreditCard, PiggyBank,
-  TrendingUp, BarChart3, Scale, Settings, Wallet,
+  TrendingUp, BarChart3, Scale, Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Mascot } from './Mascot';
 
 export const NAV_ITEMS = [
   { title: 'Dashboard', href: '/', icon: LayoutDashboard, exact: true },
@@ -21,10 +22,8 @@ export const NAV_ITEMS = [
 export function Sidebar() {
   return (
     <div className="flex h-full flex-col bg-card">
-      <div className="flex items-center gap-2 border-b border-border p-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Wallet className="h-4 w-4" />
-        </div>
+      <div className="flex items-center gap-2.5 border-b border-border p-4">
+        <Mascot size={34} tile className="shrink-0 rounded-lg" />
         <div>
           <h1 className="font-semibold leading-tight text-foreground">CaRe Wallet</h1>
           <p className="text-xs text-muted-foreground">Finanças da família</p>

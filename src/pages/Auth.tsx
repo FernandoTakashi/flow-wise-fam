@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
-import { Wallet, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { Mascot } from '@/components/Mascot';
 
 export default function AuthPage() {
   const [email, setEmail] = useState('');
@@ -56,13 +57,11 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="mb-8 text-center">
-        <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
-          <Wallet className="h-6 w-6" />
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">CaRe Wallet</h1>
-        <p className="text-sm text-slate-500">Finanças da família, sem planilha</p>
+        <Mascot size={56} tile className="mx-auto mb-2 rounded-2xl shadow-lg" />
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">CaRe Wallet</h1>
+        <p className="text-sm text-muted-foreground">Finanças da família, sem planilha</p>
       </div>
 
       <Tabs defaultValue="login" className="w-full max-w-sm sm:max-w-md">
@@ -137,7 +136,7 @@ export default function AuthPage() {
         </TabsContent>
       </Tabs>
 
-      <p className="mt-8 text-center text-xs text-slate-400">
+      <p className="mt-8 text-center text-xs text-muted-foreground">
         &copy; {new Date().getFullYear()} CaRe Wallet
       </p>
     </div>

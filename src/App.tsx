@@ -27,7 +27,7 @@ const queryClient = new QueryClient();
 
 function FullScreenLoader({ label }: { label: string }) {
   return (
-    <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-50">
+    <div className="flex h-screen w-full flex-col items-center justify-center bg-background">
       <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       <p className="mt-4 text-sm font-medium text-muted-foreground">{label}</p>
     </div>

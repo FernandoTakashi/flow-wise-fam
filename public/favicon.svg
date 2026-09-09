@@ -1,12 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect x="0" y="0" width="64" height="64" rx="16" fill="#10b981"/>
-  
-  <g transform="translate(16, 16) scale(1.33)">
-    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" 
-          stroke="white" 
-          stroke-width="3" 
-          fill="none" 
-          stroke-linecap="round" 
-          stroke-linejoin="round"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="CaRe Wallet — Carolina">
+  <rect width="64" height="64" rx="14" fill="#e9604a"/>
+  <circle cx="21" cy="16" r="5.5" fill="#b57c42"/>
+  <circle cx="43" cy="16" r="5.5" fill="#b57c42"/>
+  <circle cx="21" cy="16" r="2.4" fill="#8a5a2c"/>
+  <circle cx="43" cy="16" r="2.4" fill="#8a5a2c"/>
+  <rect x="12" y="13" width="40" height="37" rx="16" fill="#d89a63"/>
+  <rect x="17" y="31" width="30" height="18" rx="11" fill="#f0dcbb"/>
+  <circle cx="24" cy="25" r="2.8" fill="#3b2a1d"/>
+  <circle cx="40" cy="25" r="2.8" fill="#3b2a1d"/>
+  <circle cx="28" cy="39" r="1.7" fill="#7a5230"/>
+  <circle cx="36" cy="39" r="1.7" fill="#7a5230"/>
+  <path d="M32 42v3M28 46q4 3 8 0" stroke="#7a5230" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  <circle cx="48" cy="47" r="9" fill="#f5c542" stroke="#dba61f" stroke-width="2"/>
+  <text x="48" y="51.5" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="11" font-weight="700" fill="#8c6910">$</text>
 </svg>
