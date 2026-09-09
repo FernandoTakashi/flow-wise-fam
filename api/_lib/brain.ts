@@ -121,9 +121,28 @@ export async function interpret(text: string, ctx: WalletContext): Promise<BotAc
 
     return { intent: 'reply', text: p.reply?.trim() || 'Não entendi. Manda um gasto ("uber 23 nubank") ou uma pergunta ("qual meu saldo?").' };
   } catch (e) {
-    console.error('[brain] Haiku falhou:', (e as Error).message ?? e);
+    const msg = (e as Error).message ?? String(e);
+    console.error('[brain] parse falhou:', msg);
+
+    // lançamento óbvio → regex
     const en = regexEntry(text, ctx.hoje);
-    return en ? { intent: 'lancamento', entry: en }
-      : { intent: 'reply', text: 'Tive um problema pra pensar agora. Tenta de novo em instantes.' };
+    if (en) return { intent: 'lancamento', entry: en };
+
+    // plano B: resposta em texto puro (sem output estruturado)
+    try {
+      const client = new Anthropic({ apiKey: env.anthropicKey()! });
+      const r = await client.messages.create({
+        model: 'claude-haiku-4-5',
+        max_tokens: 500,
+        system: 'Assistente financeiro pessoal (pt-BR) no Telegram. Responda curto e direto usando SÓ os números do ESTADO. Se o ESTADO não tem a resposta, diga isso.',
+        messages: [{ role: 'user', content: `ESTADO:\n${JSON.stringify(ctx)}\n\nPERGUNTA:\n${text}` }],
+      });
+      const t = r.content.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('').trim();
+      if (t) return { intent: 'reply', text: t };
+    } catch (e2) {
+      console.error('[brain] plano B falhou:', (e2 as Error).message ?? e2);
+      return { intent: 'reply', text: `⚠️ Erro ao chamar o Haiku: ${msg}` };
+    }
+    return { intent: 'reply', text: `⚠️ Não consegui pensar nisso. (${msg})` };
   }
 }
