@@ -1,23 +1,20 @@
 import { useMemo, useState } from 'react';
-import { useFinance, type NewTransaction } from '@/contexts/FinanceContext';
+import { useFinance } from '@/contexts/FinanceContext';
 import { PageHeader, EmptyState } from '@/components/PageHeader';
 import { MoneyInput } from '@/components/MoneyInput';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { formatBRL, splitInstallments } from '@/lib/money';
 import { formatDayMonth, isoParts, MONTHS_PT, resolveInvoiceRef } from '@/lib/dates';
+import { cn } from '@/lib/utils';
 import type { Transaction } from '@/types';
-import {
-  Plus, Pencil, Trash2, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, Users, AlertTriangle, Lock,
-} from 'lucide-react';
+import { Plus, Pencil, Trash2, ArrowLeftRight, Users, AlertTriangle, Lock, Search } from 'lucide-react';
 
 type Kind = 'income' | 'expense';
 
@@ -26,7 +23,7 @@ interface FormState {
   accountId: string;
   amountCents: number;
   dateISO: string;
-  refMonth: number;   // 1-12
+  refMonth: number;
   refYear: number;
   refAuto: boolean;
   categoryId: string;
@@ -46,6 +43,8 @@ const emptyForm = (dateISO: string): FormState => {
   };
 };
 
+const COLS = 'grid-cols-[78px_minmax(0,1fr)_132px_124px_104px_122px_72px]';
+
 export default function Transactions({ kind = 'expense', embedded = false }: { kind?: Kind; embedded?: boolean }) {
   const {
     loading, selectedMonth, today, transactions, accounts, spendingAccounts, cards, activeCategories,
@@ -56,22 +55,32 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
   const { month, year } = selectedMonth;
   const locked = isPeriodLocked(month, year);
   const isIncome = kind === 'income';
+  const mes = MONTHS_PT[month];
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(() => ({ ...emptyForm(today), kind }));
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState('');
 
   const monthTx = useMemo(
     () => transactions.filter((t) => t.refMonth === month + 1 && t.refYear === year)
       .sort((a, b) => (a.date < b.date ? 1 : -1)),
     [transactions, month, year],
   );
-  // "Saídas" = despesas + transferências (pagamento de fatura é saída de dinheiro)
   const kindTx = useMemo(
     () => monthTx.filter((t) => (isIncome ? t.kind === 'income' : t.kind !== 'income')),
     [monthTx, isIncome],
   );
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return kindTx;
+    return kindTx.filter((t) =>
+      (t.description ?? '').toLowerCase().includes(q)
+      || accountName(t.accountId).toLowerCase().includes(q)
+      || categoryName(t.categoryId).toLowerCase().includes(q));
+  }, [kindTx, search, accountName, categoryName]);
+
   const totals = useMemo(() => {
     let income = 0; let expense = 0;
     for (const t of monthTx) {
@@ -82,78 +91,50 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
     return { income, expense, net: income - expense };
   }, [monthTx]);
 
-  if (loading) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
+  if (loading) return <div className="h-64 animate-pulse rounded-[16px] bg-muted" />;
 
   const selectedAccount = accounts.find((a) => a.id === form.accountId);
   const isCard = selectedAccount?.kind === 'card';
   const nInst = isCard ? Math.max(1, parseInt(form.installments, 10) || 1) : 1;
   const categoriesForKind = activeCategories.filter((c) => c.kind === form.kind);
-
-  // aviso de competência real quando é cartão
-  const cardRef = isCard && selectedAccount
-    ? resolveInvoiceRef(form.dateISO, selectedAccount.closingDay ?? 1)
-    : null;
-
+  const cardRef = isCard && selectedAccount ? resolveInvoiceRef(form.dateISO, selectedAccount.closingDay ?? 1) : null;
   const overdrawWarn = !editing && form.kind === 'expense' && !isCard && form.accountId && form.amountCents > 0
     && wouldOverdraw(form.accountId, form.amountCents);
   const limitWarn = !editing && form.kind === 'expense' && isCard && form.accountId && form.amountCents > 0
     && wouldExceedLimit(form.accountId, form.amountCents);
 
   const resetForm = () => { setForm({ ...emptyForm(today), kind }); setEditing(null); setShowForm(false); };
-
   const evenShares = (total: number) => {
     const ids = members.map((m) => m.userId);
     if (ids.length === 0) return [] as { memberId: string; shareCents: number }[];
     const parts = splitInstallments(total, ids.length);
     return ids.map((id, i) => ({ memberId: id, shareCents: parts[i] }));
   };
-
   const openNew = () => {
-    setForm({
-      ...emptyForm(today), kind,
-      accountId: spendingAccounts[0]?.id ?? accounts[0]?.id ?? '', memberId: userId ?? '',
-    });
-    setEditing(null);
-    setShowForm(true);
+    setForm({ ...emptyForm(today), kind, accountId: spendingAccounts[0]?.id ?? accounts[0]?.id ?? '', memberId: userId ?? '' });
+    setEditing(null); setShowForm(true);
   };
-
   const openEdit = (t: Transaction) => {
     setEditing(t);
     setForm({
-      kind: t.kind === 'income' ? 'income' : 'expense',
-      accountId: t.accountId,
-      amountCents: t.amountCents,
-      dateISO: t.date,
-      refMonth: t.refMonth,
-      refYear: t.refYear,
-      refAuto: false,
-      categoryId: t.categoryId ?? '',
-      memberId: t.memberId ?? '',
-      description: t.description,
-      installments: '1',
-      installmentStart: '1',
-      splitOn: t.splits.length > 0,
+      kind: t.kind === 'income' ? 'income' : 'expense', accountId: t.accountId, amountCents: t.amountCents,
+      dateISO: t.date, refMonth: t.refMonth, refYear: t.refYear, refAuto: false,
+      categoryId: t.categoryId ?? '', memberId: t.memberId ?? '', description: t.description,
+      installments: '1', installmentStart: '1', splitOn: t.splits.length > 0,
     });
     setShowForm(true);
   };
-
-  const onDateChange = (dateISO: string) => {
-    setForm((f) => {
-      if (!f.refAuto) return { ...f, dateISO };
-      const { y, m } = isoParts(dateISO);
-      return { ...f, dateISO, refMonth: m + 1, refYear: y };
-    });
-  };
+  const onDateChange = (dateISO: string) => setForm((f) => {
+    if (!f.refAuto) return { ...f, dateISO };
+    const { y, m } = isoParts(dateISO);
+    return { ...f, dateISO, refMonth: m + 1, refYear: y };
+  });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.accountId || form.amountCents <= 0) {
-      toast({ title: 'Preencha conta e valor', variant: 'destructive' });
-      return;
-    }
+    if (!form.accountId || form.amountCents <= 0) { toast({ title: 'Preencha conta e valor', variant: 'destructive' }); return; }
     const shared = form.kind === 'expense' && form.splitOn && members.length > 1;
     const splits = shared ? evenShares(form.amountCents) : undefined;
-
     setBusy(true);
     try {
       if (editing) {
@@ -176,106 +157,153 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
       resetForm();
     } catch (err) {
       toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' });
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   };
 
+  const newLabel = isIncome ? 'Nova receita' : 'Novo lançamento';
+
   return (
-    <div className="space-y-5">
-      {embedded ? (
-        <div className="flex justify-end">
-          <Button size="sm" onClick={openNew}><Plus className="mr-2 h-4 w-4" /> {isIncome ? 'Nova receita' : 'Novo lançamento'}</Button>
+    <div className="space-y-4">
+      {!embedded && <PageHeader title={isIncome ? 'Receitas' : 'Lançamentos'} subtitle={`Competência de ${mes} de ${year}`} extra={locked ? <LockPill /> : undefined} />}
+
+      {locked && !embedded && (
+        <div className="flex items-center gap-2 rounded-[12px] border border-[#F2C98A] bg-[#F3EBE5] p-3 text-[12.5px] text-[#5C4C45]">
+          <Lock className="h-4 w-4 shrink-0 text-[#8A6A57]" /> Mês fechado — lançamentos com competência aqui não podem ser criados ou editados. Reabra em Ajustes › Períodos.
         </div>
-      ) : (
-        <PageHeader
-          title={isIncome ? 'Receitas' : 'Lançamentos'}
-          subtitle={`Competência de ${MONTHS_PT[month]} de ${year}`}
-          action={<Button onClick={openNew}><Plus className="mr-2 h-4 w-4" /> {isIncome ? 'Nova receita' : 'Novo lançamento'}</Button>}
+      )}
+
+      {/* tiles */}
+      <div className="grid grid-cols-2 gap-3.5 md:grid-cols-3">
+        <Tile label={`Saídas de ${mes}`} value={formatBRL(totals.expense)} valueClass="text-[#C8452F]" />
+        <Tile label={`Entradas de ${mes}`} value={formatBRL(totals.income)} valueClass="text-[#1F7A52]" />
+        <Tile
+          label="Resultado do mês"
+          value={formatBRL(totals.net)}
+          dark
+          valueClass={totals.net >= 0 ? 'text-pos' : 'text-neg'}
         />
-      )}
-
-      {locked && (
-        <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">
-          <Lock className="h-4 w-4" /> Mês fechado — lançamentos com competência aqui não podem ser criados ou editados. Reabra em Ajustes › Períodos.
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-3">
-        {isIncome
-          ? <MiniTile label={`Entradas de ${MONTHS_PT[month]}`} value={formatBRL(totals.income)} className="text-emerald-600" />
-          : <MiniTile label={`Saídas de ${MONTHS_PT[month]}`} value={formatBRL(totals.expense)} className="text-red-600" />}
-        <MiniTile label="Resultado do mês" value={formatBRL(totals.net)} className={totals.net >= 0 ? 'text-emerald-600' : 'text-red-600'} />
       </div>
 
-      {kindTx.length === 0 ? (
+      {/* barra de ferramentas */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-[19px] w-[19px] -translate-y-1/2 text-[#A9968C]" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por descrição, conta ou categoria"
+            className="h-10 w-full rounded-[11px] border border-border bg-card pl-10 pr-3 text-[13.5px] text-foreground outline-none placeholder:text-[#A9968C] focus:border-primary"
+          />
+        </div>
+        <Button onClick={openNew} className="shrink-0"><Plus className="mr-2 h-4 w-4" /> {newLabel}</Button>
+      </div>
+
+      {rows.length === 0 ? (
         <EmptyState icon={<ArrowLeftRight className="h-10 w-10" />}
-          title={isIncome ? 'Nenhuma entrada neste mês' : 'Nenhuma saída neste mês'}
-          hint={isIncome ? 'Registre salário, freelas, reembolsos…' : 'Registre compras, contas, pagamentos…'} />
+          title={search ? 'Nada encontrado' : isIncome ? 'Nenhuma entrada neste mês' : 'Nenhuma saída neste mês'}
+          hint={search ? 'Tente outro termo.' : isIncome ? 'Registre salário, freelas, reembolsos…' : 'Registre compras, contas, pagamentos…'} />
       ) : (
-        <div className="space-y-2">
-          {kindTx.map((t) => (
-            <Card key={t.id} className={t.status === 'pending' ? 'border-dashed opacity-70' : ''}>
-              <CardContent className="flex items-center justify-between gap-3 p-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <TxIcon kind={t.kind} />
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">
-                      {t.description || (t.kind === 'transfer' ? 'Transferência' : categoryName(t.categoryId))}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-                      <span>{formatDayMonth(t.date)}</span>
-                      <span>·</span>
-                      <span>{accountName(t.accountId)}</span>
-                      {t.categoryId && <><span>·</span><span>{categoryName(t.categoryId)}</span></>}
-                      {t.memberId && <><span>·</span><span>{memberName(t.memberId).split(' ')[0]}</span></>}
-                      {t.installmentOf && t.installmentOf > 1 && (
-                        <Badge variant="outline" className="h-4 px-1 text-[9px]">{t.installmentNo}/{t.installmentOf}</Badge>
-                      )}
-                      {t.splits.length > 0 && <Users className="h-3 w-3" />}
-                    </div>
+        <>
+          {/* tabela desktop */}
+          <div className="hidden overflow-hidden rounded-[16px] border border-border bg-card md:block">
+            <div className={cn('grid gap-3 border-b border-border bg-[#FDFAF8] px-[22px] py-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#7E6E66]', COLS)}>
+              <span>Data</span><span>Descrição</span><span>Conta</span><span>Categoria</span><span>Quem</span>
+              <span className="text-right">Valor</span><span />
+            </div>
+            {rows.map((t) => {
+              const desc = t.description || (t.kind === 'transfer' ? 'Transferência' : categoryName(t.categoryId));
+              const dot = t.kind === 'income' ? 'bg-[#2A8F63]' : t.kind === 'expense' ? 'bg-primary' : 'bg-[#C6B4AA]';
+              const valClass = t.kind === 'income' ? 'text-[#1F7A52]' : t.kind === 'expense' ? 'text-foreground' : 'text-[#7E6E66]';
+              const sign = t.kind === 'income' ? '+' : t.kind === 'expense' ? '−' : '';
+              return (
+                <div key={t.id} className={cn('group grid items-center gap-3 border-b border-[#F4EDE7] px-[22px] py-[13px] transition-colors last:border-0 hover:bg-[#FDFAF8]', COLS, t.status === 'pending' && 'opacity-[.62]')}>
+                  <span className="text-[13px] tabular-nums text-[#5C4C45]">{formatDayMonth(t.date)}</span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <i className={cn('h-2 w-2 shrink-0 rounded-full', dot)} />
+                    <span className="truncate text-[14px] font-semibold text-foreground">{desc}</span>
+                    {t.installmentOf && t.installmentOf > 1 && (
+                      <span className="shrink-0 rounded-full border border-[#E2D7CF] px-1.5 py-px text-[10.5px] font-bold text-[#7E6E66]">{t.installmentNo}/{t.installmentOf}</span>
+                    )}
+                    {t.splits.length > 0 && <Users className="h-[15px] w-[15px] shrink-0 text-accent" />}
+                    {t.status === 'pending' && (
+                      <span className="shrink-0 rounded-full bg-[#F4EDE7] px-1.5 py-px text-[10.5px] font-bold text-[#8A6A57]">conta chegou</span>
+                    )}
+                  </span>
+                  <span className="truncate text-[12.5px] text-[#5C4C45]">{accountName(t.accountId)}</span>
+                  <span className="truncate text-[12.5px] text-[#5C4C45]">{t.categoryId ? categoryName(t.categoryId) : '—'}</span>
+                  <span className="truncate text-[12.5px] text-[#5C4C45]">{t.memberId ? memberName(t.memberId).split(' ')[0] : '—'}</span>
+                  <span className={cn('text-right text-[14px] font-bold tabular-nums', valClass)}>{sign}{formatBRL(t.amountCents)}</span>
+                  <span className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                    {t.kind !== 'transfer' && (
+                      <button type="button" onClick={() => openEdit(t)} className="rounded p-1 text-muted-foreground hover:text-foreground">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <ConfirmDialog
+                      title={t.kind === 'transfer' ? 'Estornar pagamento de fatura?' : 'Excluir lançamento?'}
+                      description={t.kind === 'transfer' ? 'A fatura volta a ficar em aberto.' : 'Essa ação não pode ser desfeita.'}
+                      confirmLabel={t.kind === 'transfer' ? 'Estornar' : 'Excluir'}
+                      onConfirm={() => deleteTransaction(t.id)}
+                      trigger={<button type="button" className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>}
+                    />
+                  </span>
+                </div>
+              );
+            })}
+            <div className="px-[22px] py-3.5 text-[12.5px] text-[#7E6E66]">
+              Competência de {mes} · {rows.length} de {kindTx.length} lançamentos
+            </div>
+          </div>
+
+          {/* card-list mobile */}
+          <div className="space-y-2 md:hidden">
+            {rows.map((t) => {
+              const desc = t.description || (t.kind === 'transfer' ? 'Transferência' : categoryName(t.categoryId));
+              const dot = t.kind === 'income' ? 'bg-[#2A8F63]' : t.kind === 'expense' ? 'bg-primary' : 'bg-[#C6B4AA]';
+              const valClass = t.kind === 'income' ? 'text-[#1F7A52]' : t.kind === 'expense' ? 'text-foreground' : 'text-[#7E6E66]';
+              const sign = t.kind === 'income' ? '+' : t.kind === 'expense' ? '−' : '';
+              return (
+                <div key={t.id} className={cn('rounded-[14px] border border-border bg-card p-3.5', t.status === 'pending' && 'opacity-[.62]')}>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <i className={cn('h-2 w-2 shrink-0 rounded-full', dot)} />
+                      <span className="truncate text-[14px] font-semibold text-foreground">{desc}</span>
+                    </span>
+                    <span className={cn('shrink-0 text-[14px] font-bold tabular-nums', valClass)}>{sign}{formatBRL(t.amountCents)}</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11.5px] text-[#7E6E66]">
+                    <span>{formatDayMonth(t.date)}</span><span>·</span><span>{accountName(t.accountId)}</span>
+                    {t.categoryId && <><span>·</span><span>{categoryName(t.categoryId)}</span></>}
+                    {t.memberId && <><span>·</span><span>{memberName(t.memberId).split(' ')[0]}</span></>}
+                    {t.installmentOf && t.installmentOf > 1 && <span>· {t.installmentNo}/{t.installmentOf}</span>}
+                    {t.splits.length > 0 && <Users className="h-3.5 w-3.5 text-accent" />}
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    {t.kind !== 'transfer' && (
+                      <Button variant="outline" size="sm" className="h-8 flex-1" onClick={() => openEdit(t)}>
+                        <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
+                      </Button>
+                    )}
+                    <ConfirmDialog
+                      title={t.kind === 'transfer' ? 'Estornar pagamento de fatura?' : 'Excluir lançamento?'}
+                      description={t.kind === 'transfer' ? 'A fatura volta a ficar em aberto.' : 'Essa ação não pode ser desfeita.'}
+                      confirmLabel={t.kind === 'transfer' ? 'Estornar' : 'Excluir'}
+                      onConfirm={() => deleteTransaction(t.id)}
+                      trigger={<Button variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>}
+                    />
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <span className={`text-sm font-bold tabular-nums ${t.kind === 'income' ? 'text-emerald-600' : t.kind === 'expense' ? 'text-red-600' : 'text-muted-foreground'}`}>
-                    {t.kind === 'income' ? '+' : t.kind === 'expense' ? '−' : ''}{formatBRL(t.amountCents)}
-                  </span>
-                  {t.kind !== 'transfer' && (
-                    <>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(t)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <ConfirmDialog
-                        title="Excluir lançamento?"
-                        description="Essa ação não pode ser desfeita."
-                        confirmLabel="Excluir"
-                        onConfirm={() => deleteTransaction(t.id)}
-                        trigger={<Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>}
-                      />
-                    </>
-                  )}
-                  {t.kind === 'transfer' && (
-                    <ConfirmDialog
-                      title="Estornar pagamento de fatura?"
-                      description="A fatura volta a ficar em aberto."
-                      confirmLabel="Estornar"
-                      onConfirm={() => deleteTransaction(t.id)}
-                      trigger={<Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>}
-                    />
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
+      {/* dialog nova/editar */}
       <Dialog open={showForm} onOpenChange={(o) => (o ? setShowForm(true) : resetForm())}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>
-              {editing ? 'Editar' : 'Nova'} {isIncome ? 'entrada' : 'saída'}
-            </DialogTitle>
+            <DialogTitle>{editing ? 'Editar' : 'Nova'} {isIncome ? 'entrada' : 'saída'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -301,7 +329,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
             </div>
 
             {cardRef && (
-              <p className="rounded bg-muted/50 p-2 text-[11px] text-muted-foreground">
+              <p className="rounded-[12px] bg-[#F3EBE5] p-3 text-[12px] text-[#5C4C45]">
                 Compra no cartão → competência da fatura de <strong>{MONTHS_PT[cardRef.refMonth - 1]} {cardRef.refYear}</strong>.
               </p>
             )}
@@ -336,18 +364,14 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                 <Label>Categoria</Label>
                 <Select value={form.categoryId} onValueChange={(v) => setForm((f) => ({ ...f, categoryId: v }))}>
                   <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
-                  <SelectContent>
-                    {categoriesForKind.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{categoriesForKind.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
                 <Label>Responsável</Label>
                 <Select value={form.memberId} onValueChange={(v) => setForm((f) => ({ ...f, memberId: v }))}>
                   <SelectTrigger><SelectValue placeholder="Quem" /></SelectTrigger>
-                  <SelectContent>
-                    {members.map((m) => <SelectItem key={m.userId} value={m.userId}>{m.profile?.name ?? '—'}</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{members.map((m) => <SelectItem key={m.userId} value={m.userId}>{m.profile?.name ?? '—'}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
@@ -387,14 +411,14 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
             </div>
 
             {(overdrawWarn || limitWarn) && (
-              <p className="flex items-start gap-2 rounded bg-amber-50 p-2 text-[11px] text-amber-800">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <p className="flex items-start gap-2 rounded-[12px] bg-[#F3EBE5] p-3 text-[12px] text-[#5C4C45]">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8A6A57]" />
                 {overdrawWarn ? 'Isso deixa o saldo da conta negativo.' : 'Isso ultrapassa o limite do cartão.'} Você pode lançar mesmo assim.
               </p>
             )}
 
             {form.kind === 'expense' && members.length > 1 && (
-              <label className="flex items-start gap-3 rounded-lg border p-3">
+              <label className="flex items-start gap-3 rounded-[14px] border p-3">
                 <input type="checkbox" className="mt-1" checked={form.splitOn}
                   onChange={(e) => setForm((f) => ({ ...f, splitOn: e.target.checked }))} />
                 <span className="text-sm">
@@ -417,20 +441,19 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
   );
 }
 
-function MiniTile({ label, value, className }: { label: string; value: string; className?: string }) {
+function LockPill() {
   return (
-    <Card>
-      <CardContent className="p-3">
-        <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
-        <p className={`text-base font-bold tabular-nums md:text-lg ${className ?? ''}`}>{value}</p>
-      </CardContent>
-    </Card>
+    <span className="inline-flex items-center gap-1 rounded-full border border-[#F2C98A] bg-[#4A3A2A]/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-[#B35A3A]">
+      <Lock className="h-3 w-3" /> mês fechado
+    </span>
   );
 }
 
-function TxIcon({ kind }: { kind: Transaction['kind'] }) {
-  const cls = 'h-8 w-8 shrink-0 rounded-full p-1.5';
-  if (kind === 'income') return <ArrowUpCircle className={`${cls} bg-emerald-100 text-emerald-600`} />;
-  if (kind === 'expense') return <ArrowDownCircle className={`${cls} bg-red-100 text-red-600`} />;
-  return <ArrowLeftRight className={`${cls} bg-muted text-muted-foreground`} />;
+function Tile({ label, value, valueClass, dark }: { label: string; value: string; valueClass?: string; dark?: boolean }) {
+  return (
+    <div className={cn('rounded-2xl border px-[18px] py-4', dark ? 'border-ink bg-ink' : 'border-border bg-card')}>
+      <p className={cn('text-[11.5px] font-semibold', dark ? 'text-[#9C8A80]' : 'text-[#7E6E66]')}>{label}</p>
+      <p className={cn('text-[22px] font-bold tabular-nums', dark ? 'text-on-ink' : 'text-foreground', valueClass)}>{value}</p>
+    </div>
+  );
 }
