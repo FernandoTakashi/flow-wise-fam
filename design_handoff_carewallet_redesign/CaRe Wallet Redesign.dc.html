@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Hanken+Grotesk:wght@400;500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#E9E1D9; -webkit-font-smoothing:antialiased; }
+  a { color:#2F8F8A; text-decoration:none; }
+  a:hover { color:#1F6B67; }
+</style>
+</helmet>
+
+<div style="font-family:'Hanken Grotesk',ui-sans-serif,system-ui,sans-serif;color:#221A17;padding:56px;display:flex;flex-direction:column;gap:56px;align-items:flex-start;background:#E9E1D9">
+
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:760px">
+    <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#7E6E66">CaRe Wallet · proposta de redesign</span>
+    <h1 style="font-family:'Bricolage Grotesque',sans-serif;font-size:40px;line-height:1.05;letter-spacing:-.025em;margin:0;font-weight:700">Mesma lógica, outra presença</h1>
+    <p style="margin:0;font-size:16px;line-height:1.5;color:#5C4C45;text-wrap:pretty">Os campos, filtros e ações são os que o app já tem — competência, faturas com previsão, acerto entre membros, fechamento de período, bot do Telegram. O que muda é a hierarquia: um número que importa por tela, listas mais calmas, e um app de celular pensado como app.</p>
+  </div>
+
+  <!-- ══ DESKTOP ══ -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <span style="font-family:ui-monospace,monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#7E6E66">Desktop · navegue pelo menu</span>
+    <div style="width:1360px;height:920px;display:grid;grid-template-columns:252px minmax(0,1fr);border-radius:20px;overflow:hidden;box-shadow:0 30px 60px -20px rgba(60,38,30,.28),0 2px 6px rgba(60,38,30,.1);background:#FAF6F2">
+
+      <!-- sidebar -->
+      <div style="background:#221A17;display:flex;flex-direction:column;padding:20px 14px;gap:22px">
+        <div style="display:flex;align-items:center;gap:11px;padding:0 8px">
+          <img src="newlogo.svg" alt="Carolina, a mascote da CaRe Wallet" style="width:36px;height:36px;border-radius:11px;background:#EF6A52;padding:3px;box-sizing:border-box">
+          <div style="display:flex;flex-direction:column">
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:16px;font-weight:700;color:#FAF6F2;letter-spacing:-.01em">CaRe Wallet</span>
+            <span style="font-size:11.5px;color:#9C8A80;white-space:nowrap">Finanças da família</span>
+          </div>
+        </div>
+
+        <button onClick="{{ noop }}" style="display:flex;align-items:center;justify-content:center;gap:8px;height:44px;border:none;border-radius:12px;background:#EF6A52;color:#fff;font-family:'Hanken Grotesk',sans-serif;font-size:14.5px;font-weight:600;cursor:pointer" style-hover="background:#D95439">
+          <span style="font-family:'Material Symbols Rounded';font-size:20px;line-height:1">add</span>Novo lançamento
+        </button>
+
+        <div style="display:flex;flex-direction:column;gap:18px;flex:1;overflow:hidden">
+          <sc-for list="{{ navGroups }}" as="group" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#6E5C54;padding:0 10px;margin-bottom:6px">{{ group.label }}</span>
+              <sc-for list="{{ group.items }}" as="item" hint-placeholder-count="4">
+                <button onClick="{{ item.go }}" style="{{ item.style }}" style-hover="{{ item.hover }}">
+                  <span style="font-family:'Material Symbols Rounded';font-size:19px;line-height:1;width:19px">{{ item.icon }}</span>
+                  <span style="flex:1;text-align:left;white-space:nowrap">{{ item.title }}</span>
+                  <span style="{{ item.badgeStyle }}">{{ item.badge }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 10px 4px;border-top:1px solid #362A25">
+          <div style="width:32px;height:32px;border-radius:50%;background:#3B2D27;color:#E4B8A9;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;flex:none">FT</div>
+          <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+            <span style="font-size:13px;font-weight:600;color:#FAF6F2">Fernando</span>
+            <span style="font-size:11px;color:#9C8A80;white-space:nowrap">Carteira Fe e Ellen</span>
+          </div>
+          <span style="font-family:'Material Symbols Rounded';font-size:19px;color:#9C8A80;cursor:pointer" style-hover="color:#EF6A52">logout</span>
+        </div>
+      </div>
+
+      <!-- main -->
+      <div style="display:flex;flex-direction:column;min-width:0;background:#FAF6F2">
+        <div style="height:64px;flex:none;display:flex;align-items:center;gap:16px;padding:0 32px;border-bottom:1px solid #EAE1DA;background:#FAF6F2">
+          <div style="display:flex;flex-direction:column;min-width:0;flex:1">
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;letter-spacing:-.015em">{{ pageTitle }}</span>
+            <span style="font-size:12px;color:#7E6E66">{{ pageSub }}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:2px;background:#fff;border:1px solid #EAE1DA;border-radius:999px;padding:4px;flex:none">
+            <button onClick="{{ prevMonth }}" style="width:30px;height:30px;border:none;background:transparent;border-radius:50%;cursor:pointer;color:#5C4C45;font-family:'Material Symbols Rounded';font-size:19px;line-height:1" style-hover="background:#F3EBE5">chevron_left</button>
+            <span style="min-width:124px;text-align:center;font-size:13.5px;font-weight:600;white-space:nowrap">{{ monthLabel }}</span>
+            <button onClick="{{ nextMonth }}" style="width:30px;height:30px;border:none;background:transparent;border-radius:50%;cursor:pointer;color:#5C4C45;font-family:'Material Symbols Rounded';font-size:19px;line-height:1" style-hover="background:#F3EBE5">chevron_right</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;height:38px;padding:0 14px;background:#fff;border:1px solid #EAE1DA;border-radius:999px;font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap;flex:none">
+            <span style="font-family:'Material Symbols Rounded';font-size:17px;color:#EF6A52">account_balance_wallet</span>Fe e Ellen
+            <span style="font-family:'Material Symbols Rounded';font-size:17px;color:#A9968C">expand_more</span>
+          </div>
+        </div>
+
+        <div style="flex:1;overflow-y:auto;padding:28px 32px 40px">
+
+          <!-- DASHBOARD -->
+          <sc-if value="{{ isDash }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+
+              <div style="background:#221A17;border-radius:18px;padding:24px 26px;display:flex;align-items:flex-end;justify-content:space-between;gap:32px">
+                <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                  <span style="font-size:12.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#A9968C">Projeção fim do mês</span>
+                  <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:52px;font-weight:700;letter-spacing:-.03em;color:#FAF6F2;font-variant-numeric:tabular-nums;line-height:1.1">R$ 581,76</span>
+                  <span style="font-size:13.5px;color:#BCA79C;margin-top:2px">Saldo em caixa depois de quitar tudo o que tem competência em setembro.</span>
+                </div>
+                <div style="display:flex;gap:30px;flex:none;padding-bottom:6px">
+                  <div style="display:flex;flex-direction:column">
+                    <span style="font-size:11.5px;color:#9C8A80;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap">Saldo em caixa</span>
+                    <span style="font-size:21px;font-weight:700;color:#FAF6F2;font-variant-numeric:tabular-nums">R$ 1.288,03</span>
+                    <span style="font-size:11.5px;color:#9C8A80">hoje, regime de caixa</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column">
+                    <span style="font-size:11.5px;color:#9C8A80;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap">A receber</span>
+                    <span style="font-size:21px;font-weight:700;color:#7FD3A8;font-variant-numeric:tabular-nums">R$ 9.367,23</span>
+                    <span style="font-size:11.5px;color:#9C8A80">entradas previstas</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column">
+                    <span style="font-size:11.5px;color:#9C8A80;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap">A pagar</span>
+                    <span style="font-size:21px;font-weight:700;color:#FF9C82;font-variant-numeric:tabular-nums">R$ 10.073,50</span>
+                    <span style="font-size:11.5px;color:#9C8A80">fixos + faturas + previstos</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px;align-items:start">
+
+                <div style="background:#fff;border:1px solid #EAE1DA;border-radius:18px;overflow:hidden">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;padding:18px 22px 12px">
+                    <div style="display:flex;flex-direction:column">
+                      <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:15.5px;font-weight:700">A pagar</span>
+                      <span style="font-size:12px;color:#7E6E66">Fixos e faturas de setembro · R$ 10.073,50</span>
+                    </div>
+                    <span style="font-size:12.5px;font-weight:600;color:#2F8F8A;cursor:pointer;white-space:nowrap">Ver gastos fixos</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column">
+                    <sc-for list="{{ payables }}" as="row" hint-placeholder-count="6">
+                      <div style="display:flex;align-items:center;gap:13px;padding:13px 22px;border-top:1px solid #F1E8E1" style-hover="background:#FDFAF8">
+                        <span style="{{ row.iconStyle }}">{{ row.icon }}</span>
+                        <div style="display:flex;flex-direction:column;flex:1;min-width:0">
+                          <span style="font-size:14px;font-weight:600">{{ row.name }}</span>
+                          <span style="font-size:11.5px;color:#7E6E66">{{ row.meta }}</span>
+                        </div>
+                        <div style="display:flex;flex-direction:column;align-items:flex-end;flex:none">
+                          <span style="font-size:14.5px;font-weight:700;font-variant-numeric:tabular-nums">{{ row.amount }}</span>
+                          <span style="{{ row.prevStyle }}">{{ row.prev }}</span>
+                        </div>
+                        <button onClick="{{ row.noop }}" style="height:31px;padding:0 12px;border:1px solid #E2D7CF;background:#fff;border-radius:9px;font-family:'Hanken Grotesk',sans-serif;font-size:12.5px;font-weight:600;color:#5C4C45;cursor:pointer;flex:none;white-space:nowrap" style-hover="border-color:#EF6A52;color:#D24E36">{{ row.action }}</button>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:16px">
+                  <div style="background:#fff;border:1px solid #EAE1DA;border-radius:18px;overflow:hidden">
+                    <div style="display:flex;flex-direction:column;padding:18px 22px 12px">
+                      <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:15.5px;font-weight:700">A receber</span>
+                      <span style="font-size:12px;color:#7E6E66">Entradas previstas para setembro</span>
+                    </div>
+                    <sc-for list="{{ receivables }}" as="row" hint-placeholder-count="2">
+                      <div style="display:flex;align-items:center;gap:13px;padding:13px 22px;border-top:1px solid #F1E8E1" style-hover="background:#FDFAF8">
+                        <span style="font-family:'Material Symbols Rounded';font-size:20px;color:#2A8F63;background:#E8F5EE;border-radius:9px;padding:6px;flex:none">trending_up</span>
+                        <div style="display:flex;flex-direction:column;flex:1;min-width:0">
+                          <span style="font-size:14px;font-weight:600">{{ row.name }}</span>
+                          <span style="font-size:11.5px;color:#7E6E66">{{ row.meta }}</span>
+                        </div>
+                        <span style="font-size:14.5px;font-weight:700;color:#1F7A52;font-variant-numeric:tabular-nums;flex:none">{{ row.amount }}</span>
+                        <button onClick="{{ noop }}" style="height:31px;padding:0 12px;border:1px solid #E2D7CF;background:#fff;border-radius:9px;font-family:'Hanken Grotesk',sans-serif;font-size:12.5px;font-weight:600;color:#5C4C45;cursor:pointer;flex:none" style-hover="border-color:#2A8F63;color:#1F7A52">Recebi</button>
+                      </div>
+                    </sc-for>
+                  </div>
+
+                  <div style="background:#fff;border:1px solid #EAE1DA;border-radius:18px;padding:18px 22px 20px;display:flex;flex-direction:column;gap:14px">
+                    <div style="display:flex;flex-direction:column">
+                      <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:15.5px;font-weight:700">Quem gastou mais</span>
+                      <span style="font-size:12px;color:#7E6E66">Despesas com competência em setembro</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:10px">
+                      <sc-for list="{{ ranking }}" as="r" hint-placeholder-count="2">
+                        <div style="display:flex;flex-direction:column;gap:5px">
+                          <div style="display:flex;justify-content:space-between;font-size:13px">
+                            <span style="font-weight:600">{{ r.name }}</span>
+                            <span style="color:#6B5B53;font-variant-numeric:tabular-nums">{{ r.value }}</span>
+                          </div>
+                          <div style="height:7px;border-radius:99px;background:#F1E8E1;overflow:hidden">
+                            <div style="{{ r.barStyle }}"></div>
+                          </div>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:6px;padding-top:14px;border-top:1px solid #F1E8E1">
+                      <span style="font-size:12.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#7E6E66">Divisão entre membros</span>
+                      <div style="display:flex;align-items:center;justify-content:space-between;background:#F4F9F7;border:1px solid #DCEDE7;border-radius:12px;padding:12px 14px">
+                        <span style="font-size:13px;font-weight:600;color:#1F6B67">Ellen tem a receber</span>
+                        <span style="font-size:15px;font-weight:700;color:#1F6B67;font-variant-numeric:tabular-nums">R$ 412,30</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- LANÇAMENTOS -->
+          <sc-if value="{{ isTx }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">
+                <div style="background:#fff;border:1px solid #EAE1DA;border-radius:16px;padding:16px 18px;display:flex;flex-direction:column">
+                  <span style="font-size:11.5px;font-weight:600;color:#7E6E66">Saídas de setembro</span>
+                  <span style="font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:#C8452F">R$ 7.891,45</span>
+                </div>
+                <div style="background:#fff;border:1px solid #EAE1DA;border-radius:16px;padding:16px 18px;display:flex;flex-direction:column">
+                  <span style="font-size:11.5px;font-weight:600;color:#7E6E66">Entradas de setembro</span>
+                  <span style="font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:#1F7A52">R$ 5.254,80</span>
+                </div>
+                <div style="background:#221A17;border-radius:16px;padding:16px 18px;display:flex;flex-direction:column">
+                  <span style="font-size:11.5px;font-weight:600;color:#A9968C">Resultado do mês</span>
+                  <span style="font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:#FF9C82">− R$ 2.636,65</span>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:10px;align-items:center">
+                <div style="display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;background:#fff;border:1px solid #EAE1DA;border-radius:11px;flex:1;min-width:0">
+                  <span style="font-family:'Material Symbols Rounded';font-size:19px;color:#A9968C;flex:none">search</span>
+                  <span style="font-size:13.5px;color:#A9968C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Buscar por descrição, conta ou categoria</span>
+                </div>
+                <div style="display:flex;background:#F1E8E1;border-radius:11px;padding:3px;flex:none">
+                  <div style="height:34px;display:flex;align-items:center;padding:0 16px;border-radius:9px;background:#221A17;color:#FAF6F2;font-size:13.5px;font-weight:700">Saídas</div>
+                  <div style="height:34px;display:flex;align-items:center;padding:0 16px;border-radius:9px;color:#6B5B53;font-size:13.5px;font-weight:600">Entradas</div>
+                </div>
+              </div>
+
+              <div style="background:#fff;border:1px solid #EAE1DA;border-radius:18px;overflow:hidden">
+                <div style="display:grid;grid-template-columns:78px minmax(0,1fr) 132px 124px 104px 122px;gap:12px;padding:13px 22px;background:#FDFAF8;border-bottom:1px solid #EAE1DA;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#7E6E66">
+                  <span>Data</span><span>Descrição</span><span>Conta</span><span>Categoria</span><span>Quem</span><span style="text-align:right">Valor</span>
+                </div>
+                <sc-for list="{{ transactions }}" as="t" hint-placeholder-count="9">
+                  <div style="{{ t.rowStyle }}" style-hover="background:#FDFAF8">
+                    <span style="font-size:13px;color:#6B5B53;font-variant-numeric:tabular-nums">{{ t.date }}</span>
+                    <div style="display:flex;align-items:center;gap:9px;min-width:0">
+                      <span style="{{ t.dot }}"></span>
+                      <span style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.name }}</span>
+                      <span style="{{ t.instStyle }}">{{ t.inst }}</span>
+                      <span style="{{ t.sharedStyle }}">group</span>
+                      <span style="{{ t.pendingStyle }}">conta chegou</span>
+                    </div>
+                    <span style="font-size:12.5px;color:#6B5B53;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.account }}</span>
+                    <span style="font-size:12.5px;color:#6B5B53;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.cat }}</span>
+                    <span style="font-size:12.5px;color:#6B5B53">{{ t.who }}</span>
+                    <span style="{{ t.amountStyle }}">{{ t.amount }}</span>
+                  </div>
+                </sc-for>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px;font-size:12.5px;color:#7E6E66">
+                  <span>Competência de setembro · 9 de 42 lançamentos</span>
+                  <span style="font-weight:600;color:#2F8F8A;cursor:pointer">Carregar mais</span>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- CARTÕES -->
+          <sc-if value="{{ isCards }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px">
+                <sc-for list="{{ cardStats }}" as="s" hint-placeholder-count="4">
+                  <div style="background:#fff;border:1px solid #EAE1DA;border-radius:16px;padding:16px 18px;display:flex;flex-direction:column">
+                    <span style="font-size:11.5px;font-weight:600;color:#7E6E66;white-space:nowrap">{{ s.label }}</span>
+                    <span style="{{ s.valueStyle }}">{{ s.value }}</span>
+                    <span style="{{ s.subStyle }}">{{ s.sub }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start">
+                <sc-for list="{{ cards }}" as="c" hint-placeholder-count="2">
+                  <div style="background:#fff;border:1px solid #EAE1DA;border-radius:18px;overflow:hidden">
+                    <div style="{{ c.headStyle }}">
+                      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+                        <div style="display:flex;flex-direction:column">
+                          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#FAF6F2">{{ c.name }}</span>
+                          <span style="font-size:12px;color:#A9968C">{{ c.days }}</span>
+                        </div>
+                        <span style="{{ c.badgeStyle }}">{{ c.status }}</span>
+                      </div>
+                      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-top:22px">
+                        <div style="display:flex;flex-direction:column">
+                          <span style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9C8A80">Fatura atual</span>
+                          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:700;color:#FAF6F2;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.15">{{ c.posted }}</span>
+                        </div>
+                        <div style="display:flex;flex-direction:column;align-items:flex-end">
+                          <span style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9C8A80">Previsão</span>
+                          <span style="font-size:17px;font-weight:700;color:#BCA79C;font-variant-numeric:tabular-nums">{{ c.projected }}</span>
+                        </div>
+                      </div>
+                      <span style="{{ c.deltaStyle }}">{{ c.delta }}</span>
+                    </div>
+
+                    <div style="padding:16px 22px 18px;display:flex;flex-direction:column;gap:14px">
+                      <div style="display:flex;flex-direction:column;gap:5px">
+                        <div style="display:flex;justify-content:space-between;font-size:12.5px">
+                          <span style="color:#7E6E66">Utilizado do limite de {{ c.limit }}</span>
+                          <span style="font-weight:700;font-variant-numeric:tabular-nums">{{ c.committed }}</span>
+                        </div>
+                        <div style="height:8px;border-radius:99px;background:#F1E8E1;overflow:hidden">
+                          <div style="{{ c.barStyle }}"></div>
+                        </div>
+                        <span style="font-size:11.5px;font-weight:600;color:#1F7A52;text-align:right">Disponível {{ c.available }}</span>
+                      </div>
+
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <span style="font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7E6E66">Lançamentos da fatura ({{ c.rowCount }})</span>
+                        <sc-for list="{{ c.rows }}" as="r" hint-placeholder-count="4">
+                          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px">
+                            <span style="{{ r.tagStyle }}">{{ r.tag }}</span>
+                            <span style="{{ r.descStyle }}">{{ r.desc }}</span>
+                            <span style="color:#A9968C;flex:none">{{ r.date }}</span>
+                            <span style="{{ r.amountStyle }}">{{ r.amount }}</span>
+                          </div>
+                        </sc-for>
+                      </div>
+
+                      <div style="display:flex;gap:8px;padding-top:4px">
+                        <button style="{{ c.payStyle }}" style-hover="background:#D95439">{{ c.payLabel }}</button>
+                        <button style="height:38px;padding:0 14px;border:1px solid #E2D7CF;border-radius:10px;background:#fff;font-family:'Hanken Grotesk',sans-serif;font-size:13px;font-weight:600;color:#5C4C45;cursor:pointer;white-space:nowrap" style-hover="border-color:#EF6A52;color:#D24E36">{{ c.lockLabel }}</button>
+                        <button style="width:38px;height:38px;border:1px solid #E2D7CF;border-radius:10px;background:#fff;color:#7E6E66;cursor:pointer;font-family:'Material Symbols Rounded';font-size:18px;line-height:1" style-hover="border-color:#EF6A52;color:#D24E36">edit</button>
+                      </div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- PROJEÇÃO -->
+          <sc-if value="{{ isProj }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px">
+                <sc-for list="{{ projKpis }}" as="k" hint-placeholder-count="4">
+                  <div style="{{ k.shellStyle }}">
+                    <span style="{{ k.labelStyle }}">{{ k.label }}</span>
+                    <span style="{{ k.valueStyle }}">{{ k.value }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="background:#fff;border:1px solid #EAE1DA;border-radius:18px;padding:22px 24px;display:flex;flex-direction:column;gap:20px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
+                  <div style="display:flex;flex-direction:column">
+                    <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:15.5px;font-weight:700">Curva de evolução</span>
+                    <span style="font-size:12px;color:#7E6E66">Cenário base para os próximos 12 meses</span>
+                  </div>
+                  <div style="display:flex;gap:16px;flex:none">
+                    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6B5B53"><span style="width:10px;height:10px;border-radius:3px;background:#EF6A52"></span>caixa</div>
+                    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6B5B53"><span style="width:10px;height:10px;border-radius:3px;background:#2A8F63"></span>investido</div>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:flex-end;gap:11px;height:230px;padding-bottom:24px;border-bottom:1px solid #EAE1DA">
+                  <sc-for list="{{ projection }}" as="m" hint-placeholder-count="13">
+                    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;justify-content:flex-end;height:100%;position:relative;min-width:0">
+                      <span style="{{ m.valueStyle }}">{{ m.total }}</span>
+                      <div style="{{ m.stackStyle }}">
+                        <div style="{{ m.investStyle }}"></div>
+                        <div style="{{ m.cashStyle }}"></div>
+                      </div>
+                      <span style="{{ m.labelStyle }}">{{ m.label }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="background:#fff;border:1px solid #EAE1DA;border-radius:18px;overflow:hidden">
+                <div style="display:grid;grid-template-columns:96px repeat(6,minmax(0,1fr));gap:10px;padding:13px 22px;background:#FDFAF8;border-bottom:1px solid #EAE1DA;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#7E6E66">
+                  <span>Mês</span><span style="text-align:right">Entradas</span><span style="text-align:right">Saídas</span><span style="text-align:right">Rendimento</span><span style="text-align:right">Investido</span><span style="text-align:right">Caixa</span><span style="text-align:right">Total</span>
+                </div>
+                <sc-for list="{{ projRows }}" as="r" hint-placeholder-count="7">
+                  <div style="{{ r.rowStyle }}">
+                    <span style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px">{{ r.label }}<span style="{{ r.tagStyle }}">atual</span></span>
+                    <span style="font-size:13px;text-align:right;color:#1F7A52;font-variant-numeric:tabular-nums">{{ r.income }}</span>
+                    <span style="font-size:13px;text-align:right;color:#C8452F;font-variant-numeric:tabular-nums">{{ r.expenses }}</span>
+                    <span style="font-size:13px;text-align:right;color:#6B5B53;font-variant-numeric:tabular-nums">{{ r.yield }}</span>
+                    <span style="font-size:13px;text-align:right;color:#6B5B53;font-variant-numeric:tabular-nums">{{ r.invested }}</span>
+                    <span style="font-size:13px;text-align:right;color:#6B5B53;font-variant-numeric:tabular-nums">{{ r.cash }}</span>
+                    <span style="font-size:13px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">{{ r.total }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <p style="margin:0;font-size:12px;line-height:1.5;color:#7E6E66;max-width:720px;text-wrap:pretty">Estimativa: entradas e saídas fixas ativas de cada mês + parcelas de cartão já lançadas + média das saídas variáveis dos últimos 3 meses. Rendimento composto pela taxa média da carteira.</p>
+            </div>
+          </sc-if>
+
+          <!-- AJUSTES -->
+          <sc-if value="{{ isSettings }}">
+            <div style="display:flex;flex-direction:column;gap:18px">
+              <div style="display:flex;gap:3px;background:#F1E8E1;border-radius:12px;padding:4px;align-self:flex-start;flex-wrap:wrap">
+                <sc-for list="{{ settingsTabs }}" as="t" hint-placeholder-count="7">
+                  <div style="{{ t.style }}">{{ t.label }}</div>
+                </sc-for>
+              </div>
+
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start">
+                <div style="background:#fff;border:1px solid #EAE1DA;border-radius:18px;overflow:hidden">
+                  <div style="padding:18px 22px 12px;display:flex;flex-direction:column">
+                    <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:15.5px;font-weight:700">Membros da carteira</span>
+                    <span style="font-size:12px;color:#7E6E66">Quem enxerga e lança em Fe e Ellen</span>
+                  </div>
+                  <sc-for list="{{ members }}" as="m" hint-placeholder-count="2">
+                    <div style="display:flex;align-items:center;gap:12px;padding:13px 22px;border-top:1px solid #F1E8E1">
+                      <div style="{{ m.avatarStyle }}">{{ m.initials }}</div>
+                      <div style="display:flex;flex-direction:column;flex:1;min-width:0">
+                        <span style="font-size:14px;font-weight:600">{{ m.name }}</span>
+                        <span style="font-size:11.5px;color:#7E6E66">{{ m.email }}</span>
+                      </div>
+                      <span style="font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7E6E66;background:#F3EBE5;border-radius:99px;padding:5px 10px;flex:none">{{ m.role }}</span>
+                    </div>
+                  </sc-for>
+                  <div style="padding:14px 22px;border-top:1px solid #F1E8E1;display:flex;gap:10px;align-items:center">
+                    <div style="height:38px;flex:1;display:flex;align-items:center;padding:0 13px;background:#FDFAF8;border:1px solid #EAE1DA;border-radius:10px;font-size:13px;color:#A9968C;min-width:0">e-mail de quem você quer convidar</div>
+                    <button style="height:38px;padding:0 16px;border:none;border-radius:10px;background:#221A17;color:#FAF6F2;font-family:'Hanken Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer;flex:none" style-hover="background:#3A2C26">Convidar</button>
+                  </div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:16px">
+                  <div style="background:#fff;border:1px solid #EAE1DA;border-radius:18px;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+                    <div style="display:flex;align-items:center;gap:9px">
+                      <span style="font-family:'Material Symbols Rounded';font-size:20px;color:#2F8F8A;background:#E7F2F1;border-radius:9px;padding:6px">send</span>
+                      <div style="display:flex;flex-direction:column">
+                        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:15.5px;font-weight:700">Telegram</span>
+                        <span style="font-size:12px;color:#7E6E66">Lance gastos por mensagem, sem abrir o app</span>
+                      </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;background:#F4F9F7;border:1px solid #DCEDE7;border-radius:12px;padding:12px 14px">
+                      <span style="font-family:'Material Symbols Rounded';font-size:19px;color:#1F6B67;flex:none">check_circle</span>
+                      <div style="display:flex;flex-direction:column;flex:1;min-width:0">
+                        <span style="font-size:13px;font-weight:600;color:#1F6B67">Conectado a @fernando</span>
+                        <span style="font-size:11.5px;color:#3E8B85">Vinculado à carteira Fe e Ellen</span>
+                      </div>
+                      <span style="font-size:12.5px;font-weight:600;color:#7E6E66;cursor:pointer;flex:none">Desconectar</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:7px">
+                      <span style="font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7E6E66">Conectar outro chat</span>
+                      <div style="display:flex;gap:10px;align-items:center">
+                        <div style="height:38px;flex:1;display:flex;align-items:center;padding:0 13px;background:#FDFAF8;border:1px solid #EAE1DA;border-radius:10px;font-size:12.5px;color:#5C4C45;font-family:ui-monospace,monospace;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">t.me/carewalletbot?start=3f9a…</div>
+                        <button style="height:38px;padding:0 14px;border:none;border-radius:10px;background:#2F8F8A;color:#fff;font-family:'Hanken Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer;flex:none" style-hover="background:#25736F">Copiar</button>
+                      </div>
+                      <span style="font-size:11.5px;color:#7E6E66">Abra no celular com o Telegram instalado e toque em Iniciar. Expira em 10 min.</span>
+                    </div>
+                  </div>
+
+                  <div style="background:#221A17;border-radius:18px;padding:20px 22px;display:flex;flex-direction:column;gap:8px">
+                    <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:15.5px;font-weight:700;color:#FAF6F2">Períodos · setembro 2026</span>
+                    <span style="font-size:12.5px;line-height:1.45;color:#BCA79C;text-wrap:pretty">Ao fechar a competência, lançamentos com este mês não podem mais ser criados ou editados. Você pode reabrir aqui a qualquer momento.</span>
+                    <div style="display:flex;gap:8px;margin-top:8px">
+                      <button style="height:38px;padding:0 18px;border:none;border-radius:10px;background:#EF6A52;color:#fff;font-family:'Hanken Grotesk',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer" style-hover="background:#D95439">Fechar setembro</button>
+                      <button style="height:38px;padding:0 16px;border:1px solid #4A3A33;border-radius:10px;background:transparent;color:#E4D8D1;font-family:'Hanken Grotesk',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer" style-hover="border-color:#9C8A80">Ver meses fechados</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MOBILE ══ -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <span style="font-family:ui-monospace,monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#7E6E66">Celular · app-first, alvos de 48px</span>
+    <div style="display:flex;gap:32px;align-items:flex-start">
+
+      <!-- login -->
+      <div style="width:390px;height:844px;border-radius:38px;background:#FAF6F2;box-shadow:0 30px 60px -20px rgba(60,38,30,.28);overflow:hidden;display:flex;flex-direction:column">
+        <div style="height:46px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 6px;font-size:12.5px;font-weight:600;color:#221A17"><span>9:41</span><span style="font-family:'Material Symbols Rounded';font-size:16px">battery_full</span></div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 26px 40px;gap:26px">
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <img src="newlogo.svg" alt="Carolina, a mascote da CaRe Wallet" style="width:60px;height:60px;border-radius:18px;background:#EF6A52;padding:5px;box-sizing:border-box">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;line-height:1.08;letter-spacing:-.025em;margin:0;font-weight:700">Finanças da família,<br>sem planilha.</h2>
+              <p style="margin:0;font-size:14.5px;line-height:1.45;color:#6B5B53">Acesse sua carteira para ver o que já saiu, o que falta pagar e quanto sobra no fim do mês.</p>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <span style="font-size:12.5px;font-weight:600;color:#5C4C45">E-mail</span>
+              <div style="height:52px;display:flex;align-items:center;padding:0 15px;background:#fff;border:1px solid #E2D7CF;border-radius:14px;font-size:15px;color:#A9968C">voce@email.com</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <span style="font-size:12.5px;font-weight:600;color:#5C4C45">Senha</span>
+              <div style="height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 15px;background:#fff;border:1px solid #E2D7CF;border-radius:14px;font-size:15px;letter-spacing:.18em;color:#221A17">••••••••<span style="font-family:'Material Symbols Rounded';font-size:20px;color:#A9968C;letter-spacing:0">visibility</span></div>
+            </div>
+            <button style="height:54px;border:none;border-radius:14px;background:#EF6A52;color:#fff;font-family:'Hanken Grotesk',sans-serif;font-size:16px;font-weight:700;cursor:pointer;margin-top:4px" style-hover="background:#D95439">Acessar conta</button>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;padding:0 2px">
+              <span style="color:#7E6E66;cursor:pointer">Esqueci minha senha</span>
+              <span style="font-weight:700;color:#2F8F8A;cursor:pointer">Criar conta</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- dashboard mobile -->
+      <div style="width:390px;height:844px;border-radius:38px;background:#FAF6F2;box-shadow:0 30px 60px -20px rgba(60,38,30,.28);overflow:hidden;display:flex;flex-direction:column;position:relative">
+        <div style="background:#221A17;padding:46px 20px 22px;display:flex;flex-direction:column;gap:16px;flex:none">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="display:flex;align-items:center;gap:7px;height:36px;padding:0 13px;background:#31241F;border-radius:99px;font-size:13.5px;font-weight:600;color:#FAF6F2">
+              <span style="font-family:'Material Symbols Rounded';font-size:17px;color:#EF6A52">account_balance_wallet</span>Fe e Ellen
+              <span style="font-family:'Material Symbols Rounded';font-size:17px;color:#9C8A80">expand_more</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;color:#FAF6F2;font-size:13.5px;font-weight:600">
+              <span style="font-family:'Material Symbols Rounded';font-size:19px;color:#9C8A80">chevron_left</span>set 26
+              <span style="font-family:'Material Symbols Rounded';font-size:19px;color:#9C8A80">chevron_right</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:1px">
+            <span style="font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#A9968C">Projeção fim do mês</span>
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:44px;font-weight:700;letter-spacing:-.03em;color:#FAF6F2;font-variant-numeric:tabular-nums;line-height:1.15">R$ 581,76</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+            <div style="background:#31241F;border-radius:13px;padding:11px 12px;display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#9C8A80">Em caixa</span>
+              <span style="font-size:15px;font-weight:700;color:#FAF6F2;font-variant-numeric:tabular-nums">1.288</span>
+            </div>
+            <div style="background:#31241F;border-radius:13px;padding:11px 12px;display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#9C8A80">A receber</span>
+              <span style="font-size:15px;font-weight:700;color:#7FD3A8;font-variant-numeric:tabular-nums">9.367</span>
+            </div>
+            <div style="background:#31241F;border-radius:13px;padding:11px 12px;display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#9C8A80">A pagar</span>
+              <span style="font-size:15px;font-weight:700;color:#FF9C82;font-variant-numeric:tabular-nums">10.073</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex:1;overflow:hidden;padding:18px 20px 0;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between">
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:17px;font-weight:700">A pagar em setembro</span>
+            <span style="font-size:13px;font-weight:600;color:#2F8F8A">Ver tudo</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ mobileRows }}" as="row" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #EAE1DA;border-radius:15px;padding:13px 14px">
+                <span style="{{ row.iconStyle }}">{{ row.icon }}</span>
+                <div style="display:flex;flex-direction:column;flex:1;min-width:0">
+                  <span style="font-size:14.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.name }}</span>
+                  <span style="font-size:11.5px;color:#7E6E66;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.meta }}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none">
+                  <span style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums">{{ row.amount }}</span>
+                  <span style="font-size:12px;font-weight:700;color:#D24E36">{{ row.action }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="position:absolute;left:0;right:0;bottom:0;height:86px;background:#FAF6F2;border-top:1px solid #EAE1DA;display:flex;align-items:flex-start;justify-content:space-around;padding-top:9px">
+          <sc-for list="{{ tabbar }}" as="t" hint-placeholder-count="5">
+            <div style="{{ t.style }}">
+              <span style="{{ t.iconStyle }}">{{ t.icon }}</span>
+              <span style="font-size:10.5px;font-weight:600">{{ t.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- nova saída -->
+      <div style="width:390px;height:844px;border-radius:38px;background:#5A4B44;box-shadow:0 30px 60px -20px rgba(60,38,30,.28);overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end">
+        <div style="background:#FAF6F2;border-radius:28px 28px 0 0;padding:14px 22px 30px;display:flex;flex-direction:column;gap:16px;height:700px;box-sizing:border-box">
+          <div style="width:44px;height:5px;border-radius:99px;background:#DDD1C9;align-self:center"></div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:700;letter-spacing:-.02em">Nova saída</span>
+            <span style="font-size:13px;color:#7E6E66">Carteira Fe e Ellen</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 0 14px;border-bottom:1px solid #EAE1DA">
+            <span style="font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#7E6E66">Valor</span>
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:46px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums">R$ 128,90</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <div style="height:52px;display:flex;align-items:center;gap:11px;padding:0 15px;background:#fff;border:1px solid #E2D7CF;border-radius:14px">
+              <span style="font-family:'Material Symbols Rounded';font-size:20px;color:#A9968C">edit_note</span>
+              <span style="font-size:15px;font-weight:600">Mercado do bairro</span>
+            </div>
+            <div style="display:flex;gap:11px">
+              <div style="flex:1;height:52px;display:flex;align-items:center;gap:9px;padding:0 15px;background:#fff;border:1px solid #E2D7CF;border-radius:14px;min-width:0">
+                <span style="font-family:'Material Symbols Rounded';font-size:20px;color:#A9968C;flex:none">sell</span>
+                <span style="font-size:14.5px;font-weight:600">Mercado</span>
+              </div>
+              <div style="flex:1;height:52px;display:flex;align-items:center;gap:9px;padding:0 15px;background:#fff;border:1px solid #E2D7CF;border-radius:14px;min-width:0">
+                <span style="font-family:'Material Symbols Rounded';font-size:20px;color:#A9968C;flex:none">event</span>
+                <span style="font-size:14.5px;font-weight:600">09/09</span>
+              </div>
+            </div>
+            <div style="height:52px;display:flex;align-items:center;gap:11px;padding:0 15px;background:#fff;border:1px solid #E2D7CF;border-radius:14px">
+              <span style="font-family:'Material Symbols Rounded';font-size:20px;color:#A9968C;flex:none">credit_card</span>
+              <span style="font-size:15px;font-weight:600;flex:1">Cartão · Crédito Itaú</span>
+              <span style="font-family:'Material Symbols Rounded';font-size:20px;color:#A9968C">expand_more</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;background:#F3EBE5;border-radius:12px;padding:11px 14px">
+              <span style="font-family:'Material Symbols Rounded';font-size:18px;color:#8A6A57;flex:none">info</span>
+              <span style="font-size:12px;line-height:1.35;color:#6B5B53">Compra no cartão entra na competência da fatura de <strong>outubro 2026</strong>.</span>
+            </div>
+            <div style="display:flex;gap:11px">
+              <div style="flex:1;height:52px;display:flex;align-items:center;gap:9px;padding:0 15px;background:#fff;border:1px solid #E2D7CF;border-radius:14px;min-width:0">
+                <span style="font-family:'Material Symbols Rounded';font-size:20px;color:#A9968C;flex:none">person</span>
+                <span style="font-size:14.5px;font-weight:600">Fernando</span>
+              </div>
+              <div style="flex:1;height:52px;display:flex;align-items:center;gap:9px;padding:0 15px;background:#fff;border:1px solid #E2D7CF;border-radius:14px;min-width:0">
+                <span style="font-family:'Material Symbols Rounded';font-size:20px;color:#A9968C;flex:none">tag</span>
+                <span style="font-size:14.5px;font-weight:600">1× parcela</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;background:#F4F9F7;border:1px solid #DCEDE7;border-radius:14px;padding:13px 15px">
+              <div style="display:flex;flex-direction:column;flex:1;min-width:0">
+                <span style="font-size:14px;font-weight:600;color:#1F6B67">Gasto compartilhado</span>
+                <span style="font-size:11.5px;color:#3E8B85">Divide igual entre os 2 membros · R$ 64,45</span>
+              </div>
+              <div style="width:46px;height:27px;border-radius:99px;background:#2F8F8A;padding:3px;box-sizing:border-box;display:flex;justify-content:flex-end;flex:none"><div style="width:21px;height:21px;border-radius:50%;background:#fff"></div></div>
+            </div>
+          </div>
+          <button style="margin-top:auto;height:54px;border:none;border-radius:14px;background:#EF6A52;color:#fff;font-family:'Hanken Grotesk',sans-serif;font-size:16px;font-weight:700;cursor:pointer" style-hover="background:#D95439">Registrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+const ICON = "font-family:'Material Symbols Rounded';font-size:20px;border-radius:9px;padding:6px;flex:none;";
+const MONTHS = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const SHORT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const TONES = {
+  red: ['#C8452F', '#FBE9E4'], sand: ['#8A6A57', '#F4EDE7'],
+  teal: ['#2F8F8A', '#E7F2F1'], green: ['#2A8F63', '#E8F5EE'],
+};
+
+const NAV = [
+  { label: 'Dia a dia', items: [
+    { id: 'dash', title: 'Dashboard', icon: 'space_dashboard' },
+    { id: 'tx', title: 'Lançamentos', icon: 'receipt_long', badge: '42' },
+    { id: 'receitas', title: 'Receitas', icon: 'trending_up' },
+    { id: 'fixos', title: 'Gastos fixos', icon: 'autorenew', badge: '4' },
+    { id: 'cards', title: 'Cartões', icon: 'credit_card', badge: '2' },
+  ]},
+  { label: 'Patrimônio', items: [
+    { id: 'invest', title: 'Investimentos', icon: 'savings' },
+    { id: 'proj', title: 'Projeção', icon: 'show_chart' },
+  ]},
+  { label: 'Fechamento', items: [
+    { id: 'rel', title: 'Relatórios', icon: 'bar_chart' },
+    { id: 'acerto', title: 'Acerto de contas', icon: 'balance' },
+    { id: 'settings', title: 'Ajustes', icon: 'settings' },
+  ]},
+];
+
+const TITLES = {
+  dash: ['Dashboard', 'Competência de setembro de 2026'],
+  tx: ['Lançamentos', 'Competência de setembro de 2026'],
+  cards: ['Cartões', 'Limites e faturas'],
+  proj: ['Projeção financeira', 'Cenário base para os próximos 12 meses'],
+  settings: ['Ajustes', 'Perfil, carteiras, contas, categorias e membros'],
+  fixos: ['Gastos fixos', 'Recorrências de setembro de 2026'],
+  receitas: ['Receitas', 'Avulsas e recorrentes'],
+  invest: ['Investimentos', 'Carteira e rendimento médio'],
+  rel: ['Relatórios', 'Competência e caixa'],
+  acerto: ['Acerto de contas', 'Divisão de despesas entre membros'],
+};
+
+const brl = (v) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const brl0 = (v) => 'R$ ' + Math.round(v).toLocaleString('pt-BR');
+
+class Component extends DCLogic {
+  state = { screen: 'dash', month: 8, year: 2026 };
+
+  go = (id) => this.setState({ screen: id });
+  shift = (d) => this.setState((s) => {
+    let m = s.month + d, y = s.year;
+    if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; }
+    return { month: m, year: y };
+  });
+
+  bar(pct, color) { return `width:${pct}%;height:100%;border-radius:99px;background:${color}`; }
+
+  buildProjection() {
+    let cash = 1288.03, invested = 18400;
+    const income = 9367.23, rate = 0.008, avgVariable = 1210, recurring = 7420;
+    const rows = [];
+    for (let i = 0; i <= 12; i += 1) {
+      const d = new Date(2026, 8 + i, 1);
+      const yieldAmount = invested * rate;
+      const expenses = i === 0 ? 10073.50 : recurring + avgVariable;
+      if (i > 0) { invested += yieldAmount; cash += income - expenses; }
+      rows.push({
+        label: `${SHORT[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`,
+        income, expenses, yieldAmount: i > 0 ? yieldAmount : 0,
+        invested, cash, total: cash + invested, current: i === 0,
+      });
+    }
+    return rows;
+  }
+
+  renderVals() {
+    const { screen, month, year } = this.state;
+    const [title, sub] = TITLES[screen] || TITLES.dash;
+
+    const navGroups = NAV.map((g) => ({
+      label: g.label,
+      items: g.items.map((it) => {
+        const active = it.id === screen;
+        return {
+          title: it.title, icon: it.icon, go: () => this.go(it.id), badge: it.badge || '',
+          badgeStyle: it.badge
+            ? `font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;color:${active ? '#fff' : '#9C8A80'};opacity:.85`
+            : 'display:none',
+          style: `display:flex;align-items:center;gap:11px;height:40px;padding:0 10px;border:none;border-radius:10px;cursor:pointer;font-family:'Hanken Grotesk',sans-serif;font-size:13.5px;font-weight:${active ? 700 : 500};background:${active ? '#EF6A52' : 'transparent'};color:${active ? '#fff' : '#BCA79C'}`,
+          hover: active ? 'background:#EF6A52' : 'background:#31241F;color:#FAF6F2',
+        };
+      }),
+    }));
+
+    const payables = [
+      { name: 'Aluguel Ellen', meta: 'Fixo · vence dia 5 · compartilhado', amount: 'R$ 850,00', icon: 'autorenew', tone: 'red', action: 'Paguei' },
+      { name: 'Claro', meta: 'Fixo · vence dia 10 · no cartão', amount: 'R$ 259,65', icon: 'autorenew', tone: 'sand', action: 'Lançar' },
+      { name: 'Conta Luz', meta: 'Fixo · vence dia 15 · conta chegou', amount: 'R$ 240,00', prev: 'previsto R$ 218,00', icon: 'autorenew', tone: 'sand', action: 'Paguei' },
+      { name: 'Financiamento Carro', meta: 'Fixo · vence dia 26 · débito automático', amount: 'R$ 1.844,84', icon: 'autorenew', tone: 'sand', action: 'Paguei' },
+      { name: 'Fatura Crédito Itaú', meta: 'Aberta · fecha dia 28', amount: 'R$ 4.182,20', prev: 'prev. R$ 5.015,61', icon: 'credit_card', tone: 'teal', action: 'Pagar' },
+      { name: 'Fatura Nubank Ellen', meta: 'Fechada · vence dia 10', amount: 'R$ 1.751,16', icon: 'credit_card', tone: 'teal', action: 'Pagar' },
+    ].map((r) => ({
+      ...r, prev: r.prev || '',
+      prevStyle: r.prev ? 'font-size:11px;color:#7E6E66' : 'display:none',
+      iconStyle: ICON + `color:${TONES[r.tone][0]};background:${TONES[r.tone][1]}`,
+      noop: () => {},
+    }));
+
+    const receivables = [
+      { name: 'Salário Fernando', meta: 'Fixo · dia 15 · Nubank', amount: 'R$ 3.668,40' },
+      { name: 'Salário Ellen', meta: 'Fixo · dia 28 · Itaú', amount: 'R$ 5.698,83' },
+    ];
+
+    const ranking = [
+      { name: 'Fernando', value: 'R$ 4.982,10', barStyle: this.bar(100, '#221A17') },
+      { name: 'Ellen', value: 'R$ 3.104,55', barStyle: this.bar(62, '#C6B4AA') },
+    ];
+
+    const txRow = 'display:grid;grid-template-columns:78px minmax(0,1fr) 132px 124px 104px 122px;gap:12px;padding:13px 22px;border-bottom:1px solid #F4EDE7;align-items:center';
+    const transactions = [
+      { date: '09/09', name: 'Mercado do bairro', account: 'Crédito Itaú', cat: 'Mercado', who: 'Fernando', v: 128.90, kind: 'expense', shared: true },
+      { date: '08/09', name: 'Posto Ipiranga', account: 'Crédito Itaú', cat: 'Transporte', who: 'Ellen', v: 210.00, kind: 'expense' },
+      { date: '08/09', name: 'Reembolso plano de saúde', account: 'Nubank', cat: 'Saúde', who: 'Ellen', v: 186.40, kind: 'income' },
+      { date: '07/09', name: 'Notebook Ellen', account: 'Nubank Ellen', cat: 'Casa', who: 'Ellen', v: 291.58, kind: 'expense', inst: '3/12' },
+      { date: '06/09', name: 'Estacionamento Faculdade', account: 'Itaú Conta', cat: 'Educação', who: 'Ellen', v: 100.00, kind: 'expense' },
+      { date: '05/09', name: 'iFood', account: 'Crédito Itaú', cat: 'Delivery', who: 'Fernando', v: 92.70, kind: 'expense', shared: true },
+      { date: '04/09', name: 'Pagamento fatura Nubank', account: 'Nubank', cat: 'Transferência', who: '—', v: 1420.00, kind: 'transfer' },
+      { date: '03/09', name: 'Freela design', account: 'Nubank', cat: 'Renda extra', who: 'Fernando', v: 1400.00, kind: 'income' },
+      { date: '02/09', name: 'Conta Luz', account: 'Itaú Conta', cat: 'Moradia', who: '—', v: 240.00, kind: 'expense', pending: true },
+    ].map((t) => {
+      const color = t.kind === 'income' ? '#1F7A52' : t.kind === 'transfer' ? '#7E6E66' : '#221A17';
+      const sign = t.kind === 'income' ? '+' : t.kind === 'transfer' ? '' : '− ';
+      return {
+        date: t.date, name: t.name, account: t.account, cat: t.cat, who: t.who,
+        amount: `${sign}${brl(t.v)}`,
+        rowStyle: txRow + (t.pending ? ';opacity:.62' : ''),
+        dot: `width:8px;height:8px;border-radius:50%;flex:none;background:${t.kind === 'income' ? '#2A8F63' : t.kind === 'transfer' ? '#C6B4AA' : '#EF6A52'}`,
+        inst: t.inst || '',
+        instStyle: t.inst ? 'font-size:10.5px;font-weight:700;color:#7E6E66;border:1px solid #E2D7CF;border-radius:99px;padding:1px 6px;flex:none' : 'display:none',
+        sharedStyle: t.shared ? "font-family:'Material Symbols Rounded';font-size:15px;color:#2F8F8A;flex:none" : 'display:none',
+        pendingStyle: t.pending ? 'font-size:10.5px;font-weight:700;color:#8A6A57;background:#F4EDE7;border-radius:99px;padding:2px 7px;flex:none' : 'display:none',
+        amountStyle: `text-align:right;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;color:${color}`,
+      };
+    });
+
+    const cardStats = [
+      { label: 'Limite total', value: 'R$ 18.500,00' },
+      { label: 'Comprometido', value: 'R$ 6.850,40' },
+      { label: 'Disponível', value: 'R$ 11.649,60', tone: '#1F7A52' },
+      { label: 'Faturas de setembro', value: 'R$ 5.933,36', sub: 'prev. R$ 6.766,77', tone: '#2F8F8A' },
+    ].map((s) => ({
+      label: s.label, value: s.value, sub: s.sub || '',
+      valueStyle: `font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;color:${s.tone || '#221A17'}`,
+      subStyle: s.sub ? 'font-size:11px;color:#7E6E66' : 'display:none',
+    }));
+
+    const CARD_ROWS = {
+      itau: [
+        { tag: 'Variável', desc: 'Mercado do bairro', date: '09/09', amount: 'R$ 128,90' },
+        { tag: 'Variável', desc: 'Posto Ipiranga', date: '08/09', amount: 'R$ 210,00' },
+        { tag: 'Fixo', desc: 'Claro', date: '10/09', amount: 'R$ 259,65' },
+        { tag: 'Variável', desc: 'iFood', date: '05/09', amount: 'R$ 92,70' },
+        { tag: 'Previsto', desc: 'Seguro de Vida', date: '14/09', amount: 'R$ 12,24', projected: true },
+      ],
+      nubank: [
+        { tag: 'Variável', desc: 'Notebook Ellen 3/12', date: '07/09', amount: 'R$ 291,58' },
+        { tag: 'Variável', desc: 'Farmácia São João', date: '04/09', amount: 'R$ 64,30' },
+        { tag: 'Fixo', desc: 'Spotify', date: '02/09', amount: 'R$ 34,90' },
+      ],
+    };
+
+    const cards = [
+      { name: 'Crédito Itaú', days: 'Fecha dia 28 · vence dia 5', status: 'Aberta', posted: 'R$ 4.182,20', projected: 'R$ 5.015,61',
+        delta: '+ R$ 833,41 em fixos ainda não lançados', limit: 'R$ 12.000,00', committed: 'R$ 5.098,84', available: 'R$ 6.901,16',
+        util: 42, rows: CARD_ROWS.itau, rowCount: 12, head: '#221A17', payLabel: 'Pagar fatura', lockLabel: 'Fechar fatura', badge: 'open' },
+      { name: 'Nubank Ellen', days: 'Fecha dia 3 · vence dia 10', status: 'Fechada', posted: 'R$ 1.751,16', projected: 'R$ 1.751,16',
+        delta: '', limit: 'R$ 6.500,00', committed: 'R$ 1.751,56', available: 'R$ 4.748,44',
+        util: 27, rows: CARD_ROWS.nubank, rowCount: 7, head: '#33262F', payLabel: 'Pagar fatura', lockLabel: 'Reabrir fatura', badge: 'closed' },
+    ].map((c) => ({
+      ...c,
+      headStyle: `background:${c.head};padding:20px 22px 18px;display:flex;flex-direction:column`,
+      badgeStyle: `font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-radius:99px;padding:5px 10px;flex:none;white-space:nowrap;${c.badge === 'closed' ? 'background:#4A3A2A;color:#F2C98A' : 'background:#3B2D27;color:#E4D8D1'}`,
+      deltaStyle: c.delta ? 'font-size:12px;color:#FFB39F;margin-top:10px' : 'display:none',
+      barStyle: this.bar(c.util, c.util > 90 ? '#C8452F' : c.util > 70 ? '#E08A3C' : '#EF6A52'),
+      payStyle: "flex:1;height:38px;border:none;border-radius:10px;background:#EF6A52;color:#fff;font-family:'Hanken Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer",
+      rows: c.rows.map((r) => ({
+        tag: r.tag, desc: r.desc, date: r.date, amount: r.amount,
+        tagStyle: `font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border:1px solid ${r.projected ? '#F0C9B8' : '#E2D7CF'};color:${r.projected ? '#B35A3A' : '#7E6E66'};border-radius:99px;padding:2px 7px;flex:none;width:56px;text-align:center`,
+        descStyle: `flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${r.projected ? '#B35A3A' : '#221A17'}`,
+        amountStyle: `font-weight:700;font-variant-numeric:tabular-nums;flex:none;color:${r.projected ? '#B35A3A' : '#221A17'}`,
+      })),
+    }));
+
+    const proj = this.buildProjection();
+    const start = proj[0].total, end = proj[proj.length - 1].total;
+    const growth = end - start, growthPct = (growth / Math.abs(start)) * 100;
+    const projKpis = [
+      { label: 'Patrimônio hoje', value: brl(start) },
+      { label: 'Em 12 meses', value: brl(end), dark: true },
+      { label: 'Crescimento', value: '+' + brl(growth), tone: '#1F7A52' },
+      { label: 'Retorno', value: growthPct.toFixed(1) + '%', tone: '#1F7A52' },
+    ].map((k) => ({
+      label: k.label, value: k.value,
+      shellStyle: `border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;${k.dark ? 'background:#221A17' : 'background:#fff;border:1px solid #EAE1DA'}`,
+      labelStyle: `font-size:11.5px;font-weight:600;color:${k.dark ? '#A9968C' : '#7E6E66'};white-space:nowrap`,
+      valueStyle: `font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:${k.dark ? '#FAF6F2' : (k.tone || '#221A17')}`,
+    }));
+
+    const maxTotal = Math.max(...proj.map((r) => r.total));
+    const projection = proj.map((r) => {
+      const h = (r.total / maxTotal) * 100;
+      return {
+        label: r.label, total: brl0(r.total),
+        valueStyle: `font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums;color:${r.current ? '#D24E36' : '#6B5B53'};white-space:nowrap`,
+        stackStyle: `width:100%;max-width:44px;height:${h}%;border-radius:8px 8px 3px 3px;overflow:hidden;display:flex;flex-direction:column`,
+        investStyle: `height:${(r.invested / r.total) * 100}%;background:#2A8F63`,
+        cashStyle: `flex:1;background:${r.current ? '#D24E36' : '#EF6A52'}`,
+        labelStyle: `position:absolute;bottom:-22px;font-size:11.5px;color:${r.current ? '#D24E36' : '#7E6E66'};font-weight:600;white-space:nowrap`,
+      };
+    });
+
+    const projRows = proj.slice(0, 7).map((r) => ({
+      label: r.label,
+      tagStyle: r.current ? 'font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#7E6E66;border:1px solid #E2D7CF;border-radius:99px;padding:1px 6px' : 'display:none',
+      income: '+' + brl(r.income), expenses: '−' + brl(r.expenses),
+      yield: r.yieldAmount > 0 ? '+' + brl(r.yieldAmount) : '—',
+      invested: brl(r.invested), cash: brl(r.cash), total: brl(r.total),
+      rowStyle: `display:grid;grid-template-columns:96px repeat(6,minmax(0,1fr));gap:10px;padding:12px 22px;border-bottom:1px solid #F4EDE7;align-items:center${r.current ? ';background:#FDFAF8' : ''}`,
+    }));
+
+    const settingsTabs = ['perfil', 'carteiras', 'contas', 'categorias', 'membros', 'períodos', 'integrações'].map((label, i) => ({
+      label,
+      style: `height:34px;display:flex;align-items:center;padding:0 15px;border-radius:9px;font-size:13.5px;font-weight:${i === 4 ? 700 : 600};text-transform:capitalize;cursor:pointer;${i === 4 ? 'background:#221A17;color:#FAF6F2' : 'color:#6B5B53'}`,
+    }));
+
+    const members = [
+      { name: 'Fernando Takashi', email: 'fernando@email.com', role: 'dono', initials: 'FT', bg: '#221A17', fg: '#E4B8A9' },
+      { name: 'Ellen', email: 'ellen@email.com', role: 'membro', initials: 'EL', bg: '#EF6A52', fg: '#fff' },
+    ].map((m) => ({
+      ...m,
+      avatarStyle: `width:38px;height:38px;border-radius:50%;background:${m.bg};color:${m.fg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex:none`,
+    }));
+
+    const mobileRows = [
+      { name: 'Aluguel Ellen', meta: 'Fixo · venceu dia 5', amount: 'R$ 850,00', icon: 'autorenew', tone: 'red', action: 'Paguei' },
+      { name: 'Claro', meta: 'Fixo · dia 10 · no cartão', amount: 'R$ 259,65', icon: 'autorenew', tone: 'sand', action: 'Lançar' },
+      { name: 'Fatura Nubank Ellen', meta: 'Fechada · vence hoje', amount: 'R$ 1.751,16', icon: 'credit_card', tone: 'teal', action: 'Pagar' },
+      { name: 'Financiamento Carro', meta: 'Fixo · dia 26 · débito automático', amount: 'R$ 1.844,84', icon: 'autorenew', tone: 'sand', action: 'Paguei' },
+    ].map((r) => ({ ...r, iconStyle: ICON + `color:${TONES[r.tone][0]};background:${TONES[r.tone][1]}` }));
+
+    const tabbar = [
+      { label: 'Início', icon: 'space_dashboard', on: true },
+      { label: 'Lançar', icon: 'add_circle', big: true },
+      { label: 'Fixos', icon: 'autorenew' },
+      { label: 'Cartões', icon: 'credit_card' },
+      { label: 'Mais', icon: 'menu' },
+    ].map((t) => ({
+      label: t.label, icon: t.icon,
+      style: `display:flex;flex-direction:column;align-items:center;gap:3px;width:64px;color:${t.on ? '#D24E36' : '#7E6E66'};cursor:pointer`,
+      iconStyle: `font-family:'Material Symbols Rounded';font-size:${t.big ? 30 : 25}px;line-height:1;color:${t.big ? '#EF6A52' : 'inherit'}`,
+    }));
+
+    return {
+      navGroups, pageTitle: title, pageSub: sub, noop: () => {},
+      monthLabel: `${MONTHS[month]} ${year}`,
+      prevMonth: () => this.shift(-1), nextMonth: () => this.shift(1),
+      isDash: screen === 'dash', isTx: screen === 'tx', isCards: screen === 'cards',
+      isProj: screen === 'proj',
+      isSettings: !['dash', 'tx', 'cards', 'proj'].includes(screen),
+      payables, receivables, ranking, transactions, cardStats, cards,
+      projKpis, projection, projRows, settingsTabs, members, mobileRows, tabbar,
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -8,31 +8,31 @@
 
 @layer base {
   :root {
-    --background: 24 42% 97%;      /* creme quente */
-    --foreground: 340 20% 18%;     /* tinta ameixa */
+    --background: 24 42% 97%;      /* #FAF6F2 — creme quente */
+    --foreground: 20 20% 11%;      /* #221A17 — tinta principal (menos rosada) */
 
     --card: 0 0% 100%;
-    --card-foreground: 340 20% 18%;
+    --card-foreground: 20 20% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 340 20% 18%;
+    --popover-foreground: 20 20% 11%;
 
     /* Coral — cor da marca / ações */
-    --primary: 8 82% 61%;
+    --primary: 8 82% 61%;          /* #EF6A52 */
     --primary-foreground: 0 0% 100%;
     --primary-light: 14 88% 70%;
-    --primary-dark: 6 66% 47%;
+    --primary-dark: 9 68% 53%;     /* #D95439 — hover de botão coral */
 
     /* Areia quente — fundos secundários sutis */
     --secondary: 24 34% 92%;
     --secondary-foreground: 340 20% 22%;
 
-    /* Teal — contraponto frio (links, gráficos, destaques) */
-    --accent: 174 44% 40%;
+    /* Teal — links, "ver todos", sucesso frio */
+    --accent: 174 44% 40%;         /* #2F8F8A */
     --accent-foreground: 0 0% 100%;
 
     --muted: 26 28% 94%;
-    --muted-foreground: 20 10% 44%;
+    --muted-foreground: 20 10% 44%;  /* #7E6E66 — piso de contraste 4,96:1, NÃO clarear */
 
     /* Status */
     --success: 158 56% 38%;
@@ -42,29 +42,40 @@
     --destructive: 0 74% 53%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 26 22% 88%;
+    --border: 26 20% 89%;         /* #EAE1DA — bordas de card */
     --input: 26 22% 88%;
     --ring: 8 82% 61%;
 
-    --radius: 0.75rem;
+    --radius: 0.875rem;
+
+    /* Shell escuro / hero / número dominante */
+    --ink: 20 20% 11%;           /* #221A17 */
+    --ink-2: 20 16% 16%;         /* #31241F — cards dentro do shell escuro */
+    --ink-border: 20 14% 18%;    /* #362A25 — divisores no escuro */
+    --on-ink: 26 24% 96%;        /* #FAF6F2 */
+    --on-ink-muted: 20 12% 58%;  /* #9C8A80 — 4,75:1 sobre --ink, NÃO clarear */
+    --pos: 152 46% 66%;          /* #7FD3A8 — valores positivos no escuro */
+    --neg: 12 100% 76%;          /* #FF9C82 — valores negativos no escuro */
 
     --gradient-primary: linear-gradient(135deg, hsl(8 82% 61%), hsl(16 88% 68%));
     --gradient-secondary: linear-gradient(135deg, hsl(24 34% 92%), hsl(28 40% 96%));
     --gradient-accent: linear-gradient(135deg, hsl(174 44% 40%), hsl(174 44% 52%));
     --gradient-card: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(26 40% 98%) 100%);
 
+    /* mantido só para popovers / dialogs */
     --shadow-card: 0 4px 6px -1px hsl(20 30% 55% / 0.12), 0 2px 4px -1px hsl(20 30% 55% / 0.07);
     --shadow-card-hover: 0 10px 15px -3px hsl(20 30% 50% / 0.13), 0 4px 6px -2px hsl(20 30% 50% / 0.06);
     --shadow-success: 0 4px 14px 0 hsl(158 56% 38% / 0.25);
     --shadow-warning: 0 4px 14px 0 hsl(34 92% 52% / 0.25);
 
-    --sidebar-background: 30 44% 98%;
-    --sidebar-foreground: 340 20% 18%;
+    /* Sidebar agora é escura */
+    --sidebar-background: 20 20% 11%;   /* #221A17 */
+    --sidebar-foreground: 26 24% 96%;   /* #FAF6F2 */
     --sidebar-primary: 8 82% 61%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 26 28% 94%;
-    --sidebar-accent-foreground: 340 20% 18%;
-    --sidebar-border: 26 22% 90%;
+    --sidebar-accent: 20 16% 16%;       /* #31241F — hover */
+    --sidebar-accent-foreground: 26 24% 96%;
+    --sidebar-border: 20 14% 18%;       /* #362A25 */
     --sidebar-ring: 8 82% 61%;
   }
 
@@ -128,7 +139,8 @@
 
   h1, h2, h3, h4 {
     font-family: "Bricolage Grotesque", "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: -0.015em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
 
   .tabular-nums {
