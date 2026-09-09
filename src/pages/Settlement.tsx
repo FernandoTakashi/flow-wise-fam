@@ -56,7 +56,7 @@ export default function Settlement() {
           <CardHeader className="p-4 pb-2"><CardTitle className="text-base">Como acertar</CardTitle></CardHeader>
           <CardContent className="space-y-2 p-4 pt-2">
             {plan.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">Ninguém deve nada. 🎉</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">Ninguém deve nada.</p>
             ) : plan.map((s, i) => (
               <div key={i} className="flex items-center justify-center gap-2 rounded-md border bg-muted/20 p-3 text-sm">
                 <span className="font-medium">{memberName(s.fromId)}</span>

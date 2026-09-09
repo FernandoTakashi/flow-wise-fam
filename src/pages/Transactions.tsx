@@ -295,7 +295,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
                   {spendingAccounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
-                  {!isIncome && cards.map((a) => <SelectItem key={a.id} value={a.id}>💳 {a.name}</SelectItem>)}
+                  {!isIncome && cards.map((a) => <SelectItem key={a.id} value={a.id}>Cartão · {a.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

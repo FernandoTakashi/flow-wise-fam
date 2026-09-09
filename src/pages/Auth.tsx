@@ -59,7 +59,7 @@ export default function AuthPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="mb-8 text-center">
-        <Mascot size={56} tile className="mx-auto mb-2 rounded-2xl shadow-lg" />
+        <Mascot size={56} tile className="mx-auto mb-3 rounded-xl" />
         <h1 className="text-2xl font-bold tracking-tight text-foreground">CaRe Wallet</h1>
         <p className="text-sm text-muted-foreground">Finanças da família, sem planilha</p>
       </div>
@@ -71,7 +71,7 @@ export default function AuthPage() {
         </TabsList>
 
         <TabsContent value="login">
-          <Card className="border-0 shadow-lg sm:border sm:shadow-sm">
+          <Card className="border shadow-sm">
             <CardHeader>
               <CardTitle>Bem-vindo de volta</CardTitle>
               <CardDescription>Acesse sua carteira para continuar.</CardDescription>
@@ -103,7 +103,7 @@ export default function AuthPage() {
         </TabsContent>
 
         <TabsContent value="register">
-          <Card className="border-0 shadow-lg sm:border sm:shadow-sm">
+          <Card className="border shadow-sm">
             <CardHeader>
               <CardTitle>Criar nova conta</CardTitle>
               <CardDescription>Sua carteira é criada automaticamente.</CardDescription>

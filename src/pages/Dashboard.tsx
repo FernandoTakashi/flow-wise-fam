@@ -124,7 +124,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="space-y-2 p-4 pt-2">
             {pendingExpenses.length === 0 && openInvoices.length === 0 && (
-              <p className="py-6 text-center text-sm text-muted-foreground">Nada em aberto. 🎉</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">Nada em aberto.</p>
             )}
             {pendingExpenses.map((o) => (
               <div key={o.recurrence.id} className="flex items-center justify-between rounded-md border bg-background p-3 text-sm">

@@ -21,7 +21,7 @@ export default function MonthSelector() {
   };
 
   return (
-    <div className="flex items-center gap-1 rounded-full border border-border/60 bg-background/50 px-1.5 py-1 backdrop-blur-sm">
+    <div className="flex items-center gap-1 rounded-full border border-border bg-card px-1.5 py-1">
       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => shift(-1)} aria-label="Mês anterior">
         <ChevronLeft className="h-4 w-4" />
       </Button>

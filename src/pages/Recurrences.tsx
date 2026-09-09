@@ -438,7 +438,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
                 <Select value={form.accountId} onValueChange={(v) => setForm((f) => ({ ...f, accountId: v }))}>
                   <SelectTrigger><SelectValue placeholder={form.kind === 'expense' ? 'Selecione' : 'Opcional'} /></SelectTrigger>
                   <SelectContent>
-                    {form.kind === 'expense' && cards.map((a) => <SelectItem key={a.id} value={a.id}>💳 {a.name}</SelectItem>)}
+                    {form.kind === 'expense' && cards.map((a) => <SelectItem key={a.id} value={a.id}>Cartão · {a.name}</SelectItem>)}
                     {spendingAccounts.map((a) => (
                       <SelectItem key={a.id} value={a.id}>
                         {form.kind === 'expense' ? `Débito · ${a.name}` : a.name}

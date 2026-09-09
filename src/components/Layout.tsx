@@ -25,7 +25,7 @@ function MobileNav() {
   return (
     <>
       {menuOpen && (
-        <div className="fixed inset-0 z-40 flex flex-col bg-background/97 backdrop-blur-sm md:hidden">
+        <div className="fixed inset-0 z-40 flex flex-col bg-background md:hidden">
           <div className="flex items-center justify-between border-b p-4">
             <span className="text-lg font-bold">Menu</span>
             <Button variant="ghost" size="icon" onClick={() => setMenuOpen(false)}><X className="h-6 w-6" /></Button>
@@ -97,7 +97,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex flex-col items-center gap-2 border-b border-border bg-background/80 px-4 py-2 backdrop-blur-md md:flex-row md:justify-between md:px-6">
+        <header className="sticky top-0 z-30 flex flex-col items-center gap-2 border-b border-border bg-background px-4 py-2 md:flex-row md:justify-between md:px-6">
           <div className="flex w-full items-center justify-between gap-4 md:w-auto">
             <WalletSelector />
             <Button variant="ghost" size="icon" onClick={handleLogout}

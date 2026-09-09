@@ -58,9 +58,6 @@
     --shadow-success: 0 4px 14px 0 hsl(158 56% 38% / 0.25);
     --shadow-warning: 0 4px 14px 0 hsl(34 92% 52% / 0.25);
 
-    --transition-all: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-colors: color 0.2s ease-in-out, background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
-
     --sidebar-background: 30 44% 98%;
     --sidebar-foreground: 340 20% 18%;
     --sidebar-primary: 8 82% 61%;
@@ -119,20 +116,6 @@
   }
 }
 
-@layer components {
-  .financial-card {
-    @apply bg-gradient-card border border-border rounded-xl shadow-card hover:shadow-card-hover transition-all duration-300;
-  }
-
-  .financial-button-primary {
-    @apply bg-gradient-primary text-white hover:opacity-90 transition-all duration-200;
-  }
-
-  .financial-input {
-    @apply bg-background border-border focus:ring-primary focus:border-primary;
-  }
-}
-
 @layer base {
   * {
     @apply border-border;
@@ -140,5 +123,15 @@
 
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  h1, h2, h3, h4 {
+    font-family: "Bricolage Grotesque", "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.015em;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
 }
