@@ -8,7 +8,7 @@ import MonthSelector from './MonthSelector';
 import { PageHeaderProvider, usePageHeader } from './PageHeader';
 import { Button } from '@/components/ui/button';
 import {
-  Menu as MenuIcon, X, LogOut, LayoutDashboard, ArrowDownCircle, ArrowUpCircle, CreditCard,
+  Menu as MenuIcon, X, LogOut, LayoutDashboard, Plus, Repeat, CreditCard,
 } from 'lucide-react';
 
 const MONTH_SCOPED_ROUTES = ['/', '/lancamentos', '/receitas', '/fixos', '/cartoes'];
@@ -28,10 +28,26 @@ const ROUTE_TITLES: Record<string, string> = {
 
 const MOBILE_PRIMARY = [
   { title: 'Início', href: '/', icon: LayoutDashboard, exact: true },
-  { title: 'Lançar', href: '/lancamentos', icon: ArrowDownCircle },
-  { title: 'Receitas', href: '/receitas', icon: ArrowUpCircle },
+  { title: 'Fixos', href: '/fixos', icon: Repeat },
   { title: 'Cartões', href: '/cartoes', icon: CreditCard },
 ];
+
+type MobileItem = { title: string; href: string; icon: typeof LayoutDashboard; exact?: boolean };
+
+function TabItem({ item, location, onClick }: {
+  item: MobileItem; location: ReturnType<typeof useLocation>; onClick: () => void;
+}) {
+  const Icon = item.icon;
+  const active = item.exact ? location.pathname === item.href : location.pathname.startsWith(item.href);
+  return (
+    <Link to={item.href} onClick={onClick}
+      className={cn('flex w-16 flex-col items-center gap-1 text-[10.5px] font-semibold',
+        active ? 'text-[#D24E36]' : 'text-[#7E6E66]')}>
+      <Icon className="h-[25px] w-[25px]" />
+      {item.title}
+    </Link>
+  );
+}
 
 function MobileNav() {
   const location = useLocation();
@@ -74,24 +90,28 @@ function MobileNav() {
         </div>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-border bg-background px-2 md:hidden">
-        {MOBILE_PRIMARY.map((item) => {
-          const Icon = item.icon;
-          const active = item.exact ? location.pathname === item.href : location.pathname.startsWith(item.href);
-          return (
-            <Link key={item.href} to={item.href} onClick={() => setMenuOpen(false)}
-              className={cn('flex w-16 flex-col items-center gap-1 text-[10px] font-medium',
-                active ? 'text-primary' : 'text-muted-foreground')}>
-              <Icon className="h-5 w-5" />
-              {item.title}
-            </Link>
-          );
-        })}
+      <div className="fixed bottom-0 left-0 right-0 z-50 flex h-[86px] items-start justify-around border-t border-[#EAE1DA] bg-background px-2 pt-2.5 md:hidden">
+        {MOBILE_PRIMARY.slice(0, 2).map((item) => (
+          <TabItem key={item.href} item={item} location={location} onClick={() => setMenuOpen(false)} />
+        ))}
+
+        <Link to="/lancamentos?new=1" onClick={() => setMenuOpen(false)}
+          className="flex w-16 flex-col items-center gap-1 text-[10.5px] font-semibold text-[#D24E36]">
+          <span className="flex h-[46px] w-[46px] items-center justify-center rounded-full bg-primary text-white">
+            <Plus className="h-[30px] w-[30px]" />
+          </span>
+          Lançar
+        </Link>
+
+        {MOBILE_PRIMARY.slice(2).map((item) => (
+          <TabItem key={item.href} item={item} location={location} onClick={() => setMenuOpen(false)} />
+        ))}
+
         <button onClick={() => setMenuOpen((v) => !v)}
-          className={cn('flex w-16 flex-col items-center gap-1 text-[10px] font-medium',
-            menuOpen ? 'text-primary' : 'text-muted-foreground')}>
-          <MenuIcon className="h-5 w-5" />
-          Menu
+          className={cn('flex w-16 flex-col items-center gap-1 text-[10.5px] font-semibold',
+            menuOpen ? 'text-[#D24E36]' : 'text-[#7E6E66]')}>
+          <MenuIcon className="h-[25px] w-[25px]" />
+          Mais
         </button>
       </div>
     </>

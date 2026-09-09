@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useFinance } from '@/contexts/FinanceContext';
 import { PageHeader, EmptyState } from '@/components/PageHeader';
 import { MoneyInput } from '@/components/MoneyInput';
@@ -62,6 +63,8 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoOpened = useRef(false);
 
   const monthTx = useMemo(
     () => transactions.filter((t) => t.refMonth === month + 1 && t.refYear === year)
@@ -90,6 +93,22 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
     }
     return { income, expense, net: income - expense };
   }, [monthTx]);
+
+  // abre o formulário direto quando vem do botão "Lançar" da tab bar mobile (/lancamentos?new=1)
+  useEffect(() => {
+    if (autoOpened.current || searchParams.get('new') !== '1') return;
+    autoOpened.current = true;
+    if (!locked) {
+      setForm({
+        ...emptyForm(today), kind,
+        accountId: spendingAccounts[0]?.id ?? accounts[0]?.id ?? '', memberId: userId ?? '',
+      });
+      setEditing(null);
+      setShowForm(true);
+    }
+    searchParams.delete('new');
+    setSearchParams(searchParams, { replace: true });
+  }, [searchParams, setSearchParams, locked, today, kind, spendingAccounts, accounts, userId]);
 
   if (loading) return <div className="h-64 animate-pulse rounded-[16px] bg-muted" />;
 
@@ -301,7 +320,8 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
 
       {/* dialog nova/editar */}
       <Dialog open={showForm} onOpenChange={(o) => (o ? setShowForm(true) : resetForm())}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:rounded-t-[28px] max-sm:border-x-0 max-sm:border-b-0">
+          <div className="mx-auto mb-1 h-[5px] w-11 shrink-0 rounded-full bg-[#DDD1C9] sm:hidden" />
           <DialogHeader>
             <DialogTitle>{editing ? 'Editar' : 'Nova'} {isIncome ? 'entrada' : 'saída'}</DialogTitle>
           </DialogHeader>

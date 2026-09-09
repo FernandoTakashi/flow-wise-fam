@@ -2,19 +2,22 @@ import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { Mascot } from '@/components/Mascot';
 
+const FIELD = 'h-[52px] rounded-[14px] border-[#E2D7CF] bg-white text-[15px]';
+const LABEL = 'text-[12.5px] font-semibold text-[#5C4C45]';
+
 export default function AuthPage() {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const isRegister = mode === 'register';
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,88 +60,80 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-      <div className="mb-8 text-center">
-        <Mascot size={56} tile className="mx-auto mb-3 rounded-xl" />
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">CaRe Wallet</h1>
-        <p className="text-sm text-muted-foreground">Finanças da família, sem planilha</p>
+    <div className="flex min-h-screen flex-col justify-center bg-background px-[26px] pb-10 pt-8">
+      <div className="mx-auto flex w-full max-w-sm flex-col gap-[26px]">
+        <div className="flex flex-col gap-4">
+          <Mascot size={60} tile className="rounded-[18px] p-[5px]" />
+          <div>
+            <h1 className="font-display text-[32px] font-bold leading-[1.08] tracking-[-0.025em] text-foreground">
+              Finanças da família,<br />sem planilha.
+            </h1>
+            <p className="mt-2 text-[14.5px] leading-[1.45] text-[#5C4C45]">
+              {isRegister
+                ? 'Crie sua conta — a carteira da família é criada junto.'
+                : 'Acesse sua carteira para lançar gastos, acompanhar as faturas e a projeção do mês.'}
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={isRegister ? handleSignUp : handleLogin} className="flex flex-col gap-4">
+          {isRegister && (
+            <div className="space-y-1.5">
+              <label htmlFor="name" className={LABEL}>Nome</label>
+              <Input id="name" type="text" autoComplete="name" placeholder="Ex: João Silva"
+                value={name} onChange={(e) => setName(e.target.value)} required className={FIELD} />
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <label htmlFor="email" className={LABEL}>E-mail</label>
+            <Input id="email" type="email" placeholder="voce@email.com" autoComplete="email"
+              value={email} onChange={(e) => setEmail(e.target.value)} required className={FIELD} />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="password" className={LABEL}>Senha</label>
+            <div className="relative">
+              <Input id="password" type={showPw ? 'text' : 'password'}
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
+                minLength={isRegister ? 6 : undefined}
+                value={password} onChange={(e) => setPassword(e.target.value)} required
+                className={`${FIELD} pr-12`} />
+              <button type="button" onClick={() => setShowPw((v) => !v)}
+                aria-label={showPw ? 'Ocultar senha' : 'Mostrar senha'}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A9968C]">
+                {showPw ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
+          </div>
+
+          <Button type="submit" disabled={loading}
+            className="h-[54px] rounded-[14px] text-[16px] font-bold">
+            {loading
+              ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {isRegister ? 'Criando…' : 'Entrando…'}</>
+              : isRegister ? 'Criar conta grátis' : 'Acessar conta'}
+          </Button>
+
+          <div className="flex items-center justify-between">
+            {isRegister ? (
+              <span className="text-[13.5px] text-[#7E6E66]">Já tem conta?</span>
+            ) : (
+              <button type="button" onClick={handleReset} disabled={resetting}
+                className="text-[13.5px] text-[#7E6E66] hover:underline">
+                {resetting ? 'Enviando…' : 'Esqueci minha senha'}
+              </button>
+            )}
+            <button type="button" onClick={() => setMode(isRegister ? 'login' : 'register')}
+              className="text-[13.5px] font-bold text-accent hover:underline">
+              {isRegister ? 'Entrar' : 'Criar conta'}
+            </button>
+          </div>
+        </form>
+
+        <p className="text-center text-[12px] text-muted-foreground">
+          &copy; {new Date().getFullYear()} CaRe Wallet
+        </p>
       </div>
-
-      <Tabs defaultValue="login" className="w-full max-w-sm sm:max-w-md">
-        <TabsList className="mb-4 grid w-full grid-cols-2">
-          <TabsTrigger value="login">Entrar</TabsTrigger>
-          <TabsTrigger value="register">Criar conta</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="login">
-          <Card className="border shadow-sm">
-            <CardHeader>
-              <CardTitle>Bem-vindo de volta</CardTitle>
-              <CardDescription>Acesse sua carteira para continuar.</CardDescription>
-            </CardHeader>
-            <form onSubmit={handleLogin}>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">E-mail</Label>
-                  <Input id="email" type="email" placeholder="voce@email.com" autoComplete="email"
-                    value={email} onChange={(e) => setEmail(e.target.value)} required className="h-11" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Senha</Label>
-                  <Input id="password" type="password" autoComplete="current-password"
-                    value={password} onChange={(e) => setPassword(e.target.value)} required className="h-11" />
-                </div>
-              </CardContent>
-              <CardFooter className="flex-col gap-2">
-                <Button type="submit" className="h-11 w-full text-base" disabled={loading}>
-                  {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Entrando…</> : 'Acessar conta'}
-                </Button>
-                <button type="button" onClick={handleReset} disabled={resetting}
-                  className="text-xs text-muted-foreground underline-offset-2 hover:underline">
-                  {resetting ? 'Enviando…' : 'Esqueci minha senha'}
-                </button>
-              </CardFooter>
-            </form>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="register">
-          <Card className="border shadow-sm">
-            <CardHeader>
-              <CardTitle>Criar nova conta</CardTitle>
-              <CardDescription>Sua carteira é criada automaticamente.</CardDescription>
-            </CardHeader>
-            <form onSubmit={handleSignUp}>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nome</Label>
-                  <Input id="name" type="text" autoComplete="name" placeholder="Ex: João Silva"
-                    value={name} onChange={(e) => setName(e.target.value)} required className="h-11" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="register-email">E-mail</Label>
-                  <Input id="register-email" type="email" autoComplete="email"
-                    value={email} onChange={(e) => setEmail(e.target.value)} required className="h-11" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="register-password">Senha</Label>
-                  <Input id="register-password" type="password" autoComplete="new-password" minLength={6}
-                    value={password} onChange={(e) => setPassword(e.target.value)} required className="h-11" />
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button type="submit" className="h-11 w-full text-base" disabled={loading}>
-                  {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Criando…</> : 'Criar conta grátis'}
-                </Button>
-              </CardFooter>
-            </form>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      <p className="mt-8 text-center text-xs text-muted-foreground">
-        &copy; {new Date().getFullYear()} CaRe Wallet
-      </p>
     </div>
   );
 }
