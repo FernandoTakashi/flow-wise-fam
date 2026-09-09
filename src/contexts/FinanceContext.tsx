@@ -87,6 +87,8 @@ export interface NewTransaction {
   memberId?: UUID | null;
   status?: TxStatus;
   installments?: number;
+  /** parcela em que a compra está agora (1 = compra nova). Só cria da parcela `installmentStart` até `installments`. */
+  installmentStart?: number;
   note?: string | null;
   /** competência manual (só para não-cartão). Omitido = derivado da data. */
   refMonth?: number;
@@ -474,10 +476,10 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
   const addMemberByEmail: FinanceApi['addMemberByEmail'] = async (email) => {
     const wid = requireWallet();
-    const { data: prof, error } = await supabase.from('profiles').select('id').eq('email', email.trim().toLowerCase()).maybeSingle();
+    const { data: uid, error } = await supabase.rpc('find_user_id_by_email', { p_email: email });
     if (error) throw error;
-    if (!prof) throw new Error('Nenhum usuário com esse e-mail. A pessoa precisa criar uma conta primeiro.');
-    const { error: mErr } = await supabase.from('wallet_members').insert({ wallet_id: wid, user_id: prof.id, role: 'member' });
+    if (!uid) throw new Error('Nenhuma conta com esse e-mail. A pessoa precisa criar a conta no app primeiro.');
+    const { error: mErr } = await supabase.from('wallet_members').insert({ wallet_id: wid, user_id: uid as string, role: 'member' });
     if (mErr) {
       if (mErr.code === '23505') throw new Error('Essa pessoa já é membro desta carteira.');
       throw mErr;
@@ -564,30 +566,33 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
     const isCard = account.kind === 'card';
     const n = isCard ? Math.max(1, Math.floor(input.installments ?? 1)) : 1;
+    // parcela atual: só materializa da `start` até a `n` (parcelas já pagas ficam de fora)
+    const start = Math.min(Math.max(1, Math.floor(input.installmentStart ?? 1)), n);
     const parts = splitInstallments(input.amountCents, n);
     const group = n > 1 ? crypto.randomUUID() : null;
     const baseDesc = input.description?.trim() || '';
     const firstIds: UUID[] = [];
 
-    for (let i = 0; i < n; i += 1) {
-      const dISO = n > 1 ? addMonthsISO(input.dateISO, i) : input.dateISO;
+    for (let k = 0; k <= n - start; k += 1) {
+      const no = start + k;                                  // nº da parcela (1..n)
+      const dISO = n > 1 ? addMonthsISO(input.dateISO, k) : input.dateISO;
       const invoiceId = isCard ? await ensureInvoice(account, dISO) : null;
       const ref = refFor(dISO, account, { refMonth: input.refMonth, refYear: input.refYear });
       const { data, error } = await supabase.from('transactions').insert({
         wallet_id: wid,
         account_id: account.id,
         kind: input.kind,
-        amount_cents: parts[i],
+        amount_cents: parts[no - 1],
         date: dISO,
         ref_month: ref.refMonth,
         ref_year: ref.refYear,
         status: input.status ?? 'cleared',
-        description: n > 1 ? `${baseDesc} (${i + 1}/${n})` : baseDesc,
+        description: n > 1 ? `${baseDesc} (${no}/${n})` : baseDesc,
         category_id: input.categoryId ?? null,
         member_id: input.memberId ?? null,
         card_invoice_id: invoiceId,
         installment_group: group,
-        installment_no: n > 1 ? i + 1 : null,
+        installment_no: n > 1 ? no : null,
         installment_of: n > 1 ? n : null,
         note: input.note ?? null,
         created_by: userId,
@@ -1007,9 +1012,12 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     for (const t of transactions) {
       if (t.kind !== 'expense' || t.status !== 'cleared') continue;
       if (t.refMonth !== month + 1 || t.refYear !== year) continue;
-      if (!t.memberId) continue;
-      // evita contar a parcela do cartão e a fatura ao mesmo tempo: conta só a compra
-      totals[t.memberId] = (totals[t.memberId] ?? 0) + t.amountCents;
+      if (t.splits.length > 0) {
+        // gasto compartilhado: cada membro carrega a sua parte
+        for (const s of t.splits) totals[s.memberId] = (totals[s.memberId] ?? 0) + s.shareCents;
+      } else if (t.memberId) {
+        totals[t.memberId] = (totals[t.memberId] ?? 0) + t.amountCents;
+      }
     }
     return members
       .map((m) => ({ memberId: m.userId, totalCents: totals[m.userId] ?? 0 }))

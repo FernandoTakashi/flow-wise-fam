@@ -33,8 +33,8 @@ interface FormState {
   memberId: string;
   description: string;
   installments: string;
+  installmentStart: string;
   splitOn: boolean;
-  shares: Record<string, number>;
 }
 
 const emptyForm = (dateISO: string): FormState => {
@@ -42,7 +42,7 @@ const emptyForm = (dateISO: string): FormState => {
   return {
     kind: 'expense', accountId: '', amountCents: 0, dateISO,
     refMonth: m + 1, refYear: y, refAuto: true,
-    categoryId: '', memberId: '', description: '', installments: '1', splitOn: false, shares: {},
+    categoryId: '', memberId: '', description: '', installments: '1', installmentStart: '1', splitOn: false,
   };
 };
 
@@ -101,11 +101,11 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
 
   const resetForm = () => { setForm({ ...emptyForm(today), kind }); setEditing(null); setShowForm(false); };
 
-  const evenShares = (total: number): Record<string, number> => {
+  const evenShares = (total: number) => {
     const ids = members.map((m) => m.userId);
-    if (ids.length === 0) return {};
+    if (ids.length === 0) return [] as { memberId: string; shareCents: number }[];
     const parts = splitInstallments(total, ids.length);
-    return Object.fromEntries(ids.map((id, i) => [id, parts[i]]));
+    return ids.map((id, i) => ({ memberId: id, shareCents: parts[i] }));
   };
 
   const openNew = () => {
@@ -131,8 +131,8 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
       memberId: t.memberId ?? '',
       description: t.description,
       installments: '1',
+      installmentStart: '1',
       splitOn: t.splits.length > 0,
-      shares: t.splits.reduce((acc, s) => ({ ...acc, [s.memberId]: s.shareCents }), {} as Record<string, number>),
     });
     setShowForm(true);
   };
@@ -151,16 +151,8 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
       toast({ title: 'Preencha conta e valor', variant: 'destructive' });
       return;
     }
-    let splits: NewTransaction['splits'];
-    if (form.kind === 'expense' && form.splitOn) {
-      splits = members.map((m) => ({ memberId: m.userId, shareCents: form.shares[m.userId] ?? 0 }))
-        .filter((s) => s.shareCents > 0);
-      const sum = splits.reduce((s, x) => s + x.shareCents, 0);
-      if (sum !== form.amountCents) {
-        toast({ title: 'Divisão não bate', description: `Soma das partes: ${formatBRL(sum)} ≠ ${formatBRL(form.amountCents)}`, variant: 'destructive' });
-        return;
-      }
-    }
+    const shared = form.kind === 'expense' && form.splitOn && members.length > 1;
+    const splits = shared ? evenShares(form.amountCents) : undefined;
 
     setBusy(true);
     try {
@@ -169,7 +161,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
           accountId: form.accountId, amountCents: form.amountCents, dateISO: form.dateISO,
           refMonth: form.refMonth, refYear: form.refYear,
           categoryId: form.categoryId || null, memberId: form.memberId || null,
-          description: form.description, splits: form.kind === 'expense' && form.splitOn ? splits : [],
+          description: form.description, splits: shared ? splits : [],
         });
         toast({ title: 'Lançamento atualizado' });
       } else {
@@ -177,7 +169,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
           kind: form.kind, accountId: form.accountId, amountCents: form.amountCents, dateISO: form.dateISO,
           refMonth: form.refAuto ? undefined : form.refMonth, refYear: form.refAuto ? undefined : form.refYear,
           categoryId: form.categoryId || null, memberId: form.memberId || null, description: form.description,
-          installments: nInst, splits,
+          installments: nInst, installmentStart: parseInt(form.installmentStart, 10) || 1, splits,
         });
         toast({ title: 'Lançamento registrado' });
       }
@@ -303,7 +295,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
                   {spendingAccounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
-                  {cards.map((a) => <SelectItem key={a.id} value={a.id}>💳 {a.name}</SelectItem>)}
+                  {!isIncome && cards.map((a) => <SelectItem key={a.id} value={a.id}>💳 {a.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -362,16 +354,29 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
 
             {!editing && isCard && (
               <div className="space-y-1.5">
-                <Label>Parcelas</Label>
-                <Input type="number" min="1" max="60" value={form.installments}
-                  onChange={(e) => setForm((f) => ({ ...f, installments: e.target.value }))} className="w-24 text-center" />
-                {nInst > 1 && form.amountCents > 0 && (
-                  <p className="text-[11px] text-muted-foreground">
-                    {nInst}× de {formatBRL(splitInstallments(form.amountCents, nInst)[0])}
-                    {splitInstallments(form.amountCents, nInst)[nInst - 1] !== splitInstallments(form.amountCents, nInst)[0]
-                      && ` (última ${formatBRL(splitInstallments(form.amountCents, nInst)[nInst - 1])})`}
-                  </p>
-                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Total de parcelas</Label>
+                    <Input type="number" min="1" max="60" value={form.installments}
+                      onChange={(e) => setForm((f) => ({ ...f, installments: e.target.value }))} className="text-center" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Está na parcela nº</Label>
+                    <Input type="number" min="1" max={form.installments || '1'} value={form.installmentStart}
+                      onChange={(e) => setForm((f) => ({ ...f, installmentStart: e.target.value }))}
+                      className="text-center" disabled={nInst <= 1} />
+                  </div>
+                </div>
+                {nInst > 1 && form.amountCents > 0 && (() => {
+                  const p = splitInstallments(form.amountCents, nInst);
+                  const s = Math.min(Math.max(1, parseInt(form.installmentStart, 10) || 1), nInst);
+                  return (
+                    <p className="text-[11px] text-muted-foreground">
+                      {nInst}× de {formatBRL(p[0])}{p[nInst - 1] !== p[0] && ` (última ${formatBRL(p[nInst - 1])})`}
+                      {s > 1 && ` · lança só as parcelas ${s} a ${nInst} (${nInst - s + 1} restantes, a partir deste mês)`}
+                    </p>
+                  );
+                })()}
               </div>
             )}
 
@@ -389,30 +394,16 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
             )}
 
             {form.kind === 'expense' && members.length > 1 && (
-              <div className="rounded-lg border border-dashed p-3">
-                <label className="flex items-center gap-2 text-sm font-medium">
-                  <input type="checkbox" checked={form.splitOn}
-                    onChange={(e) => setForm((f) => ({
-                      ...f, splitOn: e.target.checked,
-                      shares: e.target.checked ? evenShares(f.amountCents) : {},
-                    }))} />
-                  <Users className="h-4 w-4" /> Dividir entre membros
-                </label>
-                {form.splitOn && (
-                  <div className="mt-3 space-y-2">
-                    {members.map((m) => (
-                      <div key={m.userId} className="flex items-center justify-between gap-2">
-                        <span className="text-sm">{m.profile?.name ?? '—'}</span>
-                        <div className="w-32">
-                          <MoneyInput valueCents={form.shares[m.userId] ?? 0}
-                            onChangeCents={(c) => setForm((f) => ({ ...f, shares: { ...f.shares, [m.userId]: c } }))} />
-                        </div>
-                      </div>
-                    ))}
-                    <p className="text-[11px] text-muted-foreground">Soma deve bater com {formatBRL(form.amountCents)}.</p>
-                  </div>
-                )}
-              </div>
+              <label className="flex items-start gap-3 rounded-lg border p-3">
+                <input type="checkbox" className="mt-1" checked={form.splitOn}
+                  onChange={(e) => setForm((f) => ({ ...f, splitOn: e.target.checked }))} />
+                <span className="text-sm">
+                  <span className="flex items-center gap-1.5 font-medium"><Users className="h-4 w-4" /> Gasto compartilhado</span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    Divide igualmente entre os {members.length} membros da carteira — entra no acerto de contas em vez de contar tudo para uma pessoa.
+                  </span>
+                </span>
+              </label>
             )}
 
             <DialogFooter>
