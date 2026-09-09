@@ -41,6 +41,8 @@ const mapRecurrence = (r: any): Recurrence => ({
   amountCents: Number(r.amount_cents), categoryId: r.category_id, accountId: r.account_id,
   day: r.day, frequency: r.frequency, startDate: r.start_date, endDate: r.end_date, active: !!r.active,
   autopay: !!r.autopay, variableAmount: !!r.variable_amount, shared: !!r.shared,
+  installmentsTotal: r.installments_total == null ? null : Number(r.installments_total),
+  installmentsDone: Number(r.installments_done ?? 0),
 });
 const mapInvoice = (r: any): CardInvoice => ({
   id: r.id, walletId: r.wallet_id, accountId: r.account_id, refMonth: r.ref_month, refYear: r.ref_year,
@@ -99,6 +101,7 @@ export interface NewRecurrence {
   description: string; kind: CategoryKind; amountCents: number;
   categoryId?: UUID | null; accountId?: UUID | null; day: number;
   startDate: string; endDate?: string | null; autopay?: boolean; variableAmount?: boolean; shared?: boolean;
+  installmentsTotal?: number | null; installmentsDone?: number;
 }
 export interface NewInvestment {
   description: string; amountCents: number; yieldRateBps: number; dateISO: string; memberId?: UUID | null;
@@ -112,6 +115,9 @@ export interface OccurrenceView {
   amountCents: number;
   estimatedCents: number;
   onCard: boolean;
+  /** empréstimo/parcelamento: nº desta parcela e total (null se recorrência sem fim) */
+  installmentNo: number | null;
+  installmentsTotal: number | null;
 }
 export interface InvoiceRow {
   key: string;
@@ -738,6 +744,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       category_id: r.categoryId ?? null, account_id: r.accountId ?? null, day: r.day,
       start_date: r.startDate, end_date: r.endDate ?? null,
       autopay: r.autopay ?? false, variable_amount: r.variableAmount ?? false, shared: r.shared ?? false,
+      installments_total: r.installmentsTotal ?? null, installments_done: r.installmentsDone ?? 0,
     });
     if (error) throw error;
     await reload();
@@ -755,6 +762,8 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     if (patch.autopay !== undefined) row.autopay = patch.autopay;
     if (patch.variableAmount !== undefined) row.variable_amount = patch.variableAmount;
     if (patch.shared !== undefined) row.shared = patch.shared;
+    if (patch.installmentsTotal !== undefined) row.installments_total = patch.installmentsTotal;
+    if (patch.installmentsDone !== undefined) row.installments_done = patch.installmentsDone;
     if (patch.active !== undefined) row.active = patch.active;
     const { error } = await supabase.from('recurrences').update(row).eq('id', id);
     if (error) throw error;
@@ -1022,6 +1031,12 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       .map((r) => {
         const tx = transactions.find((t) => t.recurrenceId === r.id && isInMonth(t.date, month, year));
         const acc = r.accountId ? accounts.find((a) => a.id === r.accountId) : null;
+        // parcelamento/empréstimo: nº da parcela = já pagas antes + meses desde o início + 1
+        let installmentNo: number | null = null;
+        if (r.installmentsTotal) {
+          const { y: sy, m: sm } = isoParts(r.startDate);
+          installmentNo = (r.installmentsDone ?? 0) + (year - sy) * 12 + (month - sm) + 1;
+        }
         return {
           recurrence: r,
           dueDateISO: recurrenceDueISO(year, month, r.day),
@@ -1030,8 +1045,12 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
           amountCents: tx?.amountCents ?? r.amountCents,
           estimatedCents: r.amountCents,
           onCard: acc?.kind === 'card',
+          installmentNo,
+          installmentsTotal: r.installmentsTotal ?? null,
         } as OccurrenceView;
       })
+      // empréstimo já quitado (ou mês antes da 1ª parcela): não gera ocorrência
+      .filter((o) => o.installmentNo == null || (o.installmentNo >= 1 && o.installmentNo <= (o.installmentsTotal ?? 0)))
       .sort((a, b) => a.recurrence.day - b.recurrence.day);
   }, [recurrences, transactions, accounts]);
 

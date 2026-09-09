@@ -22,10 +22,12 @@ interface FormState {
   description: string; kind: CategoryKind; amountCents: number;
   categoryId: string; accountId: string; day: string;
   autopay: boolean; variableAmount: boolean; shared: boolean;
+  installmentsTotal: string; installmentsDone: string;
 }
 const emptyForm = (): FormState => ({
   description: '', kind: 'expense', amountCents: 0, categoryId: '', accountId: '',
   day: '5', autopay: false, variableAmount: false, shared: false,
+  installmentsTotal: '', installmentsDone: '0',
 });
 
 export default function Recurrences({ kind, embedded = false }: { kind?: CategoryKind; embedded?: boolean }) {
@@ -78,6 +80,8 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
       description: r.description, kind: r.kind, amountCents: r.amountCents,
       categoryId: r.categoryId ?? '', accountId: r.accountId ?? '',
       day: String(r.day), autopay: r.autopay, variableAmount: r.variableAmount, shared: r.shared,
+      installmentsTotal: r.installmentsTotal ? String(r.installmentsTotal) : '',
+      installmentsDone: String(r.installmentsDone ?? 0),
     });
     setShowForm(true);
   };
@@ -92,6 +96,12 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
       toast({ title: 'Escolha a forma de pagamento', variant: 'destructive' });
       return;
     }
+    const totalParc = form.installmentsTotal ? parseInt(form.installmentsTotal, 10) : null;
+    const doneParc = parseInt(form.installmentsDone, 10) || 0;
+    if (totalParc != null && (totalParc < 1 || doneParc < 0 || doneParc >= totalParc)) {
+      toast({ title: 'Parcelas inválidas', description: 'Parcelas já pagas tem que ser menor que o total.', variant: 'destructive' });
+      return;
+    }
     setBusy(true);
     const base = {
       description: form.description, kind: form.kind, amountCents: form.amountCents,
@@ -100,6 +110,8 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
       autopay: form.kind === 'expense' && form.autopay,
       variableAmount: form.variableAmount,
       shared: form.kind === 'expense' && members.length > 1 && form.shared,
+      installmentsTotal: totalParc,
+      installmentsDone: totalParc != null ? doneParc : 0,
     };
     try {
       if (editing) {
@@ -224,6 +236,12 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
                     </div>
                     <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
                       <span>{o.recurrence.day <= 0 ? 'Último dia' : `Dia ${o.recurrence.day}`}</span>
+                      {o.installmentsTotal && o.installmentNo != null && (
+                        <><span>·</span><span className="font-medium text-foreground">
+                          Parcela {o.installmentNo}/{o.installmentsTotal}
+                          {o.installmentsTotal - o.installmentNo > 0 && ` · faltam ${o.installmentsTotal - o.installmentNo} · devendo ≈ ${formatBRL((o.installmentsTotal - o.installmentNo + (done ? 0 : 1)) * o.amountCents)}`}
+                        </span></>
+                      )}
                       {o.recurrence.accountId && <><span>·</span><span>{accountName(o.recurrence.accountId)}</span></>}
                       {o.recurrence.categoryId && <><span>·</span><span>{categoryName(o.recurrence.categoryId)}</span></>}
                       {o.recurrence.variableAmount && <><span>·</span><span className="text-amber-600">valor variável</span></>}
@@ -387,6 +405,33 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
                 </label>
               </div>
             </div>
+            {form.kind === 'expense' && (
+              <div className="space-y-1.5 rounded-lg border p-3">
+                <p className="text-[11px] font-medium text-muted-foreground">Parcelado / empréstimo (opcional)</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Total de parcelas</Label>
+                    <Input type="number" min="1" max="480" placeholder="—" value={form.installmentsTotal}
+                      onChange={(e) => setForm((f) => ({ ...f, installmentsTotal: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Parcelas já pagas</Label>
+                    <Input type="number" min="0" value={form.installmentsDone} disabled={!form.installmentsTotal}
+                      onChange={(e) => setForm((f) => ({ ...f, installmentsDone: e.target.value }))} />
+                  </div>
+                </div>
+                {form.installmentsTotal && form.amountCents > 0 && (() => {
+                  const tot = parseInt(form.installmentsTotal, 10) || 0;
+                  const done = parseInt(form.installmentsDone, 10) || 0;
+                  const rest = Math.max(0, tot - done);
+                  return (
+                    <p className="text-[11px] text-muted-foreground">
+                      Faltam {rest} parcela(s) · saldo devedor ≈ {formatBRL(rest * form.amountCents)}. Deixe vazio para recorrência sem fim.
+                    </p>
+                  );
+                })()}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>{form.kind === 'expense' ? 'Forma de pagamento' : 'Conta de recebimento'}</Label>

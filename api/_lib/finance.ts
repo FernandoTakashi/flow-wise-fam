@@ -28,6 +28,7 @@ export interface RecurrenceRow {
   amount_cents: number; category_id: string | null; account_id: string | null;
   day: number; start_date: string; end_date: string | null; active: boolean;
   autopay: boolean; shared: boolean;
+  installments_total: number | null; installments_done: number | null;
 }
 export interface InvoiceRow {
   id: string; account_id: string; ref_month: number; ref_year: number; status: string;

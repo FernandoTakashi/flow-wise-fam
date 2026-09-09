@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migrações pendentes 20260908000002..000006 consolidadas.
+-- Migrações pendentes 20260908000002..000006 + 20260909000001 consolidadas.
 -- Rode UMA vez no SQL Editor do Supabase. Seguro re-rodar.
 -- =============================================================================
 begin;
@@ -69,5 +69,19 @@ $$;
 
 revoke all on function public.find_user_id_by_email(text) from public, anon;
 grant execute on function public.find_user_id_by_email(text) to authenticated;
+
+-- 20260909000001 — recurrences: parcelamento / empréstimo
+alter table public.recurrences
+  add column if not exists installments_total smallint,
+  add column if not exists installments_done  smallint not null default 0;
+alter table public.recurrences drop constraint if exists recurrences_installments_chk;
+alter table public.recurrences
+  add constraint recurrences_installments_chk
+  check (
+    (installments_total is null)
+    or (installments_total >= 1 and installments_done >= 0 and installments_done < installments_total)
+  );
+comment on column public.recurrences.installments_total is 'total de parcelas do empréstimo/parcelamento; null = recorrência sem fim';
+comment on column public.recurrences.installments_done  is 'parcelas já pagas antes do cadastro (empréstimo em andamento)';
 
 commit;

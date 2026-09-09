@@ -75,6 +75,10 @@ export interface Recurrence {
   variableAmount: boolean;
   /** ao pagar, divide igualmente entre os membros da carteira */
   shared: boolean;
+  /** empréstimo/parcelamento: total de parcelas (null = recorrência sem fim) */
+  installmentsTotal?: number | null;
+  /** parcelas já pagas antes de cadastrar no app */
+  installmentsDone: number;
 }
 
 export interface CardInvoice {

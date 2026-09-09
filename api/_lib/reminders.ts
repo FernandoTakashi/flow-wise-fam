@@ -25,8 +25,15 @@ async function writeLog(walletId: string, recId: string, m: number, y: number, t
     .then(() => undefined, () => undefined);
 }
 
-function inWindow(r: RecurrenceRow, mStart: string, mEnd: string): boolean {
-  return r.active && r.start_date <= mEnd && (!r.end_date || r.end_date >= mStart);
+function inWindow(r: RecurrenceRow, mStart: string, mEnd: string, m: number, y: number): boolean {
+  if (!r.active || r.start_date > mEnd || (r.end_date && r.end_date < mStart)) return false;
+  // empréstimo/parcelamento: nº da parcela deste mês tem que estar entre 1 e o total
+  if (r.installments_total) {
+    const [sy, sm] = r.start_date.split('-').map(Number);
+    const no = (r.installments_done ?? 0) + (y - sy) * 12 + (m - (sm - 1)) + 1;
+    if (no < 1 || no > r.installments_total) return false;
+  }
+  return true;
 }
 
 export async function runReminders(todayISO: string): Promise<RunSummary> {
@@ -53,7 +60,7 @@ export async function runReminders(todayISO: string): Promise<RunSummary> {
     summary.walletsChecked += 1;
     try {
       const bundle = await loadWalletBundle(walletId);
-      const expenses = bundle.recurrences.filter((r) => r.kind === 'expense' && inWindow(r, mStart, mEnd));
+      const expenses = bundle.recurrences.filter((r) => r.kind === 'expense' && inWindow(r, mStart, mEnd, m, y));
 
       const due: { rec: RecurrenceRow; amount: number }[] = [];
 
