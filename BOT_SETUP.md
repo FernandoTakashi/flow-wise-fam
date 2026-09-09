@@ -7,8 +7,14 @@ Implementa:
 - **Lembretes diários** (Vercel Cron, 08:00 BRT): toda conta fixa de saída vencendo/
   atrasada e não paga chega no Telegram com botão **[Paguei]** (um lembrete por conta
   por dia).
-- **Lançamento por mensagem**: "ifood 42,90 crédito nubank" → resumo → **[Confirmar]**.
-  Interpretação por Claude Haiku (cai num parser por regex se faltar a API key).
+- **Cérebro Haiku** (`api/_lib/brain.ts`): toda mensagem passa pelo Claude Haiku com um
+  retrato da carteira (`api/_lib/context.ts` — saldos, resumo do mês, fixos em aberto,
+  faturas, últimos lançamentos). Ele decide:
+  - **lançar** ("ifood 42,90 crédito nubank", "tv 3000 em 10x nubank", "mercado 120 dividido")
+    → resumo → **[Confirmar]**;
+  - **responder** ("qual meu saldo?", "quanto falta pagar?", "quando vence a fatura?");
+  - **marcar fixo pago** ("paguei o aluguel").
+  Sem `ANTHROPIC_API_KEY` cai num regex simples só para lançamento. Custo Haiku ≈ US$0,002/mensagem.
 
 Arquitetura: `api/` (Vercel Functions) + `api/cron/reminders.ts` (Vercel Cron) +
 `supabase/migrations/20260908000001_bot_autopay_reminders.sql`. Sem servidor dedicado.

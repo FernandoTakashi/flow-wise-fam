@@ -18,6 +18,14 @@ export const spDateISO = (d: Date): string =>
     timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(d);
 
+/** Soma meses preservando o dia (com clamp para meses curtos). */
+export const addMonthsISO = (iso: string, months: number): string => {
+  const { y, m, d } = isoParts(iso);
+  const target = new Date(y, m + months, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  return toISO(new Date(target.getFullYear(), target.getMonth(), Math.min(d, lastDay)));
+};
+
 /** Dia `day` do mês (m 0-11), com clamp (ex.: dia 31 em fevereiro → 28/29). */
 export const dayOfMonthISO = (year: number, month: number, day: number): string => {
   const lastDay = new Date(year, month + 1, 0).getDate();

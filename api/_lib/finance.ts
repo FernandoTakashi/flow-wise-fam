@@ -1,8 +1,9 @@
 // Operações de escrita no domínio financeiro a partir do backend (bot / cron).
 // Espelha a lógica de FinanceContext.tsx (refFor / ensureInvoice / markRecurrence).
+import { randomUUID } from 'node:crypto';
 import { admin } from './supabaseAdmin.js';
 import {
-  dayOfMonthISO, invoiceDates, isoParts, recurrenceDueISO, resolveInvoiceRef, splitInstallments,
+  addMonthsISO, dayOfMonthISO, invoiceDates, isoParts, recurrenceDueISO, resolveInvoiceRef, splitInstallments,
 } from './shared.js';
 
 async function syncEvenSplits(txId: string, memberIds: string[], amountCents: number): Promise<void> {
@@ -22,6 +23,7 @@ async function syncEvenSplits(txId: string, memberIds: string[], amountCents: nu
 export interface AccountRow {
   id: string; wallet_id: string; name: string; kind: 'cash' | 'checking' | 'card';
   closing_day: number | null; due_day: number | null; archived: boolean;
+  opening_balance_cents: number | null;
 }
 export interface RecurrenceRow {
   id: string; wallet_id: string; description: string; kind: 'income' | 'expense';
@@ -45,7 +47,7 @@ export interface WalletBundle {
 export async function loadWalletBundle(walletId: string): Promise<WalletBundle> {
   const db = admin();
   const [accs, cats, recs, invs, mems] = await Promise.all([
-    db.from('accounts').select('id, wallet_id, name, kind, closing_day, due_day, archived').eq('wallet_id', walletId),
+    db.from('accounts').select('id, wallet_id, name, kind, closing_day, due_day, archived, opening_balance_cents').eq('wallet_id', walletId),
     db.from('categories').select('id, name, kind').eq('wallet_id', walletId).eq('archived', false),
     db.from('recurrences').select('*').eq('wallet_id', walletId).eq('active', true),
     db.from('card_invoices').select('id, account_id, ref_month, ref_year, status').eq('wallet_id', walletId),
@@ -102,12 +104,14 @@ export interface EntryInput {
   categoryId: string | null;
   dateISO: string;
   note: string | null;
+  installments?: number | null;
+  shared?: boolean | null;
 }
 
-/** Cria uma transação avulsa (fluxo do bot). Retorna a linha inserida resumida. */
+/** Cria um lançamento avulso do bot (com parcelas de cartão e divisão opcionais). */
 export async function insertEntry(
   bundle: WalletBundle, walletId: string, createdBy: string, entry: EntryInput, source: string,
-): Promise<{ accountName: string; onCard: boolean }> {
+): Promise<{ accountName: string; onCard: boolean; parts: number }> {
   const db = admin();
   const spending = bundle.accounts.filter((a) => a.kind !== 'card' && !a.archived);
   const account =
@@ -115,17 +119,28 @@ export async function insertEntry(
   if (!account) throw new Error('Nenhuma conta disponível nesta carteira.');
 
   const onCard = account.kind === 'card';
-  const invoiceId = onCard ? await ensureInvoice(walletId, account, entry.dateISO) : null;
-  const ref = refFor(entry.dateISO, account);
+  const n = onCard && entry.installments && entry.installments > 1 ? Math.min(entry.installments, 60) : 1;
+  const parts = splitInstallments(entry.amountCents, n);
+  const group = n > 1 ? randomUUID() : null;
 
-  const { error } = await db.from('transactions').insert({
-    wallet_id: walletId, account_id: account.id, kind: entry.kind, amount_cents: entry.amountCents,
-    date: entry.dateISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: 'cleared',
-    description: entry.description, category_id: entry.categoryId,
-    member_id: createdBy, created_by: createdBy, card_invoice_id: invoiceId, note: entry.note, source,
-  });
-  if (error) throw error;
-  return { accountName: account.name, onCard };
+  for (let i = 0; i < n; i += 1) {
+    const dISO = n > 1 ? addMonthsISO(entry.dateISO, i) : entry.dateISO;
+    const invoiceId = onCard ? await ensureInvoice(walletId, account, dISO) : null;
+    const ref = refFor(dISO, account);
+    const { data: ins, error } = await db.from('transactions').insert({
+      wallet_id: walletId, account_id: account.id, kind: entry.kind, amount_cents: parts[i],
+      date: dISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: 'cleared',
+      description: n > 1 ? `${entry.description} (${i + 1}/${n})` : entry.description,
+      category_id: entry.categoryId, member_id: createdBy, created_by: createdBy,
+      card_invoice_id: invoiceId, note: entry.note, source,
+      installment_group: group, installment_no: n > 1 ? i + 1 : null, installment_of: n > 1 ? n : null,
+    }).select('id').single();
+    if (error) throw error;
+    if (entry.shared && entry.kind === 'expense' && ins) {
+      await syncEvenSplits(ins.id as string, bundle.memberIds, parts[i]);
+    }
+  }
+  return { accountName: account.name, onCard, parts: n };
 }
 
 function monthRange(month: number, year: number): { start: string; end: string } {

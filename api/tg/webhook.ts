@@ -7,18 +7,16 @@ import {
 } from '../_lib/telegram.js';
 import { findLink, redeemToken, setPending, takePending, type ChatLink } from '../_lib/chat.js';
 import { loadWalletBundle, insertEntry, markOccurrence, occurrenceTx } from '../_lib/finance.js';
-import { parseEntry } from '../_lib/parse.js';
-import { spDateISO } from '../_lib/shared.js';
-import { formatBRL, toCents } from '../_lib/shared.js';
+import { buildWalletContext } from '../_lib/context.js';
+import { interpret } from '../_lib/brain.js';
+import { spDateISO, formatBRL, toCents, isoParts } from '../_lib/shared.js';
 
 const HELP =
-  'Manda um gasto assim: <b>descrição valor forma de pagamento</b>\n' +
-  '<code>mercado 87,50 nubank</code>\n' +
-  '<code>uber 23 itau</code>\n' +
-  '<code>farmácia 45,90 pix</code>\n\n' +
-  'A forma de pagamento casa com o nome da sua conta; se não casar (ex.: “pix”) ' +
-  'vai pra conta padrão e fica anotado. Eu mostro um resumo e você confirma. ' +
-  'Os lembretes de contas chegam aqui também.';
+  'Manda um gasto em uma linha — <code>mercado 87,50 nubank</code>, ' +
+  '<code>uber 23</code>, <code>tv 3000 em 10x nubank</code> — que eu mostro um resumo pra confirmar.\n\n' +
+  'Também pergunta à vontade: <i>qual meu saldo?</i> · <i>quanto falta pagar esse mês?</i> · ' +
+  '<i>quanto gastei?</i> · <i>quando vence a fatura?</i>\n\n' +
+  'E dá pra dizer <i>paguei o aluguel</i> pra marcar um fixo. Os lembretes chegam aqui também.';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
@@ -72,32 +70,45 @@ async function onMessage(msg: TgMessage) {
     return;
   }
 
-  // lançamento novo
-  const bundle = await loadWalletBundle(link.wallet_id);
-  const parsed = await parseEntry(text, {
-    todayISO: spDateISO(new Date()),
-    accounts: bundle.accounts.map((a) => ({ id: a.id, name: a.name, kind: a.kind })),
-    categories: bundle.categories,
-  });
+  const todayISO = spDateISO(new Date());
+  const ctx = await buildWalletContext(link.wallet_id, todayISO);
+  const action = await interpret(text, ctx);
 
-  if (!parsed.understood) {
-    await sendMessage(chatId,
-      'Não achei um valor aí. Tenta assim: <code>mercado 87,50 nubank</code>');
+  if (action.intent === 'reply') {
+    await sendMessage(chatId, escapeHtml(action.text));
     return;
   }
 
-  const pendingId = await setPending(link.id, 'new_tx', { entry: parsed });
-  const acc = parsed.accountId
-    ? bundle.accounts.find((a) => a.id === parsed.accountId)?.name ?? 'conta padrão'
-    : 'conta padrão';
-  const cat = parsed.categoryId
-    ? bundle.categories.find((c) => c.id === parsed.categoryId)?.name
-    : null;
-  const tipo = parsed.kind === 'income' ? '📥 Entrada' : '🧾 Saída';
+  if (action.intent === 'pagar_fixo') {
+    const bundle = await loadWalletBundle(link.wallet_id);
+    const rec = bundle.recurrences.find((r) => r.id === action.recurrenceId);
+    if (!rec) { await sendMessage(chatId, 'Não achei esse fixo.'); return; }
+    const { m, y } = isoParts(todayISO);
+    const occ = await occurrenceTx(rec.id, m, y);
+    const amount = action.amountCents ?? occ?.amount_cents ?? rec.amount_cents;
+    await markOccurrence(bundle, link.wallet_id, rec, m, y, amount, link.user_id, 'telegram', action.paidOnISO ?? todayISO);
+    await setPending(link.id, 'adjust_recurrence', { recId: rec.id, m: m + 1, y });
+    await sendMessage(chatId,
+      `✅ <b>${escapeHtml(rec.description)}</b> ${rec.kind === 'income' ? 'recebido' : 'pago'} (${formatBRL(amount)}).\n` +
+      'Se veio outro valor, responde só com o número.');
+    return;
+  }
+
+  // lançamento
+  const e = action.entry;
+  const bundle = await loadWalletBundle(link.wallet_id);
+  const pendingId = await setPending(link.id, 'new_tx', { entry: e });
+  const accName = e.accountId ? bundle.accounts.find((a) => a.id === e.accountId)?.name ?? 'conta padrão' : 'conta padrão';
+  const catName = e.categoryId ? bundle.categories.find((c) => c.id === e.categoryId)?.name : null;
+  const tipo = e.kind === 'income' ? '📥 Entrada' : '🧾 Saída';
+  const extra = [
+    e.installments && e.installments > 1 ? `${e.installments}×` : null,
+    e.shared ? 'dividido' : null,
+  ].filter(Boolean).join(' · ');
 
   await sendMessage(chatId,
-    `${tipo}\n<b>${escapeHtml(parsed.description)}</b> — <b>${formatBRL(parsed.amountCents)}</b>\n` +
-    `${escapeHtml(acc)} · ${parsed.dateISO}${cat ? ` · ${escapeHtml(cat)}` : ''}`,
+    `${tipo}\n<b>${escapeHtml(e.description)}</b> — <b>${formatBRL(e.amountCents)}</b>\n` +
+    `${escapeHtml(accName)} · ${e.dateISO}${catName ? ` · ${escapeHtml(catName)}` : ''}${extra ? ` · ${extra}` : ''}`,
     [[
       { text: '✅ Confirmar', callback_data: `ok:${pendingId}` },
       { text: '✖️ Cancelar', callback_data: `no:${pendingId}` },
@@ -134,7 +145,7 @@ async function onCallback(cq: TgCallbackQuery) {
       await answerCallback(cq.id, 'Lançado ✅');
       await sendMessage(chatId,
         `✅ Lançado: <b>${escapeHtml(entry.description)}</b> — ${formatBRL(entry.amountCents)} · ${escapeHtml(r.accountName)}` +
-        (r.onCard ? ' (na fatura)' : ''));
+        (r.parts > 1 ? ` em ${r.parts}×` : '') + (r.onCard ? ' (na fatura)' : ''));
     } catch (e) {
       await answerCallback(cq.id, 'Erro ao lançar');
       await sendMessage(chatId, `❌ ${escapeHtml((e as Error).message)}`);
