@@ -100,7 +100,7 @@ function MobileNav() {
 
 function Shell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
-  const { subtitle } = usePageHeader();
+  const { subtitle, extra } = usePageHeader();
   const showMonthSelector = MONTH_SCOPED_ROUTES.includes(pathname);
   const title = ROUTE_TITLES[pathname] ?? '';
 
@@ -114,7 +114,10 @@ function Shell({ children }: { children: ReactNode }) {
         {/* header desktop — título da página vem para cá */}
         <header className="hidden h-16 shrink-0 items-center gap-4 border-b border-border bg-background px-8 md:flex">
           <div className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate font-display text-[19px] font-bold leading-tight text-foreground">{title}</span>
+            <span className="flex items-center gap-2 truncate font-display text-[19px] font-bold leading-tight text-foreground">
+              {title}
+              {extra}
+            </span>
             {subtitle && <span className="truncate text-[12px] text-muted-foreground">{subtitle}</span>}
           </div>
           {showMonthSelector && <MonthSelector />}

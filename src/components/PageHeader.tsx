@@ -5,16 +5,16 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 // via contexto, o título vem de ROUTE_TITLES no Layout, e a `action` continua
 // renderizada aqui (à direita) até cada página ganhar sua própria toolbar.
 
-interface PageHeaderState { subtitle: string | null }
+interface PageHeaderState { subtitle: string | null; extra: ReactNode }
 const PageHeaderContext = createContext<{
   state: PageHeaderState;
-  setSubtitle: (s: string | null) => void;
-}>({ state: { subtitle: null }, setSubtitle: () => {} });
+  set: (s: Partial<PageHeaderState>) => void;
+}>({ state: { subtitle: null, extra: null }, set: () => {} });
 
 export function PageHeaderProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<PageHeaderState>({ subtitle: null });
+  const [state, setState] = useState<PageHeaderState>({ subtitle: null, extra: null });
   return (
-    <PageHeaderContext.Provider value={{ state, setSubtitle: (subtitle) => setState({ subtitle }) }}>
+    <PageHeaderContext.Provider value={{ state, set: (p) => setState((s) => ({ ...s, ...p })) }}>
       {children}
     </PageHeaderContext.Provider>
   );
@@ -25,23 +25,24 @@ export function usePageHeader() {
 }
 
 export function PageHeader({
-  title, subtitle, action,
-}: { title: string; subtitle?: string; action?: ReactNode }) {
-  const { setSubtitle } = useContext(PageHeaderContext);
+  title, subtitle, action, extra,
+}: { title: string; subtitle?: string; action?: ReactNode; extra?: ReactNode }) {
+  const { set } = useContext(PageHeaderContext);
 
   useEffect(() => {
-    setSubtitle(subtitle ?? null);
-    return () => setSubtitle(null);
-  }, [subtitle, setSubtitle]);
+    set({ subtitle: subtitle ?? null, extra: extra ?? null });
+    return () => set({ subtitle: null, extra: null });
+  }, [subtitle, extra, set]);
 
   return (
     <>
       {/* Mobile: título ainda no conteúdo (o passo 8 mexe no mobile) */}
       <div className="mb-1 flex flex-col gap-3 md:hidden">
-        <div>
+        <div className="flex items-center gap-3">
           <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">{title}</h1>
-          {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+          {extra}
         </div>
+        {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
         {action && <div className="flex shrink-0 gap-2">{action}</div>}
       </div>
 
