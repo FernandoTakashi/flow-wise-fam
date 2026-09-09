@@ -23,6 +23,7 @@ export const env = {
   supabaseUrl: () => normalizeUrl(required('SUPABASE_URL')),
   supabaseServiceRole: () => required('SUPABASE_SERVICE_ROLE_KEY'),
   anthropicKey: () => optional('ANTHROPIC_API_KEY'),
+  anthropicWorkspaceId: () => optional('ANTHROPIC_WORKSPACE_ID'),
   telegramToken: () => required('TELEGRAM_BOT_TOKEN'),
   // Telegram só aceita [A-Za-z0-9_-] no secret_token; limpa o valor e usa o
   // mesmo resultado no setWebhook e na verificação do header.

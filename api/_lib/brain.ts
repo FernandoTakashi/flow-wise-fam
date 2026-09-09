@@ -8,6 +8,14 @@ import { env } from './env.js';
 import { toCents } from './shared.js';
 import type { WalletContext } from './context.js';
 
+function anthropic(): Anthropic {
+  const wsId = env.anthropicWorkspaceId();
+  return new Anthropic({
+    apiKey: env.anthropicKey()!,
+    ...(wsId ? { defaultHeaders: { 'anthropic-workspace-id': wsId } } : {}),
+  });
+}
+
 export interface BotEntry {
   kind: 'expense' | 'income';
   description: string;
@@ -68,7 +76,7 @@ export async function interpret(text: string, ctx: WalletContext): Promise<BotAc
   }
 
   try {
-    const client = new Anthropic({ apiKey: key });
+    const client = anthropic();
     const response = await client.messages.parse({
       model: 'claude-haiku-4-5',
       max_tokens: 900,
@@ -130,7 +138,7 @@ export async function interpret(text: string, ctx: WalletContext): Promise<BotAc
 
     // plano B: resposta em texto puro (sem output estruturado)
     try {
-      const client = new Anthropic({ apiKey: env.anthropicKey()! });
+      const client = anthropic();
       const r = await client.messages.create({
         model: 'claude-haiku-4-5',
         max_tokens: 500,
