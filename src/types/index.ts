@@ -73,6 +73,8 @@ export interface Recurrence {
   autopay: boolean;
   /** valor muda mês a mês (luz, água…): pede confirmar o valor na baixa */
   variableAmount: boolean;
+  /** ao pagar, divide igualmente entre os membros da carteira */
+  shared: boolean;
 }
 
 export interface CardInvoice {

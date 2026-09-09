@@ -67,3 +67,12 @@ export const toCents = (value: number | string): number => {
 
 export const formatBRL = (cents: number): string =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
+
+/** Divide um total em `n` partes inteiras; a última absorve o resto. */
+export const splitInstallments = (totalCents: number, n: number): number[] => {
+  if (n <= 1) return [totalCents];
+  const base = Math.floor(totalCents / n);
+  const parts = new Array(n).fill(base);
+  parts[n - 1] = totalCents - base * (n - 1);
+  return parts;
+};

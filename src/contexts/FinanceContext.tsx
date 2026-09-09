@@ -40,7 +40,7 @@ const mapRecurrence = (r: any): Recurrence => ({
   id: r.id, walletId: r.wallet_id, description: r.description, kind: r.kind,
   amountCents: Number(r.amount_cents), categoryId: r.category_id, accountId: r.account_id,
   day: r.day, frequency: r.frequency, startDate: r.start_date, endDate: r.end_date, active: !!r.active,
-  autopay: !!r.autopay, variableAmount: !!r.variable_amount,
+  autopay: !!r.autopay, variableAmount: !!r.variable_amount, shared: !!r.shared,
 });
 const mapInvoice = (r: any): CardInvoice => ({
   id: r.id, walletId: r.wallet_id, accountId: r.account_id, refMonth: r.ref_month, refYear: r.ref_year,
@@ -98,7 +98,7 @@ export interface NewTransaction {
 export interface NewRecurrence {
   description: string; kind: CategoryKind; amountCents: number;
   categoryId?: UUID | null; accountId?: UUID | null; day: number;
-  startDate: string; endDate?: string | null; autopay?: boolean; variableAmount?: boolean;
+  startDate: string; endDate?: string | null; autopay?: boolean; variableAmount?: boolean; shared?: boolean;
 }
 export interface NewInvestment {
   description: string; amountCents: number; yieldRateBps: number; dateISO: string; memberId?: UUID | null;
@@ -214,8 +214,8 @@ interface FinanceApi {
   addRecurrence(r: NewRecurrence): Promise<void>;
   updateRecurrence(id: UUID, patch: Partial<NewRecurrence> & { active?: boolean }): Promise<void>;
   deleteRecurrence(id: UUID): Promise<void>;
-  /** `paidOnISO` = dia da baixa (default hoje); num fixo de cartão decide a fatura. */
-  markRecurrenceOccurrence(recurrenceId: UUID, month: number, year: number, amountCents: number, memberId: UUID | null, paidOnISO?: string): Promise<void>;
+  /** `paidOnISO` = dia da baixa (default hoje); num fixo de cartão decide a fatura. `shared` (default = flag da recorrência) divide igual entre os membros. */
+  markRecurrenceOccurrence(recurrenceId: UUID, month: number, year: number, amountCents: number, memberId: UUID | null, paidOnISO?: string, shared?: boolean): Promise<void>;
   /** Registra o valor real do mês sem marcar como pago (transação `pending`). Não mexe no saldo, mas entra na projeção. */
   setRecurrenceOccurrenceAmount(recurrenceId: UUID, month: number, year: number, amountCents: number): Promise<void>;
   unmarkRecurrenceOccurrence(recurrenceId: UUID, month: number, year: number): Promise<void>;
@@ -737,7 +737,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       wallet_id: wid, description: r.description, kind: r.kind, amount_cents: r.amountCents,
       category_id: r.categoryId ?? null, account_id: r.accountId ?? null, day: r.day,
       start_date: r.startDate, end_date: r.endDate ?? null,
-      autopay: r.autopay ?? false, variable_amount: r.variableAmount ?? false,
+      autopay: r.autopay ?? false, variable_amount: r.variableAmount ?? false, shared: r.shared ?? false,
     });
     if (error) throw error;
     await reload();
@@ -754,6 +754,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     if (patch.endDate !== undefined) row.end_date = patch.endDate;
     if (patch.autopay !== undefined) row.autopay = patch.autopay;
     if (patch.variableAmount !== undefined) row.variable_amount = patch.variableAmount;
+    if (patch.shared !== undefined) row.shared = patch.shared;
     if (patch.active !== undefined) row.active = patch.active;
     const { error } = await supabase.from('recurrences').update(row).eq('id', id);
     if (error) throw error;
@@ -774,9 +775,23 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
    * fatura (e competência) o lançamento entra. `date` fica na data nominal da
    * ocorrência (chave estável para casar a ocorrência com a transação).
    */
+  /** Zera e (se `shared`) recria a divisão igual entre os membros de uma transação. */
+  const syncEvenSplits = async (txId: UUID, shared: boolean, amountCents: number) => {
+    await supabase.from('transaction_splits').delete().eq('transaction_id', txId);
+    if (!shared || members.length < 2) return;
+    const parts = splitInstallments(amountCents, members.length);
+    const rows = members
+      .map((m, i) => ({ transaction_id: txId, member_id: m.userId, share_cents: parts[i] }))
+      .filter((r) => r.share_cents > 0);
+    if (rows.length) {
+      const { error } = await supabase.from('transaction_splits').insert(rows);
+      if (error) throw error;
+    }
+  };
+
   const upsertRecurrenceTx = async (
     recurrenceId: UUID, month: number, year: number,
-    amountCents: number, memberId: UUID | null, status: TxStatus, paidOnISO?: string,
+    amountCents: number, memberId: UUID | null, status: TxStatus, paidOnISO?: string, shared?: boolean,
   ) => {
     const wid = requireWallet();
     const rec = recurrences.find((r) => r.id === recurrenceId);
@@ -792,6 +807,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     const chargeISO = paidOnISO ?? dueISO;
     // cartão: fatura/competência seguem o dia da baixa; senão competência = mês da ocorrência
     const ref = onCard ? refFor(chargeISO, account) : { refMonth: month + 1, refYear: year };
+    const applyShared = (shared ?? rec.shared) && nextStatus === 'cleared';
 
     if (existing) {
       const patch: Record<string, unknown> = { amount_cents: amountCents, status: nextStatus };
@@ -802,24 +818,26 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
         if (onCard) patch.card_invoice_id = await ensureInvoice(account, chargeISO);
       }
       await supabase.from('transactions').update(patch).eq('id', existing.id);
+      await syncEvenSplits(existing.id, applyShared, amountCents);
       await reload();
       return;
     }
 
     const invoiceId = onCard ? await ensureInvoice(account, chargeISO) : null;
-    const { error } = await supabase.from('transactions').insert({
+    const { data, error } = await supabase.from('transactions').insert({
       wallet_id: wid, account_id: account.id, kind: rec.kind, amount_cents: amountCents,
       date: dueISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: nextStatus,
       description: rec.description, category_id: rec.categoryId,
       member_id: nextStatus === 'cleared' ? memberId : null,
       recurrence_id: rec.id, card_invoice_id: invoiceId, created_by: userId,
-    });
+    }).select('id').single();
     if (error) throw error;
+    if (applyShared) await syncEvenSplits(data.id, true, amountCents);
     await reload();
   };
 
-  const markRecurrenceOccurrence: FinanceApi['markRecurrenceOccurrence'] = (recurrenceId, month, year, amountCents, memberId, paidOnISO) =>
-    upsertRecurrenceTx(recurrenceId, month, year, amountCents, memberId, 'cleared', paidOnISO ?? today);
+  const markRecurrenceOccurrence: FinanceApi['markRecurrenceOccurrence'] = (recurrenceId, month, year, amountCents, memberId, paidOnISO, shared) =>
+    upsertRecurrenceTx(recurrenceId, month, year, amountCents, memberId, 'cleared', paidOnISO ?? today, shared);
 
   const setRecurrenceOccurrenceAmount: FinanceApi['setRecurrenceOccurrenceAmount'] = (recurrenceId, month, year, amountCents) =>
     upsertRecurrenceTx(recurrenceId, month, year, amountCents, null, 'pending');

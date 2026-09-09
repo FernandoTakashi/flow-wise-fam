@@ -21,11 +21,11 @@ import { Plus, Pencil, Trash2, Check, X, Repeat, Lock, Receipt, Zap } from 'luci
 interface FormState {
   description: string; kind: CategoryKind; amountCents: number;
   categoryId: string; accountId: string; day: string;
-  autopay: boolean; variableAmount: boolean;
+  autopay: boolean; variableAmount: boolean; shared: boolean;
 }
 const emptyForm = (): FormState => ({
   description: '', kind: 'expense', amountCents: 0, categoryId: '', accountId: '',
-  day: '5', autopay: false, variableAmount: false,
+  day: '5', autopay: false, variableAmount: false, shared: false,
 });
 
 export default function Recurrences({ kind, embedded = false }: { kind?: CategoryKind; embedded?: boolean }) {
@@ -50,6 +50,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
   const [markAmount, setMarkAmount] = useState(0);
   const [markPayer, setMarkPayer] = useState(userId ?? '');
   const [markDate, setMarkDate] = useState(todayISO());
+  const [markShared, setMarkShared] = useState(false);
 
   const [inform, setInform] = useState<OccurrenceView | null>(null);
   const [informAmount, setInformAmount] = useState(0);
@@ -75,7 +76,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
     setForm({
       description: r.description, kind: r.kind, amountCents: r.amountCents,
       categoryId: r.categoryId ?? '', accountId: r.accountId ?? '',
-      day: String(r.day), autopay: r.autopay, variableAmount: r.variableAmount,
+      day: String(r.day), autopay: r.autopay, variableAmount: r.variableAmount, shared: r.shared,
     });
     setShowForm(true);
   };
@@ -97,6 +98,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
       day: parseInt(form.day, 10),
       autopay: form.kind === 'expense' && form.autopay,
       variableAmount: form.variableAmount,
+      shared: form.kind === 'expense' && members.length > 1 && form.shared,
     };
     try {
       if (editing) {
@@ -115,6 +117,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
 
   const openMark = (o: OccurrenceView) => {
     setMark(o); setMarkAmount(o.amountCents); setMarkPayer(userId ?? ''); setMarkDate(today);
+    setMarkShared(o.recurrence.shared);
   };
   const openInform = (o: OccurrenceView) => { setInform(o); setInformAmount(o.amountCents); };
   const confirmInform = async () => {
@@ -135,7 +138,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
   const confirmMark = async () => {
     if (!mark || markAmount <= 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
     try {
-      await markRecurrenceOccurrence(mark.recurrence.id, month, year, markAmount, markPayer || null, markDate || undefined);
+      await markRecurrenceOccurrence(mark.recurrence.id, month, year, markAmount, markPayer || null, markDate || undefined, markShared);
       toast({ title: mark.onCard ? 'Lançado no cartão' : tab === 'income' ? 'Recebimento confirmado' : 'Pagamento confirmado' });
       setMark(null);
     } catch (err) {
@@ -286,6 +289,12 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
                 <SelectContent>{members.map((m) => <SelectItem key={m.userId} value={m.userId}>{m.profile?.name ?? '—'}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            {tab === 'expense' && members.length > 1 && (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={markShared} onChange={(e) => setMarkShared(e.target.checked)} />
+                Gasto compartilhado (divide igual entre os {members.length} membros)
+              </label>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setMark(null)}>Cancelar</Button>
@@ -402,6 +411,17 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
                   <span className="font-medium">Débito automático</span>
                   <span className="block text-[11px] text-muted-foreground">
                     Só um marcador visual — o débito sai sozinho no banco, mas você continua marcando o pagamento aqui na mão.
+                  </span>
+                </span>
+              </label>
+            )}
+            {form.kind === 'expense' && members.length > 1 && (
+              <label className="flex items-start gap-3 rounded-lg border p-3">
+                <Switch checked={form.shared} onCheckedChange={(v) => setForm((f) => ({ ...f, shared: v }))} className="mt-0.5" />
+                <span className="text-sm">
+                  <span className="font-medium">Gasto compartilhado</span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    Ao pagar, divide igualmente entre os {members.length} membros da carteira (aluguel, internet…).
                   </span>
                 </span>
               </label>

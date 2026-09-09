@@ -2,8 +2,22 @@
 // Espelha a lógica de FinanceContext.tsx (refFor / ensureInvoice / markRecurrence).
 import { admin } from './supabaseAdmin.js';
 import {
-  dayOfMonthISO, invoiceDates, isoParts, recurrenceDueISO, resolveInvoiceRef,
+  dayOfMonthISO, invoiceDates, isoParts, recurrenceDueISO, resolveInvoiceRef, splitInstallments,
 } from './shared.js';
+
+async function syncEvenSplits(txId: string, memberIds: string[], amountCents: number): Promise<void> {
+  const db = admin();
+  await db.from('transaction_splits').delete().eq('transaction_id', txId);
+  if (memberIds.length < 2) return;
+  const parts = splitInstallments(amountCents, memberIds.length);
+  const rows = memberIds
+    .map((id, i) => ({ transaction_id: txId, member_id: id, share_cents: parts[i] }))
+    .filter((r) => r.share_cents > 0);
+  if (rows.length) {
+    const { error } = await db.from('transaction_splits').insert(rows);
+    if (error) throw error;
+  }
+}
 
 export interface AccountRow {
   id: string; wallet_id: string; name: string; kind: 'cash' | 'checking' | 'card';
@@ -12,7 +26,8 @@ export interface AccountRow {
 export interface RecurrenceRow {
   id: string; wallet_id: string; description: string; kind: 'income' | 'expense';
   amount_cents: number; category_id: string | null; account_id: string | null;
-  day: number; start_date: string; end_date: string | null; active: boolean; autopay: boolean;
+  day: number; start_date: string; end_date: string | null; active: boolean;
+  autopay: boolean; shared: boolean;
 }
 export interface InvoiceRow {
   id: string; account_id: string; ref_month: number; ref_year: number; status: string;
@@ -23,22 +38,25 @@ export interface WalletBundle {
   categories: { id: string; name: string; kind: string }[];
   recurrences: RecurrenceRow[];
   invoices: InvoiceRow[];
+  memberIds: string[];
 }
 
 export async function loadWalletBundle(walletId: string): Promise<WalletBundle> {
   const db = admin();
-  const [accs, cats, recs, invs] = await Promise.all([
+  const [accs, cats, recs, invs, mems] = await Promise.all([
     db.from('accounts').select('id, wallet_id, name, kind, closing_day, due_day, archived').eq('wallet_id', walletId),
     db.from('categories').select('id, name, kind').eq('wallet_id', walletId).eq('archived', false),
     db.from('recurrences').select('*').eq('wallet_id', walletId).eq('active', true),
     db.from('card_invoices').select('id, account_id, ref_month, ref_year, status').eq('wallet_id', walletId),
+    db.from('wallet_members').select('user_id').eq('wallet_id', walletId),
   ]);
-  for (const r of [accs, cats, recs, invs]) if (r.error) throw r.error;
+  for (const r of [accs, cats, recs, invs, mems]) if (r.error) throw r.error;
   return {
     accounts: (accs.data ?? []) as AccountRow[],
     categories: (cats.data ?? []) as { id: string; name: string; kind: string }[],
     recurrences: (recs.data ?? []) as RecurrenceRow[],
     invoices: (invs.data ?? []) as InvoiceRow[],
+    memberIds: ((mems.data ?? []) as { user_id: string }[]).map((m) => m.user_id),
   };
 }
 
@@ -120,7 +138,7 @@ function monthRange(month: number, year: number): { start: string; end: string }
 export async function markOccurrence(
   bundle: WalletBundle, walletId: string, rec: RecurrenceRow,
   month: number, year: number, amountCents: number, memberId: string | null, source: string,
-  paidOnISO?: string,
+  paidOnISO?: string, shared?: boolean,
 ): Promise<{ created: boolean; onCard: boolean }> {
   const db = admin();
   const { start, end } = monthRange(month, year);
@@ -134,6 +152,8 @@ export async function markOccurrence(
   const chargeISO = paidOnISO ?? dueISO;                            // dia da baixa
   const ref = onCard ? refFor(chargeISO, account) : { refMonth: month + 1, refYear: year };
 
+  const applyShared = (shared ?? rec.shared) && rec.kind === 'expense';
+
   const existing = await db.from('transactions').select('id, status')
     .eq('recurrence_id', rec.id).gte('date', start).lte('date', end).maybeSingle();
 
@@ -146,17 +166,19 @@ export async function markOccurrence(
     }
     const { error } = await db.from('transactions').update(patch).eq('id', existing.data.id);
     if (error) throw error;
+    await syncEvenSplits(existing.data.id, applyShared ? bundle.memberIds : [], amountCents);
     return { created: false, onCard };
   }
 
   const invoiceId = onCard ? await ensureInvoice(walletId, account, chargeISO) : null;
-  const { error } = await db.from('transactions').insert({
+  const { data: ins, error } = await db.from('transactions').insert({
     wallet_id: walletId, account_id: account.id, kind: rec.kind, amount_cents: amountCents,
     date: dueISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: 'cleared',
     description: rec.description, category_id: rec.category_id, member_id: memberId,
     recurrence_id: rec.id, card_invoice_id: invoiceId, created_by: memberId, source,
-  });
+  }).select('id').single();
   if (error) throw error;
+  if (applyShared && ins) await syncEvenSplits(ins.id as string, bundle.memberIds, amountCents);
   return { created: true, onCard };
 }
 

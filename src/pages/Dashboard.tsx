@@ -52,6 +52,7 @@ export default function Dashboard() {
   const [fixoAmount, setFixoAmount] = useState(0);
   const [fixoPayer, setFixoPayer] = useState(userId ?? '');
   const [fixoDate, setFixoDate] = useState(today);
+  const [fixoShared, setFixoShared] = useState(false);
 
   if (loading) return <DashboardSkeleton />;
 
@@ -69,7 +70,7 @@ export default function Dashboard() {
   const confirmFixo = async () => {
     if (!fixo || fixoAmount <= 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
     try {
-      await markRecurrenceOccurrence(fixo.recurrence.id, month, year, fixoAmount, fixoPayer || null, fixoDate || undefined);
+      await markRecurrenceOccurrence(fixo.recurrence.id, month, year, fixoAmount, fixoPayer || null, fixoDate || undefined, fixoShared);
       toast({ title: fixo.onCard ? 'Lançado no cartão' : 'Marcado como pago' });
       setFixo(null);
     } catch (err) {
@@ -79,6 +80,7 @@ export default function Dashboard() {
 
   const openFixo = (o: OccurrenceView) => {
     setFixo(o); setFixoAmount(o.amountCents); setFixoPayer(userId ?? ''); setFixoDate(today);
+    setFixoShared(o.recurrence.shared);
   };
 
   return (
@@ -287,6 +289,12 @@ export default function Dashboard() {
                 <SelectContent>{members.map((m) => <SelectItem key={m.userId} value={m.userId}>{m.profile?.name ?? '—'}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            {fixo?.recurrence.kind === 'expense' && members.length > 1 && (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={fixoShared} onChange={(e) => setFixoShared(e.target.checked)} />
+                Gasto compartilhado (divide igual entre os {members.length} membros)
+              </label>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setFixo(null)}>Cancelar</Button>
