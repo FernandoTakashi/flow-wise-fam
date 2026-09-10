@@ -36,6 +36,10 @@ begin
     raise exception 'você precisa ser dono da carteira de origem E da de destino';
   end if;
 
+  -- cópia em massa: não roda os checks de limite/saldo (a ordem das linhas
+  -- num INSERT..SELECT não é cronológica e derrubaria o clone)
+  perform set_config('carewallet.skip_checks', 'on', true);
+
   ---------------------------------------------------------------------------
   -- 0. Zera a carteira de destino.
   --    period_locks primeiro: a trigger enforce_period_lock bloqueia

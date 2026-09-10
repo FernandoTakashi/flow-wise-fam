@@ -20,7 +20,7 @@ export default function Dashboard() {
     loading, selectedMonth, today, monthSummary, cards, invoiceView, recurrenceOccurrences,
     spendingAccounts, members, memberName, userId, isPeriodLocked, spendByMember,
     payCardInvoice, markRecurrenceOccurrence, memberBalances,
-    accountBalanceCents, cardCommittedCents, cardAvailableCents,
+    accountBalanceCents, cardAvailableCents,
   } = useFinance();
   const { toast } = useToast();
   const { month, year } = selectedMonth;
@@ -252,18 +252,17 @@ export default function Dashboard() {
                     </span>
                   </div>
                 ))}
-                {cards.map((c) => {
-                  const avail = cardAvailableCents(c.id);
-                  return (
-                    <div key={c.id} className="flex items-center justify-between px-[22px] py-2.5 text-[13px]">
-                      <span className="truncate text-muted-foreground">{c.name} <span className="text-[11px]">· cartão</span></span>
-                      <span className="shrink-0 text-right tabular-nums text-muted-foreground">
-                        {formatBRL(cardCommittedCents(c.id))} usado
-                        {c.creditLimitCents != null && <span className="text-[11px]"> · {formatBRL(avail)} livre</span>}
-                      </span>
-                    </div>
-                  );
-                })}
+                {cards.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between px-[22px] py-2.5 text-[13px]">
+                    <span className="truncate text-muted-foreground">{c.name} <span className="text-[11px]">· cartão</span></span>
+                    <span className="shrink-0 text-right tabular-nums text-muted-foreground">
+                      {formatBRL(invoiceView(c.id, month, year).postedCents)} nesta fatura
+                      {c.creditLimitCents != null && (
+                        <span className="text-[11px]"> · {formatBRL(cardAvailableCents(c.id))} livre</span>
+                      )}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           )}

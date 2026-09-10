@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import {
   addMonthsISO, dayOfMonthISO, invoiceDates, isInMonth, isoParts, MONTHS_PT, recurrenceDueISO, resolveInvoiceRef, spDateISO, todayISO,
 } from '@/lib/dates';
-import { splitInstallments } from '@/lib/money';
+import { formatBRL, splitInstallments } from '@/lib/money';
 import { newId } from '@/lib/utils';
 import type {
   Account, AccountKind, CardInvoice, Category, CategoryKind, InvoiceStatus, Investment, MemberBalance,
@@ -73,6 +73,25 @@ const mapLock = (r: any): PeriodLock => ({
   walletId: r.wallet_id, refMonth: r.ref_month, refYear: r.ref_year, lockedBy: r.locked_by, lockedAt: r.locked_at,
 });
 /* eslint-enable @typescript-eslint/no-explicit-any */
+
+// --- saldo / limite (puros; usados nos seletores e na checagem das mutações) --
+function accountBalance(acc: Account, txs: Transaction[], uptoISO: string, excludeId?: string): number {
+  let total = acc.openingBalanceCents;
+  for (const t of txs) {
+    if (t.id === excludeId || t.accountId !== acc.id || t.status !== 'cleared' || t.date > uptoISO) continue;
+    if (t.kind === 'income') total += t.amountCents;
+    else if (t.kind === 'expense') total -= t.amountCents;
+    else total += acc.kind === 'card' ? t.amountCents : -t.amountCents;
+  }
+  return total;
+}
+function cardCommitted(cardId: string, txs: Transaction[], invs: CardInvoice[], excludeId?: string): number {
+  const openIds = new Set(invs.filter((i) => i.accountId === cardId && i.status !== 'paid').map((i) => i.id));
+  return txs
+    .filter((t) => t.id !== excludeId && t.accountId === cardId && t.kind === 'expense'
+      && t.cardInvoiceId && openIds.has(t.cardInvoiceId))
+    .reduce((s, t) => s + t.amountCents, 0);
+}
 
 // ---------------------------------------------------------------------------
 // Entrada
@@ -577,6 +596,22 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     if (!account) throw new Error('Conta inválida.');
 
     const isCard = account.kind === 'card';
+
+    // limites rígidos (o banco também barra; aqui é a mensagem amigável)
+    if (input.kind === 'expense' && (input.status ?? 'cleared') === 'cleared') {
+      if (isCard && account.creditLimitCents != null) {
+        const free = account.creditLimitCents - cardCommitted(account.id, transactions, invoices);
+        if (input.amountCents > free) {
+          throw new Error(`Ultrapassa o limite do cartão ${account.name} — livre: ${formatBRL(free)}.`);
+        }
+      } else if (!isCard) {
+        const bal = accountBalance(account, transactions, today);
+        if (bal - input.amountCents < 0) {
+          throw new Error(`Saldo insuficiente em ${account.name} — disponível: ${formatBRL(bal)}.`);
+        }
+      }
+    }
+
     const n = isCard ? Math.max(1, Math.floor(input.installments ?? 1)) : 1;
     // parcela atual: só materializa da `start` até a `n` (parcelas já pagas ficam de fora)
     const start = Math.min(Math.max(1, Math.floor(input.installmentStart ?? 1)), n);
@@ -706,6 +741,11 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     if (!view.invoice) throw new Error('Não há fatura para este mês.');
     if (view.status === 'paid') throw new Error('Fatura já está paga.');
     if (view.postedCents <= 0) throw new Error('Fatura sem lançamentos.');
+
+    const fromBal = accountBalance(fromAcc, transactions, today);
+    if (fromBal < view.postedCents) {
+      throw new Error(`Saldo insuficiente em ${fromAcc.name} — disponível: ${formatBRL(fromBal)}, fatura: ${formatBRL(view.postedCents)}.`);
+    }
 
     const { m: pm, y: py } = { m: isoParts(dateISO).m, y: isoParts(dateISO).y };
     const label = `Pagamento fatura ${card?.name ?? 'cartão'} ${String(month + 1).padStart(2, '0')}/${year}`;
@@ -864,6 +904,21 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
+    // limites rígidos, quando a baixa é uma saída de dinheiro/cartão
+    if (rec.kind === 'expense' && nextStatus === 'cleared') {
+      if (onCard && account.creditLimitCents != null) {
+        const free = account.creditLimitCents - cardCommitted(account.id, transactions, invoices, existing?.id);
+        if (amountCents > free) {
+          throw new Error(`Ultrapassa o limite do cartão ${account.name} — livre: ${formatBRL(free)}.`);
+        }
+      } else if (!onCard) {
+        const bal = accountBalance(account, transactions, today, existing?.id);
+        if (bal - amountCents < 0) {
+          throw new Error(`Saldo insuficiente em ${account.name} — disponível: ${formatBRL(bal)}.`);
+        }
+      }
+    }
+
     // data-caixa: quando a baixa foi dada (paidOnISO); pendente/sem data = vencimento.
     // Antes gravava sempre o vencimento, e um salário marcado como recebido antes
     // do dia de vencimento ficava com data futura → sumia do saldo e da projeção.
@@ -985,28 +1040,17 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
   const accountBalanceCents = useCallback((accountId: UUID, uptoISO?: string) => {
     const acc = accounts.find((a) => a.id === accountId);
-    if (!acc) return 0;
-    const upto = uptoISO ?? today;
-    let total = acc.openingBalanceCents;
-    for (const t of transactions) {
-      if (t.accountId !== accountId || t.status !== 'cleared' || t.date > upto) continue;
-      if (t.kind === 'income') total += t.amountCents;
-      else if (t.kind === 'expense') total -= t.amountCents;
-      else total += acc.kind === 'card' ? t.amountCents : -t.amountCents;
-    }
-    return total;
+    return acc ? accountBalance(acc, transactions, uptoISO ?? today) : 0;
   }, [accounts, transactions, today]);
 
   const cashBalanceCents = useCallback((uptoISO?: string) =>
     spendingAccountsMemo.reduce((sum, a) => sum + accountBalanceCents(a.id, uptoISO), 0),
     [spendingAccountsMemo, accountBalanceCents]);
 
-  const cardCommittedCents = useCallback((cardId: UUID) => {
-    const openIds = new Set(invoices.filter((i) => i.accountId === cardId && i.status !== 'paid').map((i) => i.id));
-    return transactions
-      .filter((t) => t.accountId === cardId && t.kind === 'expense' && t.cardInvoiceId && openIds.has(t.cardInvoiceId))
-      .reduce((s, t) => s + t.amountCents, 0);
-  }, [invoices, transactions]);
+  const cardCommittedCents = useCallback(
+    (cardId: UUID) => cardCommitted(cardId, transactions, invoices),
+    [invoices, transactions],
+  );
 
   const cardAvailableCents = useCallback((cardId: UUID) => {
     const card = accounts.find((a) => a.id === cardId);

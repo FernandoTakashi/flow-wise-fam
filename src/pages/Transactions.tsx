@@ -431,9 +431,11 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
             </div>
 
             {(overdrawWarn || limitWarn) && (
-              <p className="flex items-start gap-2 rounded-[12px] bg-[#F3EBE5] p-3 text-[12px] text-[#5C4C45]">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8A6A57]" />
-                {overdrawWarn ? 'Isso deixa o saldo da conta negativo.' : 'Isso ultrapassa o limite do cartão.'} Você pode lançar mesmo assim.
+              <p className="flex items-start gap-2 rounded-[12px] border border-[#E7B7A6] bg-[#FBE9E4] p-3 text-[12px] text-[#8A3B25]">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                {overdrawWarn
+                  ? 'Saldo insuficiente nesta conta — ajuste o valor ou escolha outra conta.'
+                  : 'Ultrapassa o limite do cartão — ajuste o valor ou escolha outra forma de pagamento.'}
               </p>
             )}
 
@@ -452,7 +454,9 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>
-              <Button type="submit" disabled={busy}>{busy ? 'Salvando…' : editing ? 'Salvar' : 'Registrar'}</Button>
+              <Button type="submit" disabled={busy || !!overdrawWarn || !!limitWarn}>
+                {busy ? 'Salvando…' : editing ? 'Salvar' : 'Registrar'}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
