@@ -16,7 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { formatBRL, pctToBps, bpsToPct } from '@/lib/money';
 import { MONTHS_PT } from '@/lib/dates';
 import type { Account, Category, CategoryKind } from '@/types';
-import { cn } from '@/lib/utils';
+import { cn, newId } from '@/lib/utils';
 import { Plus, Trash2, Pencil, Check, X, Lock, LockOpen, Copy, Send, CheckCircle2 } from 'lucide-react';
 
 const TABS = ['perfil', 'carteiras', 'contas', 'categorias', 'membros', 'períodos', 'integrações'] as const;
@@ -529,7 +529,7 @@ function IntegrationsTab() {
     setBusy(true);
     try {
       // 32 chars hex — bem abaixo do limite de 64 do parâmetro start do Telegram
-      const t = crypto.randomUUID().replace(/-/g, '');
+      const t = newId().replace(/-/g, '');
       const { error } = await supabase.from('chat_link_tokens').insert({
         token: t, provider: 'telegram', user_id: userId, wallet_id: walletId,
         expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),

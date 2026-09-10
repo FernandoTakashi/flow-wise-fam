@@ -4,9 +4,10 @@ import {
 } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  addMonthsISO, dayOfMonthISO, invoiceDates, isInMonth, isoParts, recurrenceDueISO, resolveInvoiceRef, spDateISO, todayISO,
+  addMonthsISO, dayOfMonthISO, invoiceDates, isInMonth, isoParts, MONTHS_PT, recurrenceDueISO, resolveInvoiceRef, spDateISO, todayISO,
 } from '@/lib/dates';
 import { splitInstallments } from '@/lib/money';
+import { newId } from '@/lib/utils';
 import type {
   Account, AccountKind, CardInvoice, Category, CategoryKind, InvoiceStatus, Investment, MemberBalance,
   MonthlyFilter, PeriodLock, Profile, Recurrence, Settlement, Transaction, TxKind, TxStatus, UUID,
@@ -580,7 +581,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     // parcela atual: só materializa da `start` até a `n` (parcelas já pagas ficam de fora)
     const start = Math.min(Math.max(1, Math.floor(input.installmentStart ?? 1)), n);
     const parts = splitInstallments(input.amountCents, n);
-    const group = n > 1 ? crypto.randomUUID() : null;
+    const group = n > 1 ? newId() : null;
     const baseDesc = input.description?.trim() || '';
     const firstIds: UUID[] = [];
 
@@ -647,7 +648,14 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
         row.card_invoice_id = null;
       }
     }
-    if (patch.refMonth && patch.refYear && acc?.kind !== 'card') {
+    // Lançamento de recorrência não-cartão: a competência fica presa à âncora da
+    // ocorrência (occ_month/occ_year), não à data — mudar o dia da baixa não
+    // muda de que mês aquela ocorrência é.
+    const pinnedToOcc = current.recurrenceId && acc?.kind !== 'card' && current.occMonth != null;
+    if (pinnedToOcc) {
+      row.ref_month = current.occMonth;
+      row.ref_year = current.occYear;
+    } else if (patch.refMonth && patch.refYear && acc?.kind !== 'card') {
       row.ref_month = patch.refMonth;
       row.ref_year = patch.refYear;
     } else if (patch.dateISO !== undefined || patch.accountId !== undefined) {
@@ -692,6 +700,8 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   const payCardInvoice: FinanceApi['payCardInvoice'] = async (cardId, month, year, fromAccountId, dateISO, memberId) => {
     const wid = requireWallet();
     const card = accounts.find((a) => a.id === cardId);
+    const fromAcc = accounts.find((a) => a.id === fromAccountId);
+    if (!fromAcc || fromAcc.kind === 'card') throw new Error('Escolha uma conta de dinheiro para pagar a fatura.');
     const view = computeInvoiceView(cardId, month, year);
     if (!view.invoice) throw new Error('Não há fatura para este mês.');
     if (view.status === 'paid') throw new Error('Fatura já está paga.');
@@ -771,7 +781,10 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deleteRecurrence: FinanceApi['deleteRecurrence'] = async (id) => {
-    await supabase.from('transactions').update({ recurrence_id: null }).eq('recurrence_id', id);
+    // solta os lançamentos já gerados (mantém histórico) antes de apagar o modelo
+    const { error: uErr } = await supabase.from('transactions')
+      .update({ recurrence_id: null, occ_month: null, occ_year: null }).eq('recurrence_id', id);
+    if (uErr) throw uErr;
     const { error } = await supabase.from('recurrences').delete().eq('id', id);
     if (error) throw error;
     await reload();
@@ -836,6 +849,20 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     // cartão: fatura/competência seguem o dia da baixa; senão competência = mês da ocorrência
     const ref = onCard ? refFor(chargeISO, account) : { refMonth: month + 1, refYear: year };
     const applyShared = (shared ?? rec.shared) && nextStatus === 'cleared';
+
+    // cartão: se a fatura-alvo já está fechada/paga, o trigger do banco barra o
+    // lançamento — devolve um erro claro em vez da exceção crua.
+    if (onCard && nextStatus === 'cleared') {
+      const target = invoices.find(
+        (i) => i.accountId === account.id && i.refMonth === ref.refMonth && i.refYear === ref.refYear,
+      );
+      if (target && target.status !== 'open') {
+        throw new Error(
+          `A fatura de ${MONTHS_PT[ref.refMonth - 1]}/${ref.refYear} está ${target.status === 'paid' ? 'paga' : 'fechada'}. `
+          + 'Reabra a fatura (Cartões) ou lance manualmente.',
+        );
+      }
+    }
 
     // data-caixa: quando a baixa foi dada (paidOnISO); pendente/sem data = vencimento.
     // Antes gravava sempre o vencimento, e um salário marcado como recebido antes
@@ -1003,7 +1030,9 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
         const dueISO = recurrenceDueISO(oY, oM, r.day);
         const inv = resolveInvoiceRef(dueISO, closing);
         if (inv.refMonth !== month + 1 || inv.refYear !== year) continue;
-        const already = transactions.some((t) => t.recurrenceId === r.id && t.refMonth === month + 1 && t.refYear === year);
+        // já virou lançamento? testa pela âncora da OCORRÊNCIA (oM/oY), não pela
+        // competência da fatura — a baixa pode ter caído em outra fatura.
+        const already = transactions.some((t) => t.recurrenceId === r.id && t.occMonth === oM + 1 && t.occYear === oY);
         if (already) continue;
         out.push({ recurrence: r, dueISO, amountCents: r.amountCents });
       }
@@ -1168,6 +1197,9 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     [investments],
   );
 
+  // "Quem deve a quem" — SÓ despesas compartilhadas (com splits), acumulado de
+  // todos os tempos. Diferente de spendByMember, que é "quanto cada um gastou no
+  // mês" (por competência, contando também gastos 100% individuais via memberId).
   const memberBalances = useCallback((): MemberBalance[] => {
     const net: Record<UUID, number> = {};
     members.forEach((m) => { net[m.userId] = 0; });

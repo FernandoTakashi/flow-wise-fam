@@ -18,7 +18,7 @@ const brief = (c: number) => {
 export default function Projection() {
   const {
     loading, today, recurrences, transactions, investments, cards, invoiceView,
-    cashBalanceCents, totalInvestedCents,
+    cashBalanceCents, totalInvestedCents, monthSummary,
   } = useFinance();
 
   const data = useMemo(() => {
@@ -46,6 +46,9 @@ export default function Projection() {
 
     let cash = cashBalanceCents();
     let invested = totalInvestedCents();
+    // mês corrente: o que AINDA falta acontecer (fixos não pagos, faturas em
+    // aberto, previstos). O que já caiu está no cashBalanceCents().
+    const cur = monthSummary(startMonth, startYear);
     const rows: {
       label: string; total: number; invested: number; cash: number;
       income: number; expenses: number; yield: number; isCurrent: boolean;
@@ -59,19 +62,21 @@ export default function Projection() {
 
       const activeRec = recurrences.filter((r) => r.active
         && r.startDate <= monthEnd && (!r.endDate || r.endDate >= monthStart));
-      const income = activeRec.filter((r) => r.kind === 'income').reduce((s, r) => s + r.amountCents, 0);
+      const recIncome = activeRec.filter((r) => r.kind === 'income').reduce((s, r) => s + r.amountCents, 0);
       const recExpense = activeRec
         .filter((r) => r.kind === 'expense' && !(r.accountId && cardIds.has(r.accountId)))
         .reduce((s, r) => s + r.amountCents, 0);
       const futureCard = cards.reduce((s, c) => s + invoiceView(c.id, m, y).projectedCents, 0);
 
       const yieldAmount = invested > 0 ? Math.round(invested * monthlyRate) : 0;
-      const expenses = i === 0 ? recExpense + futureCard : recExpense + futureCard + avgVariable;
 
-      if (i > 0) {
-        invested += yieldAmount;
-        cash += income - expenses;
-      }
+      const income = i === 0 ? cur.pendingIncomeCents : recIncome;
+      const expenses = i === 0
+        ? cur.pendingExpenseCents
+        : recExpense + futureCard + avgVariable;
+
+      invested += i > 0 ? yieldAmount : 0;
+      cash += income - expenses;
 
       rows.push({
         label: `${MONTHS_PT_SHORT[m]}/${String(y).slice(2)}`,
@@ -85,11 +90,13 @@ export default function Projection() {
       });
     }
     return rows;
-  }, [today, recurrences, transactions, investments, cards, invoiceView, cashBalanceCents, totalInvestedCents]);
+  }, [today, recurrences, transactions, investments, cards, invoiceView, cashBalanceCents, totalInvestedCents, monthSummary]);
+
+  const patrimonioHoje = cashBalanceCents() + totalInvestedCents();
 
   if (loading) return <div className="h-64 animate-pulse rounded-[18px] bg-muted" />;
 
-  const start = data[0]?.total ?? 0;
+  const start = patrimonioHoje;
   const end = data[data.length - 1]?.total ?? 0;
   const growth = end - start;
   const growthPct = start !== 0 ? (growth / Math.abs(start)) * 100 : 0;
@@ -212,8 +219,9 @@ export default function Projection() {
       </div>
 
       <p className="max-w-[720px] text-[12px] leading-relaxed text-[#7E6E66]">
-        Estimativa: entradas e saídas fixas ativas de cada mês + parcelas de cartão já lançadas +
-        média das saídas variáveis dos últimos 3 meses. Rendimento composto pela taxa média da carteira.
+        Mês atual: parte do que ainda falta acontecer (fixos não pagos, faturas em aberto e previstos),
+        somada ao saldo de hoje. Meses seguintes: entradas e saídas fixas ativas + parcelas de cartão já
+        lançadas + média das saídas variáveis dos últimos 3 meses. Rendimento composto pela taxa média da carteira.
       </p>
     </div>
   );

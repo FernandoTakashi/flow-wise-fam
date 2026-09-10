@@ -10,7 +10,7 @@ import { MoneyInput } from '@/components/MoneyInput';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/hooks/use-toast';
 import { formatBRL } from '@/lib/money';
-import { MONTHS_PT } from '@/lib/dates';
+import { MONTHS_PT, isoParts } from '@/lib/dates';
 import { cn } from '@/lib/utils';
 import { CreditCard, Repeat, TrendingUp, Lock } from 'lucide-react';
 import type { OccurrenceView } from '@/contexts/FinanceContext';
@@ -26,6 +26,12 @@ export default function Dashboard() {
   const { month, year } = selectedMonth;
   const locked = isPeriodLocked(month, year);
   const mesLower = MONTHS_PT[month].toLowerCase();
+
+  const { y: curY, m: curM } = isoParts(today);
+  const rel: 'past' | 'current' | 'future' =
+    year < curY || (year === curY && month < curM) ? 'past'
+      : year > curY || (year === curY && month > curM) ? 'future'
+        : 'current';
 
   const summary = useMemo(() => monthSummary(month, year), [monthSummary, month, year]);
   const pending = useMemo(
@@ -49,6 +55,43 @@ export default function Dashboard() {
   const aPagarTotal = pendingExpenses.reduce((s, o) => s + o.amountCents, 0)
     + openInvoices.reduce((s, x) => s + x.view.postedCents, 0);
   const aReceberTotal = pendingIncomes.reduce((s, o) => s + o.amountCents, 0);
+
+  // O hero só faz sentido como "projeção" no mês corrente (saldo de hoje + o que
+  // falta). Em mês passado/futuro vira "resultado" por competência.
+  const resultRealized = summary.incomeRealizedCents - summary.expenseRealizedCents;
+  const resultExpected = summary.pendingIncomeCents - summary.pendingExpenseCents;
+  const hero = rel === 'current'
+    ? {
+      label: 'Projeção fim do mês',
+      value: summary.projectedBalanceCents,
+      note: `Saldo em caixa depois de quitar tudo o que tem competência em ${mesLower}.`,
+      stats: [
+        { label: 'Saldo em caixa', value: summary.cashBalanceCents, hint: 'hoje, regime de caixa', cls: undefined as string | undefined },
+        { label: 'A receber', value: summary.pendingIncomeCents, hint: 'entradas previstas', cls: 'text-pos' },
+        { label: 'A pagar', value: summary.pendingExpenseCents, hint: 'fixos + faturas + previstos', cls: 'text-neg' },
+      ],
+    }
+    : rel === 'past'
+      ? {
+        label: `Resultado de ${mesLower}`,
+        value: resultRealized,
+        note: `Entradas menos saídas realizadas com competência em ${mesLower}.`,
+        stats: [
+          { label: 'Entradas', value: summary.incomeRealizedCents, hint: 'realizadas', cls: 'text-pos' },
+          { label: 'Saídas', value: summary.expenseRealizedCents, hint: 'realizadas', cls: 'text-neg' },
+          { label: 'Resultado', value: resultRealized, hint: 'entradas − saídas', cls: resultRealized >= 0 ? 'text-pos' : 'text-neg' },
+        ],
+      }
+      : {
+        label: `Previsto para ${mesLower}`,
+        value: resultExpected,
+        note: `Entradas menos saídas previstas para ${mesLower} (regime de competência).`,
+        stats: [
+          { label: 'A receber', value: summary.pendingIncomeCents, hint: 'entradas previstas', cls: 'text-pos' },
+          { label: 'A pagar', value: summary.pendingExpenseCents, hint: 'fixos + faturas + previstos', cls: 'text-neg' },
+          { label: 'Resultado', value: resultExpected, hint: 'previsto', cls: resultExpected >= 0 ? 'text-pos' : 'text-neg' },
+        ],
+      };
 
   const [payCard, setPayCard] = useState<{ cardId: string; total: number } | null>(null);
   const [payFrom, setPayFrom] = useState('');
@@ -115,18 +158,18 @@ export default function Dashboard() {
       {/* HERO */}
       <div className="flex flex-col gap-6 rounded-[18px] bg-ink px-[26px] py-6 text-on-ink sm:flex-row sm:items-end sm:justify-between sm:gap-8">
         <div className="min-w-0">
-          <div className="text-[12.5px] font-semibold uppercase tracking-[0.06em] text-[#A9968C]">Projeção fim do mês</div>
+          <div className="text-[12.5px] font-semibold uppercase tracking-[0.06em] text-[#A9968C]">{hero.label}</div>
           <div className="font-display text-[44px] font-bold leading-none tracking-[-0.03em] tabular-nums text-on-ink sm:text-[52px]">
-            {formatBRL(summary.projectedBalanceCents)}
+            {formatBRL(hero.value)}
           </div>
           <div className="mt-2 max-w-md text-[13.5px] leading-snug text-[#BCA79C]">
-            Saldo em caixa depois de quitar tudo o que tem competência em {mesLower}.
+            {hero.note}
           </div>
         </div>
         <div className="flex flex-wrap gap-x-8 gap-y-4 pb-1.5 sm:flex-nowrap">
-          <HeroStat label="Saldo em caixa" value={formatBRL(summary.cashBalanceCents)} hint="hoje, regime de caixa" />
-          <HeroStat label="A receber" value={formatBRL(summary.pendingIncomeCents)} hint="entradas previstas" valueClass="text-pos" />
-          <HeroStat label="A pagar" value={formatBRL(summary.pendingExpenseCents)} hint="fixos + faturas + previstos" valueClass="text-neg" />
+          {hero.stats.map((s) => (
+            <HeroStat key={s.label} label={s.label} value={formatBRL(s.value)} hint={s.hint} valueClass={s.cls} />
+          ))}
         </div>
       </div>
 

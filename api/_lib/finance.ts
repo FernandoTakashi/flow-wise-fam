@@ -166,6 +166,18 @@ export async function markOccurrence(
   // antes do dia de vencimento fica com data futura e some do saldo/projeção.
   const cashDateISO = chargeISO;
 
+  if (onCard) {
+    const target = bundle.invoices.find(
+      (i) => i.account_id === account.id && i.ref_month === ref.refMonth && i.ref_year === ref.refYear,
+    );
+    if (target && target.status !== 'open') {
+      throw new Error(
+        `A fatura ${String(ref.refMonth).padStart(2, '0')}/${ref.refYear} está `
+        + `${target.status === 'paid' ? 'paga' : 'fechada'}. Reabra a fatura ou lance manualmente.`,
+      );
+    }
+  }
+
   const applyShared = (shared ?? rec.shared) && rec.kind === 'expense';
 
   // âncora estável da ocorrência: recurrence_id + occ_month/occ_year
