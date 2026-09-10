@@ -8,6 +8,7 @@ import {
 } from '@/lib/dates';
 import { formatBRL, splitInstallments } from '@/lib/money';
 import { newId } from '@/lib/utils';
+import { apiFetch } from '@/lib/api';
 import * as core from '@/core';
 import { accountBalance, cardCommitted } from '@/core';
 import type {
@@ -78,6 +79,43 @@ const mapLock = (r: any): PeriodLock => ({
   walletId: r.wallet_id, refMonth: r.ref_month, refYear: r.ref_year, lockedBy: r.locked_by, lockedAt: r.locked_at,
 });
 /* eslint-enable @typescript-eslint/no-explicit-any */
+
+// --- snapshot da carteira (API própria com fallback pro Supabase direto) ---
+interface SnapshotRows {
+  members: unknown[]; accounts: unknown[]; categories: unknown[]; recurrences: unknown[];
+  invoices: unknown[]; transactions: unknown[]; investments: unknown[];
+  settings: unknown | null; periodLocks: unknown[]; locksError?: string;
+}
+
+async function fetchWalletSnapshotDirect(wid: string): Promise<SnapshotRows> {
+  const [m, a, c, rec, inv, tx, i, s, l] = await Promise.all([
+    supabase.from('wallet_members').select('wallet_id, user_id, role, profiles(id, name, email)').eq('wallet_id', wid),
+    supabase.from('accounts').select('*').eq('wallet_id', wid).order('created_at'),
+    supabase.from('categories').select('*').eq('wallet_id', wid).order('name'),
+    supabase.from('recurrences').select('*').eq('wallet_id', wid).order('day'),
+    supabase.from('card_invoices').select('*').eq('wallet_id', wid),
+    supabase.from('transactions').select('*, transaction_splits(*)').eq('wallet_id', wid).order('date', { ascending: false }),
+    supabase.from('investments').select('*').eq('wallet_id', wid).order('date', { ascending: false }),
+    supabase.from('wallet_settings').select('*').eq('wallet_id', wid).maybeSingle(),
+    supabase.from('period_locks').select('*').eq('wallet_id', wid),
+  ]);
+  for (const res of [m, a, c, rec, inv, tx, i]) if (res.error) throw res.error;
+  return {
+    members: m.data ?? [], accounts: a.data ?? [], categories: c.data ?? [], recurrences: rec.data ?? [],
+    invoices: inv.data ?? [], transactions: tx.data ?? [], investments: i.data ?? [],
+    settings: s.data ?? null, periodLocks: l.data ?? [], locksError: l.error?.message,
+  };
+}
+
+async function fetchWalletSnapshot(wid: string): Promise<SnapshotRows> {
+  try {
+    const r = await apiFetch<SnapshotRows & { warnings?: string[] }>(`/snapshot?wallet=${encodeURIComponent(wid)}`);
+    return { ...r, locksError: (r.warnings ?? []).find((w) => w.startsWith('period_locks')) };
+  } catch (e) {
+    console.warn('[finance] /api/v1/snapshot indisponível, usando Supabase direto:', (e as Error).message);
+    return fetchWalletSnapshotDirect(wid);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Entrada
@@ -282,36 +320,19 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const loadWalletData = useCallback(async (wid: UUID) => {
-    const [
-      membersRes, accountsRes, categoriesRes, recurrencesRes,
-      invoicesRes, txRes, investmentsRes, settingsRes, locksRes,
-    ] = await Promise.all([
-      supabase.from('wallet_members').select('wallet_id, user_id, role, profiles(id, name, email)').eq('wallet_id', wid),
-      supabase.from('accounts').select('*').eq('wallet_id', wid).order('created_at'),
-      supabase.from('categories').select('*').eq('wallet_id', wid).order('name'),
-      supabase.from('recurrences').select('*').eq('wallet_id', wid).order('day'),
-      supabase.from('card_invoices').select('*').eq('wallet_id', wid),
-      supabase.from('transactions').select('*, transaction_splits(*)').eq('wallet_id', wid).order('date', { ascending: false }),
-      supabase.from('investments').select('*').eq('wallet_id', wid).order('date', { ascending: false }),
-      supabase.from('wallet_settings').select('*').eq('wallet_id', wid).maybeSingle(),
-      supabase.from('period_locks').select('*').eq('wallet_id', wid),
-    ]);
+    const rows = await fetchWalletSnapshot(wid);
+    if (rows.locksError) console.warn('[finance] period_locks indisponível (rode a migration 2):', rows.locksError);
 
-    for (const res of [membersRes, accountsRes, categoriesRes, recurrencesRes, invoicesRes, txRes, investmentsRes]) {
-      if (res.error) throw res.error;
-    }
-    if (locksRes.error) console.warn('[finance] period_locks indisponível (rode a migration 2):', locksRes.error.message);
+    setMembers(rows.members.map(mapMember));
+    setAccounts(rows.accounts.map(mapAccount));
+    setCategories(rows.categories.map(mapCategory));
+    setRecurrences(rows.recurrences.map(mapRecurrence));
+    setInvoices(rows.invoices.map(mapInvoice));
+    setTransactions(rows.transactions.map(mapTransaction));
+    setInvestments(rows.investments.map(mapInvestment));
+    setPeriodLocks(rows.periodLocks.map(mapLock));
 
-    setMembers((membersRes.data ?? []).map(mapMember));
-    setAccounts((accountsRes.data ?? []).map(mapAccount));
-    setCategories((categoriesRes.data ?? []).map(mapCategory));
-    setRecurrences((recurrencesRes.data ?? []).map(mapRecurrence));
-    setInvoices((invoicesRes.data ?? []).map(mapInvoice));
-    setTransactions((txRes.data ?? []).map(mapTransaction));
-    setInvestments((investmentsRes.data ?? []).map(mapInvestment));
-    setPeriodLocks((locksRes.data ?? []).map(mapLock));
-
-    let s = settingsRes.data;
+    let s = rows.settings;
     if (!s) {
       const ins = await supabase.from('wallet_settings').insert({ wallet_id: wid }).select().single();
       s = ins.data;
