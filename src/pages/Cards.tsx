@@ -24,12 +24,13 @@ const PREVIEW_ROWS = 5;
 export default function Cards() {
   const {
     loading, selectedMonth, today, cards, spendingAccounts, members, userId,
-    invoiceView, cardCommittedCents, cardAvailableCents,
+    invoiceView, cardCommittedCents, cardAvailableCents, isPeriodLocked,
     addAccount, updateAccount, deleteAccount, payCardInvoice, unpayCardInvoice, setInvoiceStatus,
   } = useFinance();
   const { toast } = useToast();
   const { month, year } = selectedMonth;
   const mesLower = MONTHS_PT[month].toLowerCase();
+  const locked = isPeriodLocked(month, year);
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm());
@@ -229,16 +230,16 @@ export default function Cards() {
                         description="A fatura volta a ficar em aberto e o lançamento de saída é removido."
                         confirmLabel="Estornar"
                         onConfirm={() => view.invoice && unpayCardInvoice(view.invoice.id)}
-                        trigger={<Button variant="outline" className="h-[38px] flex-1">Estornar pagamento</Button>}
+                        trigger={<Button variant="outline" className="h-[38px] flex-1" disabled={locked}>Estornar pagamento</Button>}
                       />
                     ) : (
-                      <Button className="h-[38px] flex-1" disabled={view.postedCents <= 0}
+                      <Button className="h-[38px] flex-1" disabled={locked || view.postedCents <= 0}
                         onClick={() => { setPayDialog({ card, total: view.postedCents }); setPayFrom(spendingAccounts[0]?.id ?? ''); setPayer(userId ?? ''); }}>
                         Pagar fatura
                       </Button>
                     )}
                     {view.invoice && view.status !== 'paid' && (
-                      <Button variant="outline" className="h-[38px]"
+                      <Button variant="outline" className="h-[38px]" disabled={locked}
                         onClick={() => toggleClose(view.invoice!.id, view.status as 'open' | 'closed')}>
                         {view.status === 'closed' ? 'Reabrir fatura' : 'Fechar fatura'}
                       </Button>

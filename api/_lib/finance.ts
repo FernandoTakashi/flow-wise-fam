@@ -6,20 +6,6 @@ import {
   addMonthsISO, invoiceDates, isoParts, recurrenceDueISO, resolveInvoiceRef, splitInstallments,
 } from './shared.js';
 
-async function syncEvenSplits(txId: string, memberIds: string[], amountCents: number): Promise<void> {
-  const db = admin();
-  await db.from('transaction_splits').delete().eq('transaction_id', txId);
-  if (memberIds.length < 2) return;
-  const parts = splitInstallments(amountCents, memberIds.length);
-  const rows = memberIds
-    .map((id, i) => ({ transaction_id: txId, member_id: id, share_cents: parts[i] }))
-    .filter((r) => r.share_cents > 0);
-  if (rows.length) {
-    const { error } = await db.from('transaction_splits').insert(rows);
-    if (error) throw error;
-  }
-}
-
 export interface AccountRow {
   id: string; wallet_id: string; name: string; kind: 'cash' | 'checking' | 'card';
   closing_day: number | null; due_day: number | null; archived: boolean;
@@ -123,22 +109,20 @@ export async function insertEntry(
   const parts = splitInstallments(entry.amountCents, n);
   const group = n > 1 ? randomUUID() : null;
 
+  const isShared = entry.kind === 'expense' && entry.shared === true;
   for (let i = 0; i < n; i += 1) {
     const dISO = n > 1 ? addMonthsISO(entry.dateISO, i) : entry.dateISO;
     const invoiceId = onCard ? await ensureInvoice(walletId, account, dISO) : null;
     const ref = refFor(dISO, account);
-    const { data: ins, error } = await db.from('transactions').insert({
+    const { error } = await db.from('transactions').insert({
       wallet_id: walletId, account_id: account.id, kind: entry.kind, amount_cents: parts[i],
       date: dISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: 'cleared',
       description: n > 1 ? `${entry.description} (${i + 1}/${n})` : entry.description,
       category_id: entry.categoryId, member_id: createdBy, created_by: createdBy,
-      card_invoice_id: invoiceId, note: entry.note, source,
+      card_invoice_id: invoiceId, note: entry.note, source, shared: isShared,
       installment_group: group, installment_no: n > 1 ? i + 1 : null, installment_of: n > 1 ? n : null,
-    }).select('id').single();
+    });
     if (error) throw error;
-    if (entry.shared && entry.kind === 'expense' && ins) {
-      await syncEvenSplits(ins.id as string, bundle.memberIds, parts[i]);
-    }
   }
   return { accountName: account.name, onCard, parts: n };
 }
@@ -178,7 +162,7 @@ export async function markOccurrence(
     }
   }
 
-  const applyShared = (shared ?? rec.shared) && rec.kind === 'expense';
+  const isShared = rec.kind === 'expense' && (shared ?? rec.shared) === true;
 
   // âncora estável da ocorrência: recurrence_id + occ_month/occ_year
   const existing = await db.from('transactions').select('id, status')
@@ -186,7 +170,7 @@ export async function markOccurrence(
 
   if (existing.data) {
     const patch: Record<string, unknown> = {
-      amount_cents: amountCents, member_id: memberId, status: 'cleared', source, date: cashDateISO,
+      amount_cents: amountCents, member_id: memberId, status: 'cleared', source, date: cashDateISO, shared: isShared,
     };
     if (paidOnISO) {
       patch.ref_month = ref.refMonth;
@@ -195,20 +179,18 @@ export async function markOccurrence(
     }
     const { error } = await db.from('transactions').update(patch).eq('id', existing.data.id);
     if (error) throw error;
-    await syncEvenSplits(existing.data.id, applyShared ? bundle.memberIds : [], amountCents);
     return { created: false, onCard };
   }
 
   const invoiceId = onCard ? await ensureInvoice(walletId, account, chargeISO) : null;
-  const { data: ins, error } = await db.from('transactions').insert({
+  const { error } = await db.from('transactions').insert({
     wallet_id: walletId, account_id: account.id, kind: rec.kind, amount_cents: amountCents,
     date: cashDateISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: 'cleared',
     description: rec.description, category_id: rec.category_id, member_id: memberId,
     recurrence_id: rec.id, occ_month: month + 1, occ_year: year,
-    card_invoice_id: invoiceId, created_by: memberId, source,
-  }).select('id').single();
+    card_invoice_id: invoiceId, created_by: memberId, source, shared: isShared,
+  });
   if (error) throw error;
-  if (applyShared && ins) await syncEvenSplits(ins.id as string, bundle.memberIds, amountCents);
   return { created: true, onCard };
 }
 

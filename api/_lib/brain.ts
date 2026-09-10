@@ -44,7 +44,7 @@ const Schema = z.object({
     category_id: z.string().nullable().describe('id EXATO de categorias, ou null'),
     date: z.string().describe('yyyy-mm-dd'),
     installments: z.number().int().nullable().describe('nº de parcelas se citado (só cartão), senão null'),
-    shared: z.boolean().nullable().describe('true se a pessoa disse que é dividido/compartilhado'),
+    shared: z.boolean().nullable().describe('true se foi um gasto "em conjunto" / dos dois juntos (não divide contas, só marca)'),
     note: z.string().nullable(),
   }).nullable(),
   pay: z.object({

@@ -56,7 +56,7 @@ const mapTransaction = (r: any): Transaction => ({
   categoryId: r.category_id, memberId: r.member_id, cardInvoiceId: r.card_invoice_id, recurrenceId: r.recurrence_id,
   occMonth: r.occ_month ?? null, occYear: r.occ_year ?? null,
   installmentGroup: r.installment_group, installmentNo: r.installment_no, installmentOf: r.installment_of,
-  transferPeerId: r.transfer_peer_id, note: r.note, createdBy: r.created_by, source: r.source ?? 'app',
+  transferPeerId: r.transfer_peer_id, note: r.note, shared: !!r.shared, createdBy: r.created_by, source: r.source ?? 'app',
   splits: (r.transaction_splits ?? []).map((s: any) => ({
     id: s.id, transactionId: s.transaction_id, memberId: s.member_id, shareCents: Number(s.share_cents),
   })),
@@ -116,7 +116,8 @@ export interface NewTransaction {
   /** competência manual (só para não-cartão). Omitido = derivado da data. */
   refMonth?: number;
   refYear?: number;
-  splits?: { memberId: UUID; shareCents: number }[];
+  /** marca como gasto em conjunto (só expense) */
+  shared?: boolean;
 }
 export interface NewRecurrence {
   description: string; kind: CategoryKind; amountCents: number;
@@ -207,6 +208,7 @@ interface FinanceApi {
   monthSummary(month: number, year: number): MonthSummary;
   recurrenceOccurrences(month: number, year: number): OccurrenceView[];
   spendByMember(month: number, year: number): MemberSpend[];
+  jointSpendCents(month: number, year: number): number;
   isPeriodLocked(month: number, year: number): boolean;
   wouldOverdraw(accountId: UUID, amountCents: number): boolean;
   wouldExceedLimit(cardId: UUID, amountCents: number): boolean;
@@ -618,14 +620,14 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     const parts = splitInstallments(input.amountCents, n);
     const group = n > 1 ? newId() : null;
     const baseDesc = input.description?.trim() || '';
-    const firstIds: UUID[] = [];
+    const isShared = input.kind === 'expense' && input.shared === true;
 
     for (let k = 0; k <= n - start; k += 1) {
       const no = start + k;                                  // nº da parcela (1..n)
       const dISO = n > 1 ? addMonthsISO(input.dateISO, k) : input.dateISO;
       const invoiceId = isCard ? await ensureInvoice(account, dISO) : null;
       const ref = refFor(dISO, account, { refMonth: input.refMonth, refYear: input.refYear });
-      const { data, error } = await supabase.from('transactions').insert({
+      const { error } = await supabase.from('transactions').insert({
         wallet_id: wid,
         account_id: account.id,
         kind: input.kind,
@@ -642,19 +644,10 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
         installment_no: n > 1 ? no : null,
         installment_of: n > 1 ? n : null,
         note: input.note ?? null,
+        shared: isShared,
         created_by: userId,
       }).select('id').single();
       if (error) throw error;
-      firstIds.push(data.id);
-    }
-
-    if (n === 1 && input.splits && input.splits.length > 0) {
-      const rows = input.splits.filter((s) => s.shareCents > 0)
-        .map((s) => ({ transaction_id: firstIds[0], member_id: s.memberId, share_cents: s.shareCents }));
-      if (rows.length) {
-        const { error } = await supabase.from('transaction_splits').insert(rows);
-        if (error) throw error;
-      }
     }
     await reload();
   };
@@ -669,6 +662,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     if (patch.memberId !== undefined) row.member_id = patch.memberId;
     if (patch.status !== undefined) row.status = patch.status;
     if (patch.note !== undefined) row.note = patch.note;
+    if (patch.shared !== undefined) row.shared = current.kind === 'income' ? false : patch.shared;
 
     const nextDate = patch.dateISO ?? current.date;
     const nextAccountId = patch.accountId ?? current.accountId;
@@ -701,16 +695,6 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
     const { error } = await supabase.from('transactions').update(row).eq('id', id);
     if (error) throw error;
-
-    if (patch.splits) {
-      await supabase.from('transaction_splits').delete().eq('transaction_id', id);
-      const rows = patch.splits.filter((s) => s.shareCents > 0)
-        .map((s) => ({ transaction_id: id, member_id: s.memberId, share_cents: s.shareCents }));
-      if (rows.length) {
-        const { error: sErr } = await supabase.from('transaction_splits').insert(rows);
-        if (sErr) throw sErr;
-      }
-    }
     await reload();
   };
 
@@ -834,23 +818,10 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
    * Cria/atualiza a transação de uma ocorrência de recorrência.
    * `pending` = valor informado sem pagar.
    * `paidOnISO` = dia da baixa: para fixo de cartão, é ele que decide em qual
-   * fatura (e competência) o lançamento entra. `date` fica na data nominal da
-   * ocorrência (chave estável para casar a ocorrência com a transação).
+   * fatura (e competência) o lançamento entra.
+   * `shared` (default = flag da recorrência) só marca o lançamento como
+   * "gasto em conjunto" — não divide contas.
    */
-  /** Zera e (se `shared`) recria a divisão igual entre os membros de uma transação. */
-  const syncEvenSplits = async (txId: UUID, shared: boolean, amountCents: number) => {
-    await supabase.from('transaction_splits').delete().eq('transaction_id', txId);
-    if (!shared || members.length < 2) return;
-    const parts = splitInstallments(amountCents, members.length);
-    const rows = members
-      .map((m, i) => ({ transaction_id: txId, member_id: m.userId, share_cents: parts[i] }))
-      .filter((r) => r.share_cents > 0);
-    if (rows.length) {
-      const { error } = await supabase.from('transaction_splits').insert(rows);
-      if (error) throw error;
-    }
-  };
-
   const upsertRecurrenceTx = async (
     recurrenceId: UUID, month: number, year: number,
     amountCents: number, memberId: UUID | null, status: TxStatus,
@@ -888,7 +859,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     const chargeISO = paidOnISO ?? dueISO;
     // cartão: fatura/competência seguem o dia da baixa; senão competência = mês da ocorrência
     const ref = onCard ? refFor(chargeISO, account) : { refMonth: month + 1, refYear: year };
-    const applyShared = (shared ?? rec.shared) && nextStatus === 'cleared';
+    const isShared = rec.kind === 'expense' && (shared ?? rec.shared) === true;
 
     // cartão: se a fatura-alvo já está fechada/paga, o trigger do banco barra o
     // lançamento — devolve um erro claro em vez da exceção crua.
@@ -925,7 +896,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     const cashDateISO = nextStatus === 'cleared' ? chargeISO : dueISO;
 
     if (existing) {
-      const patch: Record<string, unknown> = { amount_cents: amountCents, status: nextStatus };
+      const patch: Record<string, unknown> = { amount_cents: amountCents, status: nextStatus, shared: isShared };
       if (nextStatus === 'cleared') { patch.member_id = memberId; patch.date = cashDateISO; }
       if (overrideAcc && !onCard) patch.account_id = account.id;
       if (paidOnISO) {
@@ -934,26 +905,24 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
         if (onCard) patch.card_invoice_id = await ensureInvoice(account, chargeISO);
       }
       await supabase.from('transactions').update(patch).eq('id', existing.id);
-      await syncEvenSplits(existing.id, applyShared, amountCents);
       await reload();
       return;
     }
 
     const invoiceId = onCard ? await ensureInvoice(account, chargeISO) : null;
-    const { data, error } = await supabase.from('transactions').insert({
+    const { error } = await supabase.from('transactions').insert({
       wallet_id: wid, account_id: account.id, kind: rec.kind, amount_cents: amountCents,
       date: cashDateISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: nextStatus,
       description: rec.description, category_id: rec.categoryId,
       member_id: nextStatus === 'cleared' ? memberId : null,
       recurrence_id: rec.id, occ_month: month + 1, occ_year: year,
-      card_invoice_id: invoiceId, created_by: userId,
-    }).select('id').single();
+      card_invoice_id: invoiceId, shared: isShared, created_by: userId,
+    });
     if (error) {
       // corrida perdida contra outra baixa da mesma ocorrência: só recarrega
       if (error.code === '23505') { await reload(); return; }
       throw error;
     }
-    if (applyShared) await syncEvenSplits(data.id, true, amountCents);
     await reload();
   };
 
@@ -1152,23 +1121,25 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       .sort((a, b) => a.recurrence.day - b.recurrence.day);
   }, [recurrences, transactions, accounts]);
 
+  // Gasto individual do mês (competência): despesas NÃO compartilhadas, por quem
+  // pagou. As compartilhadas ficam de fora — vão para jointSpendCents.
   const spendByMember = useCallback((month: number, year: number): MemberSpend[] => {
-    const cardIds = new Set(cardsMemo.map((c) => c.id));
     const totals: Record<string, number> = {};
     for (const t of transactions) {
-      if (t.kind !== 'expense' || t.status !== 'cleared') continue;
+      if (t.kind !== 'expense' || t.status !== 'cleared' || t.shared) continue;
       if (t.refMonth !== month + 1 || t.refYear !== year) continue;
-      if (t.splits.length > 0) {
-        // gasto compartilhado: cada membro carrega a sua parte
-        for (const s of t.splits) totals[s.memberId] = (totals[s.memberId] ?? 0) + s.shareCents;
-      } else if (t.memberId) {
-        totals[t.memberId] = (totals[t.memberId] ?? 0) + t.amountCents;
-      }
+      if (t.memberId) totals[t.memberId] = (totals[t.memberId] ?? 0) + t.amountCents;
     }
     return members
       .map((m) => ({ memberId: m.userId, totalCents: totals[m.userId] ?? 0 }))
       .sort((a, b) => b.totalCents - a.totalCents);
-  }, [transactions, members, cardsMemo]);
+  }, [transactions, members]);
+
+  // Total gasto "em conjunto" no mês (despesas marcadas como compartilhadas).
+  const jointSpendCents = useCallback((month: number, year: number) => transactions
+    .filter((t) => t.kind === 'expense' && t.status === 'cleared' && t.shared
+      && t.refMonth === month + 1 && t.refYear === year)
+    .reduce((s, t) => s + t.amountCents, 0), [transactions]);
 
   const isPeriodLocked = useCallback(
     (month: number, year: number) => periodLocks.some((l) => l.refMonth === month + 1 && l.refYear === year),
@@ -1288,7 +1259,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     categoryName, memberName, accountName,
     accountBalanceCents, cashBalanceCents, cardCommittedCents, cardAvailableCents,
     invoiceView, monthTransactionsByDate, monthTransactionsByRef, monthSummary, recurrenceOccurrences,
-    spendByMember, isPeriodLocked, wouldOverdraw, wouldExceedLimit,
+    spendByMember, jointSpendCents, isPeriodLocked, wouldOverdraw, wouldExceedLimit,
     totalInvestedCents, investmentMonthlyYieldCents, memberBalances, settlements,
     updateProfile, createWallet, renameWallet, deleteWallet, addMemberByEmail, removeMember,
     addAccount, updateAccount, deleteAccount,

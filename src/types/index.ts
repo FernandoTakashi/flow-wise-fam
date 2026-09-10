@@ -127,6 +127,8 @@ export interface Transaction {
   installmentOf?: number | null;
   transferPeerId?: UUID | null;
   note?: string | null;
+  /** gasto feito em conjunto pelos membros — marcador para o resumo, não divide contas */
+  shared: boolean;
   createdBy?: UUID | null;
   /** origem do lançamento: app, bot (telegram/whatsapp), importação, débito automático */
   source: TxSource;

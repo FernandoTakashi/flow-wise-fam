@@ -18,7 +18,7 @@ import type { OccurrenceView } from '@/contexts/FinanceContext';
 export default function Dashboard() {
   const {
     loading, selectedMonth, today, monthSummary, cards, invoiceView, recurrenceOccurrences,
-    spendingAccounts, members, memberName, userId, isPeriodLocked, spendByMember,
+    spendingAccounts, members, memberName, userId, isPeriodLocked, spendByMember, jointSpendCents,
     payCardInvoice, markRecurrenceOccurrence, memberBalances,
     accountBalanceCents, cardAvailableCents,
   } = useFinance();
@@ -49,7 +49,14 @@ export default function Dashboard() {
     [cards, invoiceView, month, year],
   );
   const balances = useMemo(() => memberBalances().filter((b) => b.netCents !== 0), [memberBalances]);
-  const ranking = useMemo(() => spendByMember(month, year).filter((r) => r.totalCents > 0), [spendByMember, month, year]);
+  const ranking = useMemo(() => {
+    const indiv = spendByMember(month, year)
+      .filter((r) => r.totalCents > 0)
+      .map((r) => ({ key: r.memberId, label: memberName(r.memberId), totalCents: r.totalCents }));
+    const joint = jointSpendCents(month, year);
+    const all = joint > 0 ? [...indiv, { key: '__joint__', label: 'Em conjunto', totalCents: joint }] : indiv;
+    return all.sort((a, b) => b.totalCents - a.totalCents);
+  }, [spendByMember, jointSpendCents, memberName, month, year]);
   const rankTop = ranking[0]?.totalCents ?? 0;
 
   const aPagarTotal = pendingExpenses.reduce((s, o) => s + o.amountCents, 0)
@@ -146,7 +153,7 @@ export default function Dashboard() {
     const bits: string[] = [o.recurrence.day <= 0 ? 'vence no último dia' : `vence dia ${o.recurrence.day}`];
     if (o.onCard) bits.push('no cartão');
     if (o.status === 'pending') bits.push('conta chegou');
-    if (o.recurrence.shared) bits.push('compartilhado');
+    if (o.recurrence.shared) bits.push('em conjunto');
     if (!income && o.recurrence.autopay) bits.push('débito automático');
     return `Fixo · ${bits.join(' · ')}`;
   };
@@ -208,6 +215,7 @@ export default function Dashboard() {
               valueSub={view.projectedCents > view.postedCents ? `prev. ${formatBRL(view.projectedCents)}` : undefined}
               button={{
                 label: 'Pagar',
+                disabled: locked,
                 onClick: () => { setPayCard({ cardId: card.id, total: view.postedCents }); setPayFrom(spendingAccounts[0]?.id ?? ''); setPayer(userId ?? ''); },
               }}
             />
@@ -277,9 +285,9 @@ export default function Dashboard() {
               {ranking.length > 0 && (
                 <div className="space-y-3 px-[22px] pb-4">
                   {ranking.map((r, i) => (
-                    <div key={r.memberId} className="space-y-1.5">
+                    <div key={r.key} className="space-y-1.5">
                       <div className="flex justify-between">
-                        <span className="text-[13px] font-semibold text-foreground">{memberName(r.memberId)}</span>
+                        <span className="text-[13px] font-semibold text-foreground">{r.label}</span>
                         <span className="text-[13px] tabular-nums text-muted-foreground">{formatBRL(r.totalCents)}</span>
                       </div>
                       <div className="h-[7px] overflow-hidden rounded-full bg-[#F1E8E1]">
@@ -383,7 +391,7 @@ export default function Dashboard() {
             {fixo?.recurrence.kind === 'expense' && members.length > 1 && (
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={fixoShared} onChange={(e) => setFixoShared(e.target.checked)} />
-                Gasto compartilhado (divide igual entre os {members.length} membros)
+                Gasto em conjunto (aparece em “em conjunto”, não no total individual)
               </label>
             )}
           </div>

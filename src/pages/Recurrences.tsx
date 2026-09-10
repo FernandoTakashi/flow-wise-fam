@@ -173,7 +173,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
   const catsForKind = activeCategories.filter((c) => c.kind === form.kind);
 
   const newBtn = (
-    <Button onClick={openNew} size={embedded ? 'sm' : 'default'}>
+    <Button onClick={openNew} disabled={locked} size={embedded ? 'sm' : 'default'}>
       <Plus className="mr-2 h-4 w-4" /> {tab === 'income' ? 'Nova receita fixa' : 'Novo gasto fixo'}
     </Button>
   );
@@ -327,7 +327,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
             {tab === 'expense' && members.length > 1 && (
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={markShared} onChange={(e) => setMarkShared(e.target.checked)} />
-                Gasto compartilhado (divide igual entre os {members.length} membros)
+                Gasto em conjunto (aparece em “em conjunto”, não no total individual)
               </label>
             )}
           </div>
@@ -481,9 +481,9 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
               <label className="flex items-start gap-3 rounded-lg border p-3">
                 <Switch checked={form.shared} onCheckedChange={(v) => setForm((f) => ({ ...f, shared: v }))} className="mt-0.5" />
                 <span className="text-sm">
-                  <span className="font-medium">Gasto compartilhado</span>
+                  <span className="font-medium">Gasto em conjunto</span>
                   <span className="block text-[11px] text-muted-foreground">
-                    Ao pagar, divide igualmente entre os {members.length} membros da carteira (aluguel, internet…).
+                    Conta dos dois (aluguel, internet…). Ao pagar, entra em “em conjunto” no resumo, não no total individual. Não divide contas.
                   </span>
                 </span>
               </label>

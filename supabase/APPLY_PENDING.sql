@@ -234,4 +234,14 @@ create trigger trg_transactions_spend_limits
   before insert or update on public.transactions
   for each row execute function public.enforce_spend_limits();
 
+-- 20260910000005 — "gasto compartilhado" vira marcador ("foi dos dois juntos"),
+-- não gera mais divisão automática (acerto de contas fica como feature separada)
+alter table public.transactions
+  add column if not exists shared boolean not null default false;
+update public.transactions
+   set shared = true
+ where shared = false
+   and id in (select distinct transaction_id from public.transaction_splits);
+delete from public.transaction_splits;
+
 commit;

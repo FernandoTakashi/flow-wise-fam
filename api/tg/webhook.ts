@@ -114,7 +114,7 @@ async function onMessage(msg: TgMessage) {
   const tipo = e.kind === 'income' ? '📥 Entrada' : '🧾 Saída';
   const extra = [
     e.installments && e.installments > 1 ? `${e.installments}×` : null,
-    e.shared ? 'dividido' : null,
+    e.shared ? 'em conjunto' : null,
   ].filter(Boolean).join(' · ');
 
   await sendMessage(chatId,

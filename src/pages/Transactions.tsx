@@ -123,12 +123,6 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
     && wouldExceedLimit(form.accountId, form.amountCents);
 
   const resetForm = () => { setForm({ ...emptyForm(today), kind }); setEditing(null); setShowForm(false); };
-  const evenShares = (total: number) => {
-    const ids = members.map((m) => m.userId);
-    if (ids.length === 0) return [] as { memberId: string; shareCents: number }[];
-    const parts = splitInstallments(total, ids.length);
-    return ids.map((id, i) => ({ memberId: id, shareCents: parts[i] }));
-  };
   const openNew = () => {
     setForm({ ...emptyForm(today), kind, accountId: spendingAccounts[0]?.id ?? accounts[0]?.id ?? '', memberId: userId ?? '' });
     setEditing(null); setShowForm(true);
@@ -139,7 +133,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
       kind: t.kind === 'income' ? 'income' : 'expense', accountId: t.accountId, amountCents: t.amountCents,
       dateISO: t.date, refMonth: t.refMonth, refYear: t.refYear, refAuto: false,
       categoryId: t.categoryId ?? '', memberId: t.memberId ?? '', description: t.description,
-      installments: '1', installmentStart: '1', splitOn: t.splits.length > 0,
+      installments: '1', installmentStart: '1', splitOn: t.shared,
     });
     setShowForm(true);
   };
@@ -153,7 +147,6 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
     e.preventDefault();
     if (!form.accountId || form.amountCents <= 0) { toast({ title: 'Preencha conta e valor', variant: 'destructive' }); return; }
     const shared = form.kind === 'expense' && form.splitOn && members.length > 1;
-    const splits = shared ? evenShares(form.amountCents) : undefined;
     setBusy(true);
     try {
       if (editing) {
@@ -161,7 +154,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
           accountId: form.accountId, amountCents: form.amountCents, dateISO: form.dateISO,
           refMonth: form.refMonth, refYear: form.refYear,
           categoryId: form.categoryId || null, memberId: form.memberId || null,
-          description: form.description, splits: shared ? splits : [],
+          description: form.description, shared,
         });
         toast({ title: 'Lançamento atualizado' });
       } else {
@@ -169,7 +162,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
           kind: form.kind, accountId: form.accountId, amountCents: form.amountCents, dateISO: form.dateISO,
           refMonth: form.refAuto ? undefined : form.refMonth, refYear: form.refAuto ? undefined : form.refYear,
           categoryId: form.categoryId || null, memberId: form.memberId || null, description: form.description,
-          installments: nInst, installmentStart: parseInt(form.installmentStart, 10) || 1, splits,
+          installments: nInst, installmentStart: parseInt(form.installmentStart, 10) || 1, shared,
         });
         toast({ title: 'Lançamento registrado' });
       }
@@ -214,7 +207,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
             className="h-10 w-full rounded-[11px] border border-border bg-card pl-10 pr-3 text-[13.5px] text-foreground outline-none placeholder:text-[#A9968C] focus:border-primary"
           />
         </div>
-        <Button onClick={openNew} className="shrink-0"><Plus className="mr-2 h-4 w-4" /> {newLabel}</Button>
+        <Button onClick={openNew} disabled={locked} className="shrink-0"><Plus className="mr-2 h-4 w-4" /> {newLabel}</Button>
       </div>
 
       {rows.length === 0 ? (
@@ -243,28 +236,32 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                     {t.installmentOf && t.installmentOf > 1 && (
                       <span className="shrink-0 rounded-full border border-[#E2D7CF] px-1.5 py-px text-[10.5px] font-bold text-[#7E6E66]">{t.installmentNo}/{t.installmentOf}</span>
                     )}
-                    {t.splits.length > 0 && <Users className="h-[15px] w-[15px] shrink-0 text-accent" />}
+                    {t.shared && <Users className="h-[15px] w-[15px] shrink-0 text-accent" />}
                     {t.status === 'pending' && (
                       <span className="shrink-0 rounded-full bg-[#F4EDE7] px-1.5 py-px text-[10.5px] font-bold text-[#8A6A57]">conta chegou</span>
                     )}
                   </span>
                   <span className="truncate text-[12.5px] text-[#5C4C45]">{accountName(t.accountId)}</span>
                   <span className="truncate text-[12.5px] text-[#5C4C45]">{t.categoryId ? categoryName(t.categoryId) : '—'}</span>
-                  <span className="truncate text-[12.5px] text-[#5C4C45]">{t.memberId ? memberName(t.memberId).split(' ')[0] : '—'}</span>
+                  <span className="truncate text-[12.5px] text-[#5C4C45]">
+                    {t.shared ? 'Em conjunto' : t.memberId ? memberName(t.memberId).split(' ')[0] : '—'}
+                  </span>
                   <span className={cn('text-right text-[14px] font-bold tabular-nums', valClass)}>{sign}{formatBRL(t.amountCents)}</span>
                   <span className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                    {t.kind !== 'transfer' && (
+                    {!locked && t.kind !== 'transfer' && (
                       <button type="button" onClick={() => openEdit(t)} className="rounded p-1 text-muted-foreground hover:text-foreground">
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                     )}
-                    <ConfirmDialog
-                      title={t.kind === 'transfer' ? 'Estornar pagamento de fatura?' : 'Excluir lançamento?'}
-                      description={t.kind === 'transfer' ? 'A fatura volta a ficar em aberto.' : 'Essa ação não pode ser desfeita.'}
-                      confirmLabel={t.kind === 'transfer' ? 'Estornar' : 'Excluir'}
-                      onConfirm={() => deleteTransaction(t.id)}
-                      trigger={<button type="button" className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>}
-                    />
+                    {!locked && (
+                      <ConfirmDialog
+                        title={t.kind === 'transfer' ? 'Estornar pagamento de fatura?' : 'Excluir lançamento?'}
+                        description={t.kind === 'transfer' ? 'A fatura volta a ficar em aberto.' : 'Essa ação não pode ser desfeita.'}
+                        confirmLabel={t.kind === 'transfer' ? 'Estornar' : 'Excluir'}
+                        onConfirm={() => deleteTransaction(t.id)}
+                        trigger={<button type="button" className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>}
+                      />
+                    )}
                   </span>
                 </div>
               );
@@ -293,24 +290,28 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11.5px] text-[#7E6E66]">
                     <span>{formatDayMonth(t.date)}</span><span>·</span><span>{accountName(t.accountId)}</span>
                     {t.categoryId && <><span>·</span><span>{categoryName(t.categoryId)}</span></>}
-                    {t.memberId && <><span>·</span><span>{memberName(t.memberId).split(' ')[0]}</span></>}
+                    {t.shared
+                      ? <><span>·</span><span>em conjunto</span></>
+                      : t.memberId && <><span>·</span><span>{memberName(t.memberId).split(' ')[0]}</span></>}
                     {t.installmentOf && t.installmentOf > 1 && <span>· {t.installmentNo}/{t.installmentOf}</span>}
-                    {t.splits.length > 0 && <Users className="h-3.5 w-3.5 text-accent" />}
+                    {t.shared && <Users className="h-3.5 w-3.5 text-accent" />}
                   </div>
-                  <div className="mt-2 flex gap-2">
-                    {t.kind !== 'transfer' && (
-                      <Button variant="outline" size="sm" className="h-8 flex-1" onClick={() => openEdit(t)}>
-                        <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
-                      </Button>
-                    )}
-                    <ConfirmDialog
-                      title={t.kind === 'transfer' ? 'Estornar pagamento de fatura?' : 'Excluir lançamento?'}
-                      description={t.kind === 'transfer' ? 'A fatura volta a ficar em aberto.' : 'Essa ação não pode ser desfeita.'}
-                      confirmLabel={t.kind === 'transfer' ? 'Estornar' : 'Excluir'}
-                      onConfirm={() => deleteTransaction(t.id)}
-                      trigger={<Button variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>}
-                    />
-                  </div>
+                  {!locked && (
+                    <div className="mt-2 flex gap-2">
+                      {t.kind !== 'transfer' && (
+                        <Button variant="outline" size="sm" className="h-8 flex-1" onClick={() => openEdit(t)}>
+                          <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
+                        </Button>
+                      )}
+                      <ConfirmDialog
+                        title={t.kind === 'transfer' ? 'Estornar pagamento de fatura?' : 'Excluir lançamento?'}
+                        description={t.kind === 'transfer' ? 'A fatura volta a ficar em aberto.' : 'Essa ação não pode ser desfeita.'}
+                        confirmLabel={t.kind === 'transfer' ? 'Estornar' : 'Excluir'}
+                        onConfirm={() => deleteTransaction(t.id)}
+                        trigger={<Button variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>}
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -444,9 +445,9 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                 <input type="checkbox" className="mt-1" checked={form.splitOn}
                   onChange={(e) => setForm((f) => ({ ...f, splitOn: e.target.checked }))} />
                 <span className="text-sm">
-                  <span className="flex items-center gap-1.5 font-medium"><Users className="h-4 w-4" /> Gasto compartilhado</span>
+                  <span className="flex items-center gap-1.5 font-medium"><Users className="h-4 w-4" /> Gasto em conjunto</span>
                   <span className="block text-[11px] text-muted-foreground">
-                    Divide igualmente entre os {members.length} membros da carteira — entra no acerto de contas em vez de contar tudo para uma pessoa.
+                    Foi um gasto dos dois juntos. No resumo aparece em “em conjunto”, sem entrar no total individual de ninguém. Não divide contas.
                   </span>
                 </span>
               </label>
