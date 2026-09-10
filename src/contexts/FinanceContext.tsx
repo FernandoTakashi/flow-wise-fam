@@ -805,7 +805,21 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     const wid = requireWallet();
     const rec = recurrences.find((r) => r.id === recurrenceId);
     if (!rec) throw new Error('Recorrência não encontrada.');
-    const existing = transactions.find((t) => t.recurrenceId === recurrenceId && isInMonth(t.date, month, year));
+    const dueISO = recurrenceDueISO(year, month, rec.day);
+
+    // Fonte da verdade é o banco: o estado local pode estar defasado logo após
+    // um desfazer/refazer, e aí uma 2ª transação era criada para a mesma
+    // ocorrência (gasto fixo contado duas vezes). A ocorrência do mês é
+    // identificada por recurrence_id + vencimento (date).
+    const { data: existingRows, error: exErr } = await supabase
+      .from('transactions')
+      .select('id, status')
+      .eq('recurrence_id', recurrenceId)
+      .eq('date', dueISO)
+      .order('created_at')
+      .limit(1);
+    if (exErr) throw exErr;
+    const existing = existingRows?.[0] ?? null;
     // nunca rebaixa uma ocorrência já paga para pendente
     const nextStatus: TxStatus = existing?.status === 'cleared' ? 'cleared' : status;
 
@@ -816,7 +830,6 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       ?? spendingAccountsMemo[0];
     if (!account) throw new Error('Defina uma forma de pagamento para esta recorrência (Fixos → editar).');
     const onCard = account.kind === 'card';
-    const dueISO = recurrenceDueISO(year, month, rec.day);
     const chargeISO = paidOnISO ?? dueISO;
     // cartão: fatura/competência seguem o dia da baixa; senão competência = mês da ocorrência
     const ref = onCard ? refFor(chargeISO, account) : { refMonth: month + 1, refYear: year };
@@ -845,7 +858,11 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       member_id: nextStatus === 'cleared' ? memberId : null,
       recurrence_id: rec.id, card_invoice_id: invoiceId, created_by: userId,
     }).select('id').single();
-    if (error) throw error;
+    if (error) {
+      // corrida perdida contra outra baixa da mesma ocorrência: só recarrega
+      if (error.code === '23505') { await reload(); return; }
+      throw error;
+    }
     if (applyShared) await syncEvenSplits(data.id, true, amountCents);
     await reload();
   };
@@ -857,9 +874,13 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     upsertRecurrenceTx(recurrenceId, month, year, amountCents, null, 'pending');
 
   const unmarkRecurrenceOccurrence: FinanceApi['unmarkRecurrenceOccurrence'] = async (recurrenceId, month, year) => {
-    const existing = transactions.find((t) => t.recurrenceId === recurrenceId && isInMonth(t.date, month, year));
-    if (!existing) return;
-    const { error } = await supabase.from('transactions').delete().eq('id', existing.id);
+    const rec = recurrences.find((r) => r.id === recurrenceId);
+    if (!rec) return;
+    const dueISO = recurrenceDueISO(year, month, rec.day);
+    // apaga direto no banco por chave da ocorrência (recurrence_id + vencimento),
+    // sem depender do estado local — e leva junto qualquer duplicata remanescente
+    const { error } = await supabase.from('transactions').delete()
+      .eq('recurrence_id', recurrenceId).eq('date', dueISO);
     if (error) throw error;
     await reload();
   };

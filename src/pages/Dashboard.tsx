@@ -58,22 +58,27 @@ export default function Dashboard() {
   const [fixoDate, setFixoDate] = useState(today);
   const [fixoShared, setFixoShared] = useState(false);
   const [fixoAccount, setFixoAccount] = useState('');
+  const [busy, setBusy] = useState(false);
 
   if (loading) return <DashboardSkeleton />;
 
   const confirmPayCard = async () => {
+    if (busy) return;
     if (!payCard || !payFrom) { toast({ title: 'Escolha a conta de origem', variant: 'destructive' }); return; }
+    setBusy(true);
     try {
       await payCardInvoice(payCard.cardId, month, year, payFrom, today, payer || null);
       toast({ title: 'Fatura paga', description: 'Saldo atualizado.' });
       setPayCard(null);
     } catch (err) {
       toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' });
-    }
+    } finally { setBusy(false); }
   };
 
   const confirmFixo = async () => {
+    if (busy) return;
     if (!fixo || fixoAmount <= 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
+    setBusy(true);
     try {
       await markRecurrenceOccurrence(
         fixo.recurrence.id, month, year, fixoAmount, fixoPayer || null,
@@ -83,7 +88,7 @@ export default function Dashboard() {
       setFixo(null);
     } catch (err) {
       toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' });
-    }
+    } finally { setBusy(false); }
   };
 
   const openFixo = (o: OccurrenceView) => {
@@ -248,8 +253,8 @@ export default function Dashboard() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPayCard(null)}>Cancelar</Button>
-            <Button onClick={confirmPayCard}>Confirmar</Button>
+            <Button variant="outline" onClick={() => setPayCard(null)} disabled={busy}>Cancelar</Button>
+            <Button onClick={confirmPayCard} disabled={busy}>{busy ? 'Confirmando…' : 'Confirmar'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -303,8 +308,8 @@ export default function Dashboard() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFixo(null)}>Cancelar</Button>
-            <Button onClick={confirmFixo}>Confirmar</Button>
+            <Button variant="outline" onClick={() => setFixo(null)} disabled={busy}>Cancelar</Button>
+            <Button onClick={confirmFixo} disabled={busy}>{busy ? 'Confirmando…' : 'Confirmar'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

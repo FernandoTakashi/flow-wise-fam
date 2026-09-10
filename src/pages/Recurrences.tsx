@@ -47,6 +47,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
   const [form, setForm] = useState<FormState>(emptyForm());
   const [editing, setEditing] = useState<Recurrence | null>(null);
   const [busy, setBusy] = useState(false);
+  const [acting, setActing] = useState(false); // baixa/desfazer de ocorrência em andamento
 
   const [mark, setMark] = useState<OccurrenceView | null>(null);
   const [markAmount, setMarkAmount] = useState(0);
@@ -135,37 +136,38 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
     setMarkAccount(recAcc?.id ?? spendingAccounts[0]?.id ?? '');
   };
   const openInform = (o: OccurrenceView) => { setInform(o); setInformAmount(o.amountCents); };
-  const confirmInform = async () => {
+  const runAction = async (fn: () => Promise<unknown>) => {
+    if (acting) return;
+    setActing(true);
+    try { await fn(); }
+    catch (err) { toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' }); }
+    finally { setActing(false); }
+  };
+  const confirmInform = () => {
     if (!inform || informAmount <= 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
-    try {
+    void runAction(async () => {
       await setRecurrenceOccurrenceAmount(inform.recurrence.id, month, year, informAmount);
       toast({ title: 'Valor do mês registrado', description: 'Entra na projeção, mas ainda não saiu do saldo.' });
       setInform(null);
-    } catch (err) {
-      toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' });
-    }
+    });
   };
-  const clearInform = async () => {
+  const clearInform = () => {
     if (!inform) return;
-    try { await unmarkRecurrenceOccurrence(inform.recurrence.id, month, year); setInform(null); }
-    catch (err) { toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' }); }
+    void runAction(async () => { await unmarkRecurrenceOccurrence(inform.recurrence.id, month, year); setInform(null); });
   };
-  const confirmMark = async () => {
+  const confirmMark = () => {
     if (!mark || markAmount <= 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
-    try {
+    void runAction(async () => {
       await markRecurrenceOccurrence(
         mark.recurrence.id, month, year, markAmount, markPayer || null,
         markDate || undefined, markShared, mark.onCard ? undefined : markAccount || undefined,
       );
       toast({ title: mark.onCard ? 'Lançado no cartão' : tab === 'income' ? 'Recebimento confirmado' : 'Pagamento confirmado' });
       setMark(null);
-    } catch (err) {
-      toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' });
-    }
+    });
   };
-  const undo = async (recId: string) => {
-    try { await unmarkRecurrenceOccurrence(recId, month, year); }
-    catch (err) { toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' }); }
+  const undo = (recId: string) => {
+    void runAction(() => unmarkRecurrenceOccurrence(recId, month, year));
   };
 
   const catsForKind = activeCategories.filter((c) => c.kind === form.kind);
@@ -259,7 +261,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
                         <Receipt className="mr-1 h-3.5 w-3.5" /> {informed ? 'Editar valor' : 'Informar valor'}
                       </Button>
                     )}
-                    <Button variant={done ? 'outline' : 'default'} size="sm" className="h-8" disabled={locked}
+                    <Button variant={done ? 'outline' : 'default'} size="sm" className="h-8" disabled={locked || acting}
                       onClick={() => (done ? undo(o.recurrence.id) : openMark(o))}>
                       {done ? <><X className="mr-1 h-3.5 w-3.5" /> Desmarcar</> : <><Check className="mr-1 h-3.5 w-3.5" /> {o.onCard ? 'Lançar' : tab === 'income' ? 'Recebi' : 'Paguei'}</>}
                     </Button>
@@ -330,8 +332,8 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setMark(null)}>Cancelar</Button>
-            <Button onClick={confirmMark}>Confirmar</Button>
+            <Button variant="outline" onClick={() => setMark(null)} disabled={acting}>Cancelar</Button>
+            <Button onClick={confirmMark} disabled={acting}>{acting ? 'Confirmando…' : 'Confirmar'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -355,11 +357,11 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
           </div>
           <DialogFooter className="sm:justify-between">
             {inform?.status === 'pending'
-              ? <Button variant="ghost" className="text-muted-foreground" onClick={clearInform}>Limpar</Button>
+              ? <Button variant="ghost" className="text-muted-foreground" onClick={clearInform} disabled={acting}>Limpar</Button>
               : <span />}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setInform(null)}>Cancelar</Button>
-              <Button onClick={confirmInform}>Salvar</Button>
+              <Button variant="outline" onClick={() => setInform(null)} disabled={acting}>Cancelar</Button>
+              <Button onClick={confirmInform} disabled={acting}>{acting ? 'Salvando…' : 'Salvar'}</Button>
             </div>
           </DialogFooter>
         </DialogContent>

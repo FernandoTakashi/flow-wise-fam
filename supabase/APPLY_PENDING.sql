@@ -115,4 +115,22 @@ $$;
 
 grant execute on function public.create_wallet(text) to authenticated;
 
+-- 20260910000002 — gasto fixo contado duas vezes (dedupe + índice único)
+with ranked as (
+  select id,
+         row_number() over (
+           partition by recurrence_id, date
+           order by (status = 'cleared') desc, created_at asc
+         ) as rn
+  from public.transactions
+  where recurrence_id is not null
+)
+delete from public.transactions t
+using ranked r
+where t.id = r.id and r.rn > 1;
+
+create unique index if not exists transactions_recurrence_occurrence_uniq
+  on public.transactions (recurrence_id, date)
+  where recurrence_id is not null;
+
 commit;
