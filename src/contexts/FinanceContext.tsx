@@ -117,6 +117,25 @@ async function fetchWalletSnapshot(wid: string): Promise<SnapshotRows> {
   }
 }
 
+async function fetchWalletsListDirect(uid: string): Promise<unknown[]> {
+  const { data, error } = await supabase
+    .from('wallet_members')
+    .select('wallet_id, role, wallets(id, name, base_currency, created_by)')
+    .eq('user_id', uid);
+  if (error) throw error;
+  return (data ?? []).map((r) => (r as { wallets?: unknown }).wallets).filter(Boolean);
+}
+
+async function fetchWalletsList(uid: string): Promise<unknown[]> {
+  try {
+    const r = await apiFetch<{ wallets: unknown[] }>('/wallets');
+    return r.wallets ?? [];
+  } catch (e) {
+    console.warn('[finance] /api/v1/wallets indisponível, usando Supabase direto:', (e as Error).message);
+    return fetchWalletsListDirect(uid);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Entrada
 // ---------------------------------------------------------------------------
@@ -301,17 +320,8 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
   // --- carregamento ----------------------------------------------------
   const loadWallets = useCallback(async (uid: UUID): Promise<UUID | null> => {
-    const { data, error } = await supabase
-      .from('wallet_members')
-      .select('wallet_id, role, wallets(id, name, base_currency, created_by)')
-      .eq('user_id', uid);
-    if (error) throw error;
-    const list = (data ?? [])
-      .map((r) => {
-        const w = (r as { wallets?: unknown }).wallets;
-        return w ? mapWallet(w) : null;
-      })
-      .filter((w): w is Wallet => w !== null);
+    const rows = await fetchWalletsList(uid);
+    const list = rows.map(mapWallet);
     setWallets(list);
     const chosen = list.find((w) => w.id === walletIdRef.current)?.id ?? list[0]?.id ?? null;
     setWalletId(chosen);
