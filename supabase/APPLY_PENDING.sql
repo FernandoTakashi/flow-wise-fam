@@ -84,4 +84,35 @@ alter table public.recurrences
 comment on column public.recurrences.installments_total is 'total de parcelas do empréstimo/parcelamento; null = recorrência sem fim';
 comment on column public.recurrences.installments_done  is 'parcelas já pagas antes do cadastro (empréstimo em andamento)';
 
+-- 20260910000001 — criação de carteira num RPC atômico
+-- (corrige "new row violates row-level security policy for table wallets")
+create or replace function public.create_wallet(p_name text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  w   uuid;
+begin
+  if uid is null then
+    raise exception 'not authenticated';
+  end if;
+
+  insert into public.wallets (name, created_by)
+  values (coalesce(nullif(btrim(p_name), ''), 'Nova carteira'), uid)
+  returning id into w;
+
+  insert into public.wallet_members (wallet_id, user_id, role)
+  values (w, uid, 'owner');
+
+  perform public.seed_wallet(w);
+
+  return w;
+end;
+$$;
+
+grant execute on function public.create_wallet(text) to authenticated;
+
 commit;

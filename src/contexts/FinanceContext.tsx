@@ -456,14 +456,13 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
   const createWallet: FinanceApi['createWallet'] = async (name) => {
     if (!userId) throw new Error('Sem sessão.');
-    const { data: w, error } = await supabase.from('wallets').insert({ name, created_by: userId }).select().single();
+    // RPC atômico: cria carteira + associa o dono + faz o seed numa transação só.
+    const { data: id, error } = await supabase.rpc('create_wallet', { p_name: name });
     if (error) throw error;
-    const { error: mErr } = await supabase.from('wallet_members').insert({ wallet_id: w.id, user_id: userId, role: 'owner' });
-    if (mErr) throw mErr;
-    await supabase.rpc('seed_wallet', { w: w.id });
+    const newId = id as UUID;
     await loadWallets(userId);
-    setWallet(w.id);
-    return w.id;
+    setWallet(newId);
+    return newId;
   };
 
   const renameWallet: FinanceApi['renameWallet'] = async (id, name) => {
