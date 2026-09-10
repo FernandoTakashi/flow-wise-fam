@@ -67,8 +67,14 @@ async function onMessage(msg: TgMessage) {
 
   const pending = await takePending(link.id);
   if (pending?.kind === 'adjust_recurrence') {
-    await adjustRecurrence(link, pending.payload as { recId: string; m: number; y: number }, text, chatId);
-    return;
+    const bare = parseBareAmount(text);
+    if (bare) {
+      await adjustRecurrence(link, pending.payload as { recId: string; m: number; y: number }, bare, chatId);
+      return;
+    }
+    // A mensagem não é só um número — o usuário quis fazer outra coisa
+    // (ex.: lançar um gasto novo). Abandona o passo de ajuste e segue o fluxo
+    // normal com o texto original.
   }
 
   const todayISO = spDateISO(new Date());
@@ -91,7 +97,8 @@ async function onMessage(msg: TgMessage) {
     await setPending(link.id, 'adjust_recurrence', { recId: rec.id, m: m + 1, y });
     await sendMessage(chatId,
       `✅ <b>${escapeHtml(rec.description)}</b> ${rec.kind === 'income' ? 'recebido' : 'pago'} (${formatBRL(amount)}).\n` +
-      'Se veio outro valor, responde só com o número.');
+      'Veio outro valor? Toque em <b>Corrigir valor</b> ou responda só com o número.',
+      [[{ text: '✏️ Corrigir valor', callback_data: `adj:${rec.id}:${m + 1}:${y}` }]]);
     return;
   }
 
@@ -99,7 +106,10 @@ async function onMessage(msg: TgMessage) {
   const e = action.entry;
   const bundle = await loadWalletBundle(link.wallet_id);
   const pendingId = await setPending(link.id, 'new_tx', { entry: e });
-  const accName = e.accountId ? bundle.accounts.find((a) => a.id === e.accountId)?.name ?? 'conta padrão' : 'conta padrão';
+  // mostra a MESMA conta que o insertEntry vai usar (conta citada, senão a 1ª de dinheiro)
+  const chosenAcc = (e.accountId && bundle.accounts.find((a) => a.id === e.accountId))
+    || bundle.accounts.find((a) => a.kind !== 'card' && !a.archived);
+  const accName = chosenAcc?.name ?? 'conta principal';
   const catName = e.categoryId ? bundle.categories.find((c) => c.id === e.categoryId)?.name : null;
   const tipo = e.kind === 'income' ? '📥 Entrada' : '🧾 Saída';
   const extra = [
@@ -169,7 +179,8 @@ async function onCallback(cq: TgCallbackQuery) {
       await setPending(link.id, 'adjust_recurrence', { recId: rec.id, m: Number(a2), y: year });
       await sendMessage(chatId,
         `✅ <b>${escapeHtml(rec.description)}</b> marcado como pago (${formatBRL(amount)}).\n` +
-        'Se veio outro valor, responda esta mensagem só com o número certo.');
+        'Veio outro valor? Toque em <b>Corrigir valor</b> ou responda só com o número certo.',
+        [[{ text: '✏️ Corrigir valor', callback_data: `adj:${a1}:${a2}:${a3}` }]]);
     } catch (e) {
       await answerCallback(cq.id, 'Erro');
       await sendMessage(chatId, `❌ ${escapeHtml((e as Error).message)}`);
@@ -189,19 +200,28 @@ async function onCallback(cq: TgCallbackQuery) {
 
 // ---------------------------------------------------------------------------
 async function adjustRecurrence(
-  link: ChatLink, payload: { recId: string; m: number; y: number }, text: string, chatId: number,
+  link: ChatLink, payload: { recId: string; m: number; y: number }, cents: number, chatId: number,
 ) {
-  const cents = toCents(text);
-  if (!cents || cents <= 0) {
-    await sendMessage(chatId, 'Não entendi o valor. Responda só com o número, ex.: <code>243,10</code>.');
-    await setPending(link.id, 'adjust_recurrence', payload); // mantém o passo
-    return;
-  }
   const bundle = await loadWalletBundle(link.wallet_id);
   const rec = bundle.recurrences.find((r) => r.id === payload.recId);
   if (!rec) { await sendMessage(chatId, 'Recorrência não encontrada.'); return; }
   await markOccurrence(bundle, link.wallet_id, rec, payload.m - 1, payload.y, cents, link.user_id, 'telegram');
   await sendMessage(chatId, `✅ Valor de <b>${escapeHtml(rec.description)}</b> ajustado para ${formatBRL(cents)}.`);
+}
+
+/**
+ * Só aceita a mensagem como "valor de ajuste" se ela for essencialmente um
+ * número puro (opcional R$ / "reais"). "15,03 Uber crédito Itaú" NÃO passa —
+ * isso é um lançamento novo, não a correção do fixo que acabou de ser pago.
+ */
+function parseBareAmount(text: string): number | null {
+  const cleaned = text.trim()
+    .replace(/^(r\$|rs)\s*/i, '')
+    .replace(/\s*(reais?|contos?|pilas?|paus?)$/i, '')
+    .trim();
+  if (!/^\d{1,3}(\.\d{3})+(,\d{1,2})?$|^\d+(?:[.,]\d{1,2})?$/.test(cleaned)) return null;
+  const cents = toCents(cleaned);
+  return cents > 0 ? cents : null;
 }
 
 function escapeHtml(s: string): string {
