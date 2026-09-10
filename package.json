@@ -11,6 +11,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "typecheck:api": "tsc --noEmit -p api/tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "db:link": "supabase link --project-ref mmxbwznxtpwjfitdcvej",
     "db:pull": "supabase db pull",
     "db:diff": "supabase db diff",
@@ -89,6 +91,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
-    "vite": "^5.4.19"
+    "vite": "^5.4.19",
+    "vitest": "^2.1.9"
   }
 }

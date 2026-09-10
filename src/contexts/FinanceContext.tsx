@@ -4,10 +4,15 @@ import {
 } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  addMonthsISO, dayOfMonthISO, invoiceDates, isInMonth, isoParts, MONTHS_PT, recurrenceDueISO, resolveInvoiceRef, spDateISO, todayISO,
+  addMonthsISO, invoiceDates, isoParts, MONTHS_PT, recurrenceDueISO, resolveInvoiceRef, spDateISO, todayISO,
 } from '@/lib/dates';
 import { formatBRL, splitInstallments } from '@/lib/money';
 import { newId } from '@/lib/utils';
+import * as core from '@/core';
+import { accountBalance, cardCommitted } from '@/core';
+import type {
+  FinanceData, OccurrenceView, InvoiceView, MemberSpend, MonthSummary,
+} from '@/core';
 import type {
   Account, AccountKind, CardInvoice, Category, CategoryKind, InvoiceStatus, Investment, MemberBalance,
   MonthlyFilter, PeriodLock, Profile, Recurrence, Settlement, Transaction, TxKind, TxStatus, UUID,
@@ -74,25 +79,6 @@ const mapLock = (r: any): PeriodLock => ({
 });
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-// --- saldo / limite (puros; usados nos seletores e na checagem das mutações) --
-function accountBalance(acc: Account, txs: Transaction[], uptoISO: string, excludeId?: string): number {
-  let total = acc.openingBalanceCents;
-  for (const t of txs) {
-    if (t.id === excludeId || t.accountId !== acc.id || t.status !== 'cleared' || t.date > uptoISO) continue;
-    if (t.kind === 'income') total += t.amountCents;
-    else if (t.kind === 'expense') total -= t.amountCents;
-    else total += acc.kind === 'card' ? t.amountCents : -t.amountCents;
-  }
-  return total;
-}
-function cardCommitted(cardId: string, txs: Transaction[], invs: CardInvoice[], excludeId?: string): number {
-  const openIds = new Set(invs.filter((i) => i.accountId === cardId && i.status !== 'paid').map((i) => i.id));
-  return txs
-    .filter((t) => t.id !== excludeId && t.accountId === cardId && t.kind === 'expense'
-      && t.cardInvoiceId && openIds.has(t.cardInvoiceId))
-    .reduce((s, t) => s + t.amountCents, 0);
-}
-
 // ---------------------------------------------------------------------------
 // Entrada
 // ---------------------------------------------------------------------------
@@ -129,44 +115,9 @@ export interface NewInvestment {
   description: string; amountCents: number; yieldRateBps: number; dateISO: string; memberId?: UUID | null;
 }
 
-export interface OccurrenceView {
-  recurrence: Recurrence;
-  dueDateISO: string;
-  txId: UUID | null;
-  status: 'none' | 'pending' | 'paid';
-  amountCents: number;
-  estimatedCents: number;
-  onCard: boolean;
-  /** empréstimo/parcelamento: nº desta parcela e total (null se recorrência sem fim) */
-  installmentNo: number | null;
-  installmentsTotal: number | null;
-}
-export interface InvoiceRow {
-  key: string;
-  description: string;
-  dateISO: string;
-  amountCents: number;
-  type: 'variavel' | 'fixo' | 'previsto';
-  projected: boolean;
-}
-export interface InvoiceView {
-  invoice: CardInvoice | null;
-  status: InvoiceStatus;
-  postedCents: number;      // o que já está lançado na fatura
-  projectedCents: number;   // posted + fixos de cartão ainda não lançados
-  rows: InvoiceRow[];
-}
-export interface MemberSpend { memberId: UUID; totalCents: number }
-export interface MonthSummary {
-  incomeRealizedCents: number;
-  expenseRealizedCents: number;
-  pendingIncomeCents: number;
-  pendingExpenseCents: number;
-  cardBillCents: number;
-  cardOpenCents: number;
-  cashBalanceCents: number;
-  projectedBalanceCents: number;
-}
+// Tipos de leitura vivem em `src/core`; re-exportados para quem importa
+// de '@/contexts/FinanceContext'.
+export type { OccurrenceView, InvoiceRow, InvoiceView, MemberSpend, MonthSummary } from '@/core';
 
 interface FinanceApi {
   loading: boolean;
@@ -296,6 +247,12 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   walletIdRef.current = walletId;
   const skewRef = useRef(0);
   skewRef.current = skewMs;
+
+  // Retrato imutável da carteira — entrada de todos os seletores de `@/core`.
+  const data: FinanceData = useMemo(() => ({
+    transactions, accounts, categories, recurrences, invoices, investments,
+    members, periodLocks, settings, today,
+  }), [transactions, accounts, categories, recurrences, invoices, investments, members, periodLocks, settings, today]);
 
   const serverNow = useCallback(() => new Date(Date.now() + skewRef.current), []);
   const computeToday = useCallback(() => setToday(spDateISO(new Date(Date.now() + skewRef.current))), []);
@@ -726,7 +683,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     const card = accounts.find((a) => a.id === cardId);
     const fromAcc = accounts.find((a) => a.id === fromAccountId);
     if (!fromAcc || fromAcc.kind === 'card') throw new Error('Escolha uma conta de dinheiro para pagar a fatura.');
-    const view = computeInvoiceView(cardId, month, year);
+    const view = core.computeInvoiceView(data, cardId, month, year);
     if (!view.invoice) throw new Error('Não há fatura para este mês.');
     if (view.status === 'paid') throw new Error('Fatura já está paga.');
     if (view.postedCents <= 0) throw new Error('Fatura sem lançamentos.');
@@ -1001,257 +958,56 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     await reload();
   };
 
-  // --- seletores --------------------------------------
-  const spendingAccountsMemo = useMemo(
-    () => accounts.filter((a) => a.kind !== 'card' && !a.archived), [accounts],
-  );
-  const cardsMemo = useMemo(() => accounts.filter((a) => a.kind === 'card' && !a.archived), [accounts]);
+  // --- seletores (finos; a lógica pura vive em `@/core`) --------------
+  const spendingAccountsMemo = useMemo(() => core.spendingAccounts(data), [data]);
+  const cardsMemo = useMemo(() => core.cards(data), [data]);
   const activeCategoriesMemo = useMemo(() => categories.filter((c) => !c.archived), [categories]);
 
   const categoryName = useCallback((id?: UUID | null) => categories.find((c) => c.id === id)?.name ?? '—', [categories]);
   const memberName = useCallback((id?: UUID | null) => members.find((m) => m.userId === id)?.profile?.name ?? '—', [members]);
   const accountName = useCallback((id?: UUID | null) => accounts.find((a) => a.id === id)?.name ?? '—', [accounts]);
 
-  const accountBalanceCents = useCallback((accountId: UUID, uptoISO?: string) => {
-    const acc = accounts.find((a) => a.id === accountId);
-    return acc ? accountBalance(acc, transactions, uptoISO ?? today) : 0;
-  }, [accounts, transactions, today]);
-
-  const cashBalanceCents = useCallback((uptoISO?: string) =>
-    spendingAccountsMemo.reduce((sum, a) => sum + accountBalanceCents(a.id, uptoISO), 0),
-    [spendingAccountsMemo, accountBalanceCents]);
-
-  const cardCommittedCents = useCallback(
-    (cardId: UUID) => cardCommitted(cardId, transactions, invoices),
-    [invoices, transactions],
+  const accountBalanceCents = useCallback(
+    (accountId: UUID, uptoISO?: string) => core.accountBalanceCents(data, accountId, uptoISO), [data],
   );
+  const cashBalanceCents = useCallback((uptoISO?: string) => core.cashBalanceCents(data, uptoISO), [data]);
+  const cardCommittedCents = useCallback((cardId: UUID) => core.cardCommittedCents(data, cardId), [data]);
+  const cardAvailableCents = useCallback((cardId: UUID) => core.cardAvailableCents(data, cardId), [data]);
 
-  const cardAvailableCents = useCallback((cardId: UUID) => {
-    const card = accounts.find((a) => a.id === cardId);
-    return (card?.creditLimitCents ?? 0) - cardCommittedCents(cardId);
-  }, [accounts, cardCommittedCents]);
-
-  /** fixos de cartão previstos que ainda não viraram lançamento nesta fatura */
-  const projectedCardFixos = (cardId: UUID, month: number, year: number) => {
-    const card = accounts.find((a) => a.id === cardId);
-    if (!card) return [] as { recurrence: Recurrence; dueISO: string; amountCents: number }[];
-    const closing = card.closingDay ?? 1;
-    const out: { recurrence: Recurrence; dueISO: string; amountCents: number }[] = [];
-    for (const offset of [0, -1]) {
-      const obl = new Date(year, month + offset, 1);
-      const oM = obl.getMonth(); const oY = obl.getFullYear();
-      const mStart = dayOfMonthISO(oY, oM, 1);
-      const mEnd = dayOfMonthISO(oY, oM + 1, 0);
-      for (const r of recurrences) {
-        if (r.accountId !== cardId || r.kind !== 'expense' || !r.active) continue;
-        if (r.startDate > mEnd || (r.endDate && r.endDate < mStart)) continue;
-        const dueISO = recurrenceDueISO(oY, oM, r.day);
-        const inv = resolveInvoiceRef(dueISO, closing);
-        if (inv.refMonth !== month + 1 || inv.refYear !== year) continue;
-        // já virou lançamento? testa pela âncora da OCORRÊNCIA (oM/oY), não pela
-        // competência da fatura — a baixa pode ter caído em outra fatura.
-        const already = transactions.some((t) => t.recurrenceId === r.id && t.occMonth === oM + 1 && t.occYear === oY);
-        if (already) continue;
-        out.push({ recurrence: r, dueISO, amountCents: r.amountCents });
-      }
-    }
-    return out;
-  };
-
-  const computeInvoiceView = (cardId: UUID, month: number, year: number): InvoiceView => {
-    const refMonth = month + 1;
-    const invoice = invoices.find((i) => i.accountId === cardId && i.refMonth === refMonth && i.refYear === year) ?? null;
-    const posted = invoice
-      ? transactions.filter((t) => t.cardInvoiceId === invoice.id && t.kind === 'expense')
-      : [];
-    const postedCents = posted.reduce((s, t) => s + t.amountCents, 0);
-    const projected = projectedCardFixos(cardId, month, year);
-    const rows: InvoiceRow[] = [
-      ...posted.map((t) => ({
-        key: t.id, description: t.description || '—', dateISO: t.date, amountCents: t.amountCents,
-        type: (t.recurrenceId ? 'fixo' : 'variavel') as InvoiceRow['type'], projected: false,
-      })),
-      ...projected.map((p) => ({
-        key: `proj:${p.recurrence.id}`, description: p.recurrence.description, dateISO: p.dueISO,
-        amountCents: p.amountCents, type: 'previsto' as const, projected: true,
-      })),
-    ].sort((a, b) => (a.dateISO < b.dateISO ? -1 : 1));
-    return {
-      invoice,
-      status: invoice?.status ?? 'open',
-      postedCents,
-      projectedCents: postedCents + projected.reduce((s, p) => s + p.amountCents, 0),
-      rows,
-    };
-  };
-  const invoiceView = useCallback(computeInvoiceView, [invoices, transactions, recurrences, accounts]);
-
+  const invoiceView = useCallback(
+    (cardId: UUID, month: number, year: number): InvoiceView => core.computeInvoiceView(data, cardId, month, year), [data],
+  );
   const monthTransactionsByDate = useCallback(
-    (month: number, year: number) => transactions.filter((t) => isInMonth(t.date, month, year)),
-    [transactions],
+    (month: number, year: number) => core.monthTxByDate(transactions, month, year), [transactions],
   );
   const monthTransactionsByRef = useCallback(
-    (month: number, year: number) => transactions.filter((t) => t.refMonth === month + 1 && t.refYear === year),
-    [transactions],
+    (month: number, year: number) => core.monthTxByRef(transactions, month, year), [transactions],
   );
-
-  const recurrenceOccurrences = useCallback((month: number, year: number): OccurrenceView[] => {
-    const mStart = dayOfMonthISO(year, month, 1);
-    const mEnd = dayOfMonthISO(year, month + 1, 0);
-    return recurrences
-      .filter((r) => r.active && r.startDate <= mEnd && (!r.endDate || r.endDate >= mStart))
-      .map((r) => {
-        const tx = transactions.find((t) => t.recurrenceId === r.id && t.occMonth === month + 1 && t.occYear === year);
-        const acc = r.accountId ? accounts.find((a) => a.id === r.accountId) : null;
-        // parcelamento/empréstimo: nº da parcela = já pagas antes + meses desde o início + 1
-        let installmentNo: number | null = null;
-        if (r.installmentsTotal) {
-          const { y: sy, m: sm } = isoParts(r.startDate);
-          installmentNo = (r.installmentsDone ?? 0) + (year - sy) * 12 + (month - sm) + 1;
-        }
-        return {
-          recurrence: r,
-          dueDateISO: recurrenceDueISO(year, month, r.day),
-          txId: tx?.id ?? null,
-          status: tx ? (tx.status === 'cleared' ? 'paid' : 'pending') : 'none',
-          amountCents: tx?.amountCents ?? r.amountCents,
-          estimatedCents: r.amountCents,
-          onCard: acc?.kind === 'card',
-          installmentNo,
-          installmentsTotal: r.installmentsTotal ?? null,
-        } as OccurrenceView;
-      })
-      // empréstimo já quitado (ou mês antes da 1ª parcela): não gera ocorrência
-      .filter((o) => o.installmentNo == null || (o.installmentNo >= 1 && o.installmentNo <= (o.installmentsTotal ?? 0)))
-      .sort((a, b) => a.recurrence.day - b.recurrence.day);
-  }, [recurrences, transactions, accounts]);
-
-  // Gasto individual do mês (competência): despesas NÃO compartilhadas, por quem
-  // pagou. As compartilhadas ficam de fora — vão para jointSpendCents.
-  const spendByMember = useCallback((month: number, year: number): MemberSpend[] => {
-    const totals: Record<string, number> = {};
-    for (const t of transactions) {
-      if (t.kind !== 'expense' || t.status !== 'cleared' || t.shared) continue;
-      if (t.refMonth !== month + 1 || t.refYear !== year) continue;
-      if (t.memberId) totals[t.memberId] = (totals[t.memberId] ?? 0) + t.amountCents;
-    }
-    return members
-      .map((m) => ({ memberId: m.userId, totalCents: totals[m.userId] ?? 0 }))
-      .sort((a, b) => b.totalCents - a.totalCents);
-  }, [transactions, members]);
-
-  // Total gasto "em conjunto" no mês (despesas marcadas como compartilhadas).
-  const jointSpendCents = useCallback((month: number, year: number) => transactions
-    .filter((t) => t.kind === 'expense' && t.status === 'cleared' && t.shared
-      && t.refMonth === month + 1 && t.refYear === year)
-    .reduce((s, t) => s + t.amountCents, 0), [transactions]);
-
+  const recurrenceOccurrences = useCallback(
+    (month: number, year: number): OccurrenceView[] => core.recurrenceOccurrences(data, month, year), [data],
+  );
+  const spendByMember = useCallback(
+    (month: number, year: number): MemberSpend[] => core.spendByMember(data, month, year), [data],
+  );
+  const jointSpendCents = useCallback(
+    (month: number, year: number) => core.jointSpendCents(data, month, year), [data],
+  );
   const isPeriodLocked = useCallback(
-    (month: number, year: number) => periodLocks.some((l) => l.refMonth === month + 1 && l.refYear === year),
-    [periodLocks],
+    (month: number, year: number) => core.isPeriodLocked(periodLocks, month, year), [periodLocks],
   );
-
-  const wouldOverdraw = useCallback((accountId: UUID, amountCents: number) => {
-    const acc = accounts.find((a) => a.id === accountId);
-    if (!acc || acc.kind === 'card') return false;
-    return accountBalanceCents(accountId) - amountCents < 0;
-  }, [accounts, accountBalanceCents]);
-
-  const wouldExceedLimit = useCallback((cardId: UUID, amountCents: number) => {
-    const card = accounts.find((a) => a.id === cardId);
-    if (card?.kind !== 'card' || card.creditLimitCents == null) return false;
-    return cardCommittedCents(cardId) + amountCents > card.creditLimitCents;
-  }, [accounts, cardCommittedCents]);
-
-  const monthSummary = useCallback((month: number, year: number): MonthSummary => {
-    const cardIds = new Set(cardsMemo.map((c) => c.id));
-    const refTx = transactions.filter((t) => t.refMonth === month + 1 && t.refYear === year);
-
-    const incomeRealizedCents = refTx
-      .filter((t) => t.kind === 'income' && t.status === 'cleared').reduce((s, t) => s + t.amountCents, 0);
-    const directExpenseRealized = refTx
-      .filter((t) => t.kind === 'expense' && t.status === 'cleared' && !cardIds.has(t.accountId))
-      .reduce((s, t) => s + t.amountCents, 0);
-
-    let cardBillCents = 0;
-    let cardOpenCents = 0;
-    let projectedCardCents = 0;
-    for (const card of cardsMemo) {
-      const v = computeInvoiceView(card.id, month, year);
-      cardBillCents += v.postedCents;
-      if (v.status !== 'paid') cardOpenCents += v.postedCents;
-      projectedCardCents += v.projectedCents - v.postedCents;
-    }
-    const cardPaidCents = cardBillCents - cardOpenCents;
-
-    const occ = recurrenceOccurrences(month, year).filter((o) => o.status !== 'paid');
-    const pendingIncomeCents = occ.filter((o) => o.recurrence.kind === 'income').reduce((s, o) => s + o.amountCents, 0);
-    const pendingNonCardExpense = occ
-      .filter((o) => o.recurrence.kind === 'expense' && !o.onCard)
-      .reduce((s, o) => s + o.amountCents, 0);
-    const pendingBoletos = refTx
-      .filter((t) => t.kind === 'expense' && t.status === 'pending' && !cardIds.has(t.accountId) && !t.recurrenceId)
-      .reduce((s, t) => s + t.amountCents, 0);
-
-    const cashBalance = cashBalanceCents();
-    const pendingExpenseCents = pendingNonCardExpense + pendingBoletos + cardOpenCents + projectedCardCents;
-
-    return {
-      incomeRealizedCents,
-      expenseRealizedCents: directExpenseRealized + cardPaidCents,
-      pendingIncomeCents,
-      pendingExpenseCents,
-      cardBillCents,
-      cardOpenCents,
-      cashBalanceCents: cashBalance,
-      projectedBalanceCents: cashBalance + pendingIncomeCents - pendingExpenseCents,
-    };
-  }, [transactions, cardsMemo, recurrenceOccurrences, cashBalanceCents]);
-
-  const totalInvestedCents = useCallback(
-    () => (settings?.initialInvestmentCents ?? 0) + investments.reduce((s, i) => s + i.amountCents, 0),
-    [settings, investments],
+  const wouldOverdraw = useCallback(
+    (accountId: UUID, amountCents: number) => core.wouldOverdraw(data, accountId, amountCents), [data],
   );
-  const investmentMonthlyYieldCents = useCallback(
-    () => investments.reduce((s, i) => s + Math.round(i.amountCents * (i.yieldRateBps / 10000)), 0),
-    [investments],
+  const wouldExceedLimit = useCallback(
+    (cardId: UUID, amountCents: number) => core.wouldExceedLimit(data, cardId, amountCents), [data],
   );
-
-  // "Quem deve a quem" — SÓ despesas compartilhadas (com splits), acumulado de
-  // todos os tempos. Diferente de spendByMember, que é "quanto cada um gastou no
-  // mês" (por competência, contando também gastos 100% individuais via memberId).
-  const memberBalances = useCallback((): MemberBalance[] => {
-    const net: Record<UUID, number> = {};
-    members.forEach((m) => { net[m.userId] = 0; });
-    transactions
-      .filter((t) => t.kind === 'expense' && t.status === 'cleared' && t.memberId && t.splits.length > 0)
-      .forEach((t) => {
-        const payer = t.memberId as UUID;
-        t.splits.forEach((s) => {
-          if (s.memberId === payer) return;
-          net[payer] = (net[payer] ?? 0) + s.shareCents;
-          net[s.memberId] = (net[s.memberId] ?? 0) - s.shareCents;
-        });
-      });
-    return Object.entries(net).map(([memberId, netCents]) => ({ memberId, netCents }));
-  }, [members, transactions]);
-
-  const settlements = useCallback((): Settlement[] => {
-    const bal = memberBalances().map((b) => ({ ...b }));
-    const debtors = bal.filter((b) => b.netCents < 0).sort((a, b) => a.netCents - b.netCents);
-    const creditors = bal.filter((b) => b.netCents > 0).sort((a, b) => b.netCents - a.netCents);
-    const out: Settlement[] = [];
-    let i = 0; let j = 0;
-    while (i < debtors.length && j < creditors.length) {
-      const amount = Math.min(-debtors[i].netCents, creditors[j].netCents);
-      if (amount > 0) out.push({ fromId: debtors[i].memberId, toId: creditors[j].memberId, amountCents: amount });
-      debtors[i].netCents += amount;
-      creditors[j].netCents -= amount;
-      if (debtors[i].netCents === 0) i += 1;
-      if (creditors[j].netCents === 0) j += 1;
-    }
-    return out;
-  }, [memberBalances]);
+  const monthSummary = useCallback(
+    (month: number, year: number): MonthSummary => core.monthSummary(data, month, year), [data],
+  );
+  const totalInvestedCents = useCallback(() => core.totalInvestedCents(data), [data]);
+  const investmentMonthlyYieldCents = useCallback(() => core.investmentMonthlyYieldCents(data), [data]);
+  const memberBalances = useCallback((): MemberBalance[] => core.memberBalances(data), [data]);
+  const settlements = useCallback((): Settlement[] => core.settlements(data), [data]);
 
   const wallet = wallets.find((w) => w.id === walletId) ?? null;
   const role = members.find((m) => m.userId === userId)?.role ?? null;
