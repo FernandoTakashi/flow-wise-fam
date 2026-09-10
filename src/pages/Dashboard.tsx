@@ -20,6 +20,7 @@ export default function Dashboard() {
     loading, selectedMonth, today, monthSummary, cards, invoiceView, recurrenceOccurrences,
     spendingAccounts, members, memberName, userId, isPeriodLocked, spendByMember,
     payCardInvoice, markRecurrenceOccurrence, memberBalances,
+    accountBalanceCents, cardCommittedCents, cardAvailableCents,
   } = useFinance();
   const { toast } = useToast();
   const { month, year } = selectedMonth;
@@ -186,6 +187,43 @@ export default function Dashboard() {
               />
             ))}
           </ListCard>
+
+          {(spendingAccounts.length > 0 || cards.length > 0) && (
+            <div className="overflow-hidden rounded-[18px] border border-border bg-card">
+              <div className="flex items-baseline justify-between px-[22px] pb-3 pt-[18px]">
+                <div>
+                  <div className="font-display text-[15.5px] font-bold text-foreground">Contas</div>
+                  <div className="text-[12px] text-muted-foreground">Saldo de hoje</div>
+                </div>
+                <span className="text-[15px] font-bold tabular-nums text-foreground">
+                  {formatBRL(spendingAccounts.reduce((s, a) => s + accountBalanceCents(a.id), 0))}
+                </span>
+              </div>
+              <div className="border-t border-[#F1E8E1]">
+                {spendingAccounts.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between px-[22px] py-2.5 text-[13px]">
+                    <span className="truncate text-foreground">{a.name}</span>
+                    <span className={cn('shrink-0 tabular-nums font-semibold',
+                      accountBalanceCents(a.id) < 0 ? 'text-[#C8452F]' : 'text-foreground')}>
+                      {formatBRL(accountBalanceCents(a.id))}
+                    </span>
+                  </div>
+                ))}
+                {cards.map((c) => {
+                  const avail = cardAvailableCents(c.id);
+                  return (
+                    <div key={c.id} className="flex items-center justify-between px-[22px] py-2.5 text-[13px]">
+                      <span className="truncate text-muted-foreground">{c.name} <span className="text-[11px]">· cartão</span></span>
+                      <span className="shrink-0 text-right tabular-nums text-muted-foreground">
+                        {formatBRL(cardCommittedCents(c.id))} usado
+                        {c.creditLimitCents != null && <span className="text-[11px]"> · {formatBRL(avail)} livre</span>}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {(ranking.length > 0 || balances.length > 0) && (
             <div className="overflow-hidden rounded-[18px] border border-border bg-card">
