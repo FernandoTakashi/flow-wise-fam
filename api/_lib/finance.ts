@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { admin } from './supabaseAdmin.js';
 import {
-  addMonthsISO, dayOfMonthISO, invoiceDates, isoParts, recurrenceDueISO, resolveInvoiceRef, splitInstallments,
+  addMonthsISO, invoiceDates, isoParts, recurrenceDueISO, resolveInvoiceRef, splitInstallments,
 } from './shared.js';
 
 async function syncEvenSplits(txId: string, memberIds: string[], amountCents: number): Promise<void> {
@@ -143,10 +143,6 @@ export async function insertEntry(
   return { accountName: account.name, onCard, parts: n };
 }
 
-function monthRange(month: number, year: number): { start: string; end: string } {
-  return { start: dayOfMonthISO(year, month, 1), end: dayOfMonthISO(year, month + 1, 0) };
-}
-
 /**
  * Marca (ou ajusta) a ocorrência de uma recorrência num mês como paga/recebida.
  * `month` é 0-11. Espelha markRecurrenceOccurrence do FinanceContext.
@@ -157,24 +153,29 @@ export async function markOccurrence(
   paidOnISO?: string, shared?: boolean,
 ): Promise<{ created: boolean; onCard: boolean }> {
   const db = admin();
-  const { start, end } = monthRange(month, year);
 
   const spending = bundle.accounts.filter((a) => a.kind !== 'card' && !a.archived);
   const account = (rec.account_id && bundle.accounts.find((a) => a.id === rec.account_id)) || spending[0];
-  if (!account) throw new Error('Defina uma conta padrão para esta recorrência.');
+  if (!account) throw new Error('Escolha uma forma de pagamento para esta recorrência.');
   const onCard = account.kind === 'card';
 
-  const dueISO = recurrenceDueISO(year, month, rec.day);           // chave estável da ocorrência
+  const dueISO = recurrenceDueISO(year, month, rec.day);
   const chargeISO = paidOnISO ?? dueISO;                            // dia da baixa
   const ref = onCard ? refFor(chargeISO, account) : { refMonth: month + 1, refYear: year };
+  // data-caixa = dia da baixa (não o vencimento): senão um recebimento marcado
+  // antes do dia de vencimento fica com data futura e some do saldo/projeção.
+  const cashDateISO = chargeISO;
 
   const applyShared = (shared ?? rec.shared) && rec.kind === 'expense';
 
+  // âncora estável da ocorrência: recurrence_id + occ_month/occ_year
   const existing = await db.from('transactions').select('id, status')
-    .eq('recurrence_id', rec.id).gte('date', start).lte('date', end).maybeSingle();
+    .eq('recurrence_id', rec.id).eq('occ_month', month + 1).eq('occ_year', year).maybeSingle();
 
   if (existing.data) {
-    const patch: Record<string, unknown> = { amount_cents: amountCents, member_id: memberId, status: 'cleared', source };
+    const patch: Record<string, unknown> = {
+      amount_cents: amountCents, member_id: memberId, status: 'cleared', source, date: cashDateISO,
+    };
     if (paidOnISO) {
       patch.ref_month = ref.refMonth;
       patch.ref_year = ref.refYear;
@@ -189,9 +190,10 @@ export async function markOccurrence(
   const invoiceId = onCard ? await ensureInvoice(walletId, account, chargeISO) : null;
   const { data: ins, error } = await db.from('transactions').insert({
     wallet_id: walletId, account_id: account.id, kind: rec.kind, amount_cents: amountCents,
-    date: dueISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: 'cleared',
+    date: cashDateISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: 'cleared',
     description: rec.description, category_id: rec.category_id, member_id: memberId,
-    recurrence_id: rec.id, card_invoice_id: invoiceId, created_by: memberId, source,
+    recurrence_id: rec.id, occ_month: month + 1, occ_year: year,
+    card_invoice_id: invoiceId, created_by: memberId, source,
   }).select('id').single();
   if (error) throw error;
   if (applyShared && ins) await syncEvenSplits(ins.id as string, bundle.memberIds, amountCents);
@@ -203,8 +205,7 @@ export async function occurrenceTx(
   recId: string, month: number, year: number,
 ): Promise<{ id: string; status: string; amount_cents: number } | null> {
   const db = admin();
-  const { start, end } = monthRange(month, year);
   const { data } = await db.from('transactions').select('id, status, amount_cents')
-    .eq('recurrence_id', recId).gte('date', start).lte('date', end).maybeSingle();
+    .eq('recurrence_id', recId).eq('occ_month', month + 1).eq('occ_year', year).maybeSingle();
   return data ?? null;
 }

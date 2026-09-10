@@ -133,4 +133,32 @@ create unique index if not exists transactions_recurrence_occurrence_uniq
   on public.transactions (recurrence_id, date)
   where recurrence_id is not null;
 
+-- 20260910000003 — âncora estável da ocorrência (occ_month/occ_year); `date` passa
+-- a ser o dia real da baixa (corrige salário recebido antes do vencimento sumindo)
+alter table public.transactions
+  add column if not exists occ_month smallint,
+  add column if not exists occ_year  smallint;
+
+update public.transactions
+   set occ_month = extract(month from date)::smallint,
+       occ_year  = extract(year  from date)::smallint
+ where recurrence_id is not null and occ_month is null;
+
+with ranked as (
+  select id,
+         row_number() over (
+           partition by recurrence_id, occ_year, occ_month
+           order by (status = 'cleared') desc, created_at asc
+         ) as rn
+  from public.transactions
+  where recurrence_id is not null
+)
+delete from public.transactions t using ranked r
+where t.id = r.id and r.rn > 1;
+
+drop index if exists transactions_recurrence_occurrence_uniq;
+create unique index transactions_recurrence_occurrence_uniq
+  on public.transactions (recurrence_id, occ_year, occ_month)
+  where recurrence_id is not null;
+
 commit;

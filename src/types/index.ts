@@ -118,6 +118,10 @@ export interface Transaction {
   memberId?: UUID | null;
   cardInvoiceId?: UUID | null;
   recurrenceId?: UUID | null;
+  /** mês/ano da OCORRÊNCIA da recorrência (1-12). Âncora estável — não muda
+   *  com o dia da baixa nem com a competência da fatura. Só em txs de recorrência. */
+  occMonth?: number | null;
+  occYear?: number | null;
   installmentGroup?: UUID | null;
   installmentNo?: number | null;
   installmentOf?: number | null;

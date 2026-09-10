@@ -22,20 +22,25 @@ export const MoneyInput = forwardRef<HTMLInputElement, Props>(function MoneyInpu
   { valueCents, onChangeCents, placeholder = '0,00', className, id, required, autoFocus }, ref,
 ) {
   return (
-    <Input
-      ref={ref}
-      id={id}
-      inputMode="decimal"
-      required={required}
-      autoFocus={autoFocus}
-      placeholder={placeholder}
-      className={cn('font-bold tabular-nums', className)}
-      defaultValue={valueCents ? (valueCents / 100).toFixed(2).replace('.', ',') : ''}
-      onChange={(e) => onChangeCents(toCents(e.target.value))}
-      onBlur={(e) => {
-        const cents = toCents(e.target.value);
-        e.target.value = cents ? (cents / 100).toFixed(2).replace('.', ',') : '';
-      }}
-    />
+    <div className="relative">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] font-bold text-muted-foreground">
+        R$
+      </span>
+      <Input
+        ref={ref}
+        id={id}
+        inputMode="decimal"
+        required={required}
+        autoFocus={autoFocus}
+        placeholder={placeholder}
+        className={cn('pl-9 font-bold tabular-nums', className)}
+        defaultValue={valueCents ? (valueCents / 100).toFixed(2).replace('.', ',') : ''}
+        onChange={(e) => onChangeCents(toCents(e.target.value))}
+        onBlur={(e) => {
+          const cents = toCents(e.target.value);
+          e.target.value = cents ? (cents / 100).toFixed(2).replace('.', ',') : '';
+        }}
+      />
+    </div>
   );
 });

@@ -53,6 +53,7 @@ const mapTransaction = (r: any): Transaction => ({
   amountCents: Number(r.amount_cents), date: r.date, refMonth: r.ref_month, refYear: r.ref_year,
   status: r.status, description: r.description ?? '',
   categoryId: r.category_id, memberId: r.member_id, cardInvoiceId: r.card_invoice_id, recurrenceId: r.recurrence_id,
+  occMonth: r.occ_month ?? null, occYear: r.occ_year ?? null,
   installmentGroup: r.installment_group, installmentNo: r.installment_no, installmentOf: r.installment_of,
   transferPeerId: r.transfer_peer_id, note: r.note, createdBy: r.created_by, source: r.source ?? 'app',
   splits: (r.transaction_splits ?? []).map((s: any) => ({
@@ -807,15 +808,16 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     if (!rec) throw new Error('Recorrência não encontrada.');
     const dueISO = recurrenceDueISO(year, month, rec.day);
 
-    // Fonte da verdade é o banco: o estado local pode estar defasado logo após
-    // um desfazer/refazer, e aí uma 2ª transação era criada para a mesma
-    // ocorrência (gasto fixo contado duas vezes). A ocorrência do mês é
-    // identificada por recurrence_id + vencimento (date).
+    // Fonte da verdade é o banco (o estado local pode estar defasado logo após
+    // um desfazer/refazer). A ocorrência é identificada pela ÂNCORA
+    // recurrence_id + occ_month/occ_year — estável, independe do dia da baixa
+    // e da competência da fatura.
     const { data: existingRows, error: exErr } = await supabase
       .from('transactions')
       .select('id, status')
       .eq('recurrence_id', recurrenceId)
-      .eq('date', dueISO)
+      .eq('occ_month', month + 1)
+      .eq('occ_year', year)
       .order('created_at')
       .limit(1);
     if (exErr) throw exErr;
@@ -835,9 +837,14 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     const ref = onCard ? refFor(chargeISO, account) : { refMonth: month + 1, refYear: year };
     const applyShared = (shared ?? rec.shared) && nextStatus === 'cleared';
 
+    // data-caixa: quando a baixa foi dada (paidOnISO); pendente/sem data = vencimento.
+    // Antes gravava sempre o vencimento, e um salário marcado como recebido antes
+    // do dia de vencimento ficava com data futura → sumia do saldo e da projeção.
+    const cashDateISO = nextStatus === 'cleared' ? chargeISO : dueISO;
+
     if (existing) {
       const patch: Record<string, unknown> = { amount_cents: amountCents, status: nextStatus };
-      if (nextStatus === 'cleared') patch.member_id = memberId;
+      if (nextStatus === 'cleared') { patch.member_id = memberId; patch.date = cashDateISO; }
       if (overrideAcc && !onCard) patch.account_id = account.id;
       if (paidOnISO) {
         patch.ref_month = ref.refMonth;
@@ -853,10 +860,11 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     const invoiceId = onCard ? await ensureInvoice(account, chargeISO) : null;
     const { data, error } = await supabase.from('transactions').insert({
       wallet_id: wid, account_id: account.id, kind: rec.kind, amount_cents: amountCents,
-      date: dueISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: nextStatus,
+      date: cashDateISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: nextStatus,
       description: rec.description, category_id: rec.categoryId,
       member_id: nextStatus === 'cleared' ? memberId : null,
-      recurrence_id: rec.id, card_invoice_id: invoiceId, created_by: userId,
+      recurrence_id: rec.id, occ_month: month + 1, occ_year: year,
+      card_invoice_id: invoiceId, created_by: userId,
     }).select('id').single();
     if (error) {
       // corrida perdida contra outra baixa da mesma ocorrência: só recarrega
@@ -874,13 +882,10 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     upsertRecurrenceTx(recurrenceId, month, year, amountCents, null, 'pending');
 
   const unmarkRecurrenceOccurrence: FinanceApi['unmarkRecurrenceOccurrence'] = async (recurrenceId, month, year) => {
-    const rec = recurrences.find((r) => r.id === recurrenceId);
-    if (!rec) return;
-    const dueISO = recurrenceDueISO(year, month, rec.day);
-    // apaga direto no banco por chave da ocorrência (recurrence_id + vencimento),
-    // sem depender do estado local — e leva junto qualquer duplicata remanescente
+    // apaga pela âncora da ocorrência (recurrence_id + occ_month/occ_year),
+    // sem depender do estado local — leva junto qualquer duplicata remanescente
     const { error } = await supabase.from('transactions').delete()
-      .eq('recurrence_id', recurrenceId).eq('date', dueISO);
+      .eq('recurrence_id', recurrenceId).eq('occ_month', month + 1).eq('occ_year', year);
     if (error) throw error;
     await reload();
   };
@@ -1049,7 +1054,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     return recurrences
       .filter((r) => r.active && r.startDate <= mEnd && (!r.endDate || r.endDate >= mStart))
       .map((r) => {
-        const tx = transactions.find((t) => t.recurrenceId === r.id && isInMonth(t.date, month, year));
+        const tx = transactions.find((t) => t.recurrenceId === r.id && t.occMonth === month + 1 && t.occYear === year);
         const acc = r.accountId ? accounts.find((a) => a.id === r.accountId) : null;
         // parcelamento/empréstimo: nº da parcela = já pagas antes + meses desde o início + 1
         let installmentNo: number | null = null;

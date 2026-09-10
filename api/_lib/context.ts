@@ -8,6 +8,7 @@ interface TxRow {
   amount_cents: number; kind: 'income' | 'expense' | 'transfer'; account_id: string;
   status: string; date: string; ref_month: number; ref_year: number;
   description: string | null; card_invoice_id: string | null; recurrence_id: string | null;
+  occ_month: number | null; occ_year: number | null;
 }
 
 export interface WalletContext {
@@ -31,7 +32,7 @@ const MES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho'
 export async function buildWalletContext(walletId: string, todayISO: string): Promise<WalletContext> {
   const bundle = await loadWalletBundle(walletId);
   const { data: txData } = await admin().from('transactions')
-    .select('amount_cents, kind, account_id, status, date, ref_month, ref_year, description, card_invoice_id, recurrence_id')
+    .select('amount_cents, kind, account_id, status, date, ref_month, ref_year, description, card_invoice_id, recurrence_id, occ_month, occ_year')
     .eq('wallet_id', walletId);
   const txs = (txData ?? []) as TxRow[];
 
@@ -59,12 +60,13 @@ export async function buildWalletContext(walletId: string, todayISO: string): Pr
   const entradas = refTx.filter((t) => t.kind === 'income' && t.status === 'cleared').reduce((s, t) => s + t.amount_cents, 0);
   const saidas = refTx.filter((t) => t.kind === 'expense' && t.status === 'cleared').reduce((s, t) => s + t.amount_cents, 0);
 
-  // ocorrências de fixos deste mês
+  // ocorrências de fixos deste mês (âncora recurrence_id + occ_month/occ_year)
+  const isOcc = (t: TxRow) => t.occ_month === refMonth && t.occ_year === y;
   const occExists = (recId: string) => txs.some(
-    (t) => t.recurrence_id === recId && t.status === 'cleared' && isInMonth(t.date, m, y),
+    (t) => t.recurrence_id === recId && t.status === 'cleared' && isOcc(t),
   );
   const informed = (recId: string) => txs.find(
-    (t) => t.recurrence_id === recId && t.status === 'pending' && isInMonth(t.date, m, y),
+    (t) => t.recurrence_id === recId && t.status === 'pending' && isOcc(t),
   )?.amount_cents ?? null;
 
   const inWindow = (r: WalletBundle['recurrences'][number]) => {
@@ -140,10 +142,6 @@ export async function buildWalletContext(walletId: string, todayISO: string): Pr
   };
 }
 
-function isInMonth(iso: string, month: number, year: number): boolean {
-  const { y, m } = isoParts(iso);
-  return m === month && y === year;
-}
 // "R$ 1.234,56" -> 123456
 function unBRL(s: string): number {
   const n = parseFloat(s.replace(/[^\d,-]/g, '').replace(/\./g, '').replace(',', '.'));
