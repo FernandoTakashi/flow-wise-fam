@@ -10,6 +10,7 @@ import { FinanceProvider } from '@/contexts/FinanceContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Layout } from '@/components/Layout';
 import AuthPage from '@/pages/Auth';
+import ResetPassword from '@/pages/ResetPassword';
 
 const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const Transactions = lazy(() => import('@/pages/Transactions'));
@@ -37,19 +38,37 @@ function FullScreenLoader({ label }: { label: string }) {
 const App = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
+  // usuário chegou pelo link de "redefinir senha" — precisa definir a nova
+  const [recovery, setRecovery] = useState(
+    typeof window !== 'undefined' && window.location.hash.includes('type=recovery'),
+  );
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setChecking(false);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true);
+      if (event === 'SIGNED_OUT') setRecovery(false);
     });
     return () => subscription.unsubscribe();
   }, []);
 
   if (checking) return <FullScreenLoader label="Carregando…" />;
+
+  if (recovery) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <ResetPassword onDone={() => {
+          setRecovery(false);
+          if (typeof window !== 'undefined') window.history.replaceState(null, '', window.location.pathname);
+        }} />
+        <Toaster />
+      </QueryClientProvider>
+    );
+  }
 
   if (!session) {
     return (

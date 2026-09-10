@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useFinance } from '@/contexts/FinanceContext';
 import { supabase } from '@/lib/supabase';
+import { mapAuthError } from '@/lib/authErrors';
 import { PageHeader, EmptyState } from '@/components/PageHeader';
 import { MoneyInput } from '@/components/MoneyInput';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -96,7 +97,47 @@ function ProfileTab() {
         </div>
       </div>
       <Button onClick={save} disabled={busy}>{busy ? 'Salvando…' : 'Salvar'}</Button>
+
+      <ChangePassword />
     </CardContent></Card>
+  );
+}
+
+function ChangePassword() {
+  const { toast } = useToast();
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    if (pw.length < 8) { toast({ title: 'Senha muito curta', description: 'Use pelo menos 8 caracteres.', variant: 'destructive' }); return; }
+    if (pw !== pw2) { toast({ title: 'As senhas não conferem', variant: 'destructive' }); return; }
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: pw });
+      if (error) throw error;
+      toast({ title: 'Senha atualizada' });
+      setPw(''); setPw2('');
+    } catch (err) {
+      toast({ title: 'Erro', description: mapAuthError(err as { message?: string }), variant: 'destructive' });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <p className="text-xs font-semibold uppercase text-muted-foreground">Trocar senha</p>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Nova senha</Label>
+          <Input type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="mín. 8 caracteres" />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Repetir</Label>
+          <Input type="password" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} />
+        </div>
+      </div>
+      <Button variant="outline" onClick={save} disabled={busy || !pw}>{busy ? 'Salvando…' : 'Trocar senha'}</Button>
+    </div>
   );
 }
 

@@ -387,7 +387,12 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
       setProfile(prof ? mapProfile(prof) : { id: user.id, name: user.email ?? '', email: user.email });
 
-      const chosen = await loadWallets(user.id);
+      let chosen = await loadWallets(user.id);
+      if (!chosen) {
+        // auto-heal: conta sem carteira (trigger de onboarding falhou / conta antiga)
+        const { data: healedId, error } = await supabase.rpc('create_wallet', { p_name: 'Minha Carteira' });
+        if (!error && healedId) chosen = await loadWallets(user.id);
+      }
       if (chosen) await loadWalletData(chosen);
     } catch (err) {
       console.error('[finance] bootstrap', err);
