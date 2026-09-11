@@ -1,27 +1,17 @@
 // GET /api/v1/snapshot?wallet=<uuid>
 // Retorno único com tudo que a carteira precisa (antes: 9 queries do cliente).
-// Primeiro passo da camada de API: o cliente deixa de falar 9x com o Supabase.
-// Autorização: Bearer <access_token> do Supabase Auth + checagem de membro.
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { admin } from '../_lib/supabaseAdmin.js';
+import { requireUser } from './_util.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') {
-    res.status(405).json({ error: 'method_not_allowed' });
-    return;
-  }
+  if (req.method !== 'GET') { res.status(405).json({ error: 'method_not_allowed' }); return; }
 
-  const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '').trim();
-  if (!token) { res.status(401).json({ error: 'missing_token' }); return; }
+  const auth = await requireUser(req.headers.authorization, res);
+  if (!auth) return;
+  const { db, user } = auth;
 
   const walletId = typeof req.query.wallet === 'string' ? req.query.wallet : '';
   if (!walletId) { res.status(400).json({ error: 'missing_wallet' }); return; }
-
-  const db = admin();
-
-  const { data: userData, error: authErr } = await db.auth.getUser(token);
-  const user = userData?.user;
-  if (authErr || !user) { res.status(401).json({ error: 'invalid_token' }); return; }
 
   const { data: membership, error: memErr } = await db
     .from('wallet_members').select('role')

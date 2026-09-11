@@ -3,9 +3,7 @@ import {
   type ReactNode,
 } from 'react';
 import { supabase } from '@/lib/supabase';
-import {
-  invoiceDates, isoParts, MONTHS_PT, recurrenceDueISO, resolveInvoiceRef, spDateISO, todayISO,
-} from '@/lib/dates';
+import { spDateISO, todayISO } from '@/lib/dates';
 import { formatBRL } from '@/lib/money';
 import { apiFetch } from '@/lib/api';
 import * as core from '@/core';
@@ -424,43 +422,6 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     return wid;
   };
 
-  /** Competência de uma transação: cartão → mês da fatura; senão → mês da data (ou o passado). */
-  const refFor = (
-    dateISO: string, account?: Account | null, explicit?: { refMonth?: number; refYear?: number },
-  ): { refMonth: number; refYear: number } => {
-    if (account?.kind === 'card') return resolveInvoiceRef(dateISO, account.closingDay ?? 1);
-    if (explicit?.refMonth && explicit?.refYear) return { refMonth: explicit.refMonth, refYear: explicit.refYear };
-    const { y, m } = isoParts(dateISO);
-    return { refMonth: m + 1, refYear: y };
-  };
-
-  const ensureInvoice = useCallback(async (card: Account, dateISO: string): Promise<UUID> => {
-    const wid = requireWallet();
-    const closing = card.closingDay ?? 1;
-    const due = card.dueDay ?? closing;
-    const { refMonth, refYear } = resolveInvoiceRef(dateISO, closing);
-    const existing = invoices.find(
-      (i) => i.accountId === card.id && i.refMonth === refMonth && i.refYear === refYear,
-    );
-    if (existing) return existing.id;
-    const { closingDate, dueDate } = invoiceDates(refMonth, refYear, closing, due);
-    const { data, error } = await supabase
-      .from('card_invoices')
-      .insert({ wallet_id: wid, account_id: card.id, ref_month: refMonth, ref_year: refYear, closing_date: closingDate, due_date: dueDate, status: 'open' })
-      .select('id')
-      .single();
-    if (error) {
-      if (error.code === '23505') {
-        const { data: again } = await supabase
-          .from('card_invoices').select('id')
-          .eq('account_id', card.id).eq('ref_year', refYear).eq('ref_month', refMonth).single();
-        if (again) return again.id;
-      }
-      throw error;
-    }
-    return data.id;
-  }, [invoices]);
-
   // --- perfil / carteira / membros --------------------------------
   const updateProfile: FinanceApi['updateProfile'] = async ({ name }) => {
     if (!userId) return;
@@ -481,105 +442,76 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const renameWallet: FinanceApi['renameWallet'] = async (id, name) => {
-    const { error } = await supabase.from('wallets').update({ name }).eq('id', id);
-    if (error) throw error;
+    await apiFetch('/wallets', { method: 'PATCH', body: JSON.stringify({ id, name }) });
     await loadWallets(userId!);
   };
 
   const deleteWallet: FinanceApi['deleteWallet'] = async (id) => {
     if (wallets.length <= 1) throw new Error('Você precisa manter ao menos uma carteira.');
-    const { error } = await supabase.from('wallets').delete().eq('id', id);
-    if (error) throw error;
+    await apiFetch('/wallets', { method: 'DELETE', body: JSON.stringify({ id }) });
     const next = await loadWallets(userId!);
     if (next) await loadWalletData(next);
   };
 
   const addMemberByEmail: FinanceApi['addMemberByEmail'] = async (email) => {
     const wid = requireWallet();
-    const { data: uid, error } = await supabase.rpc('find_user_id_by_email', { p_email: email });
-    if (error) {
-      if (error.code === 'PGRST202' || /function .*find_user_id_by_email/i.test(error.message)) {
-        throw new Error('Falta aplicar a migração 20260908000005 no Supabase.');
-      }
-      throw error;
-    }
-    if (!uid) throw new Error(`Nenhuma conta encontrada para "${email.trim()}". Confira o e-mail (Supabase → Authentication → Users) — precisa ser o mesmo do cadastro.`);
-    const { error: mErr } = await supabase.from('wallet_members').insert({ wallet_id: wid, user_id: uid as string, role: 'member' });
-    if (mErr) {
-      if (mErr.code === '23505') throw new Error('Essa pessoa já é membro desta carteira.');
-      throw mErr;
-    }
+    await apiFetch('/members', { method: 'POST', body: JSON.stringify({ walletId: wid, email: email.trim() }) });
     await reload();
   };
 
   const removeMember: FinanceApi['removeMember'] = async (uid) => {
     const wid = requireWallet();
     if (uid === userId) throw new Error('Use "sair da carteira" para remover a si mesmo.');
-    const { error } = await supabase.from('wallet_members').delete().eq('wallet_id', wid).eq('user_id', uid);
-    if (error) throw error;
+    await apiFetch('/members', { method: 'DELETE', body: JSON.stringify({ walletId: wid, userId: uid }) });
     await reload();
   };
 
   // --- contas ----------------------------------------------------
   const addAccount: FinanceApi['addAccount'] = async (a) => {
     const wid = requireWallet();
-    const { error } = await supabase.from('accounts').insert({
-      wallet_id: wid, name: a.name, kind: a.kind,
-      opening_balance_cents: a.openingBalanceCents ?? 0,
-      closing_day: a.kind === 'card' ? a.closingDay ?? null : null,
-      due_day: a.kind === 'card' ? a.dueDay ?? null : null,
-      credit_limit_cents: a.kind === 'card' ? a.creditLimitCents ?? null : null,
+    await apiFetch('/accounts', {
+      method: 'POST',
+      body: JSON.stringify({
+        walletId: wid, name: a.name, kind: a.kind, openingBalanceCents: a.openingBalanceCents ?? 0,
+        closingDay: a.kind === 'card' ? a.closingDay ?? null : null,
+        dueDay: a.kind === 'card' ? a.dueDay ?? null : null,
+        creditLimitCents: a.kind === 'card' ? a.creditLimitCents ?? null : null,
+      }),
     });
-    if (error) throw error;
     await reload();
   };
 
   const updateAccount: FinanceApi['updateAccount'] = async (id, patch) => {
-    const row: Record<string, unknown> = {};
-    if (patch.name !== undefined) row.name = patch.name;
-    if (patch.openingBalanceCents !== undefined) row.opening_balance_cents = patch.openingBalanceCents;
-    if (patch.closingDay !== undefined) row.closing_day = patch.closingDay;
-    if (patch.dueDay !== undefined) row.due_day = patch.dueDay;
-    if (patch.creditLimitCents !== undefined) row.credit_limit_cents = patch.creditLimitCents;
-    if (patch.archived !== undefined) row.archived = patch.archived;
-    const { error } = await supabase.from('accounts').update(row).eq('id', id);
-    if (error) throw error;
+    const wid = requireWallet();
+    await apiFetch('/accounts', { method: 'PATCH', body: JSON.stringify({ walletId: wid, id, ...patch }) });
     await reload();
   };
 
   const deleteAccount: FinanceApi['deleteAccount'] = async (id) => {
-    const count = transactions.filter((t) => t.accountId === id).length;
-    if (count > 0) throw new Error(`Essa conta tem ${count} lançamento(s). Arquive-a em vez de excluir.`);
-    const { error } = await supabase.from('accounts').delete().eq('id', id);
-    if (error) throw error;
+    const wid = requireWallet();
+    await apiFetch('/accounts', { method: 'DELETE', body: JSON.stringify({ walletId: wid, id }) });
     await reload();
   };
 
   // --- categorias ---------------------------------------------
   const addCategory: FinanceApi['addCategory'] = async (c) => {
     const wid = requireWallet();
-    const { error } = await supabase.from('categories').insert({
-      wallet_id: wid, name: c.name, kind: c.kind, icon: c.icon ?? null, color: c.color ?? null,
+    await apiFetch('/categories', {
+      method: 'POST',
+      body: JSON.stringify({ walletId: wid, name: c.name, kind: c.kind, icon: c.icon ?? null, color: c.color ?? null }),
     });
-    if (error) throw error;
     await reload();
   };
 
   const updateCategory: FinanceApi['updateCategory'] = async (id, patch) => {
-    const { error } = await supabase.from('categories').update(patch).eq('id', id);
-    if (error) throw error;
+    const wid = requireWallet();
+    await apiFetch('/categories', { method: 'PATCH', body: JSON.stringify({ walletId: wid, id, ...patch }) });
     await reload();
   };
 
   const deleteCategory: FinanceApi['deleteCategory'] = async (id) => {
-    const count = transactions.filter((t) => t.categoryId === id).length;
-    if (count > 0) {
-      const { error } = await supabase.from('categories').update({ archived: true }).eq('id', id);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from('categories').delete().eq('id', id);
-      if (error) throw error;
-    }
+    const wid = requireWallet();
+    await apiFetch('/categories', { method: 'DELETE', body: JSON.stringify({ walletId: wid, id }) });
     await reload();
   };
 
@@ -633,66 +565,20 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateTransaction: FinanceApi['updateTransaction'] = async (id, patch) => {
-    const current = transactions.find((t) => t.id === id);
-    if (!current) throw new Error('Lançamento não encontrado.');
-    const row: Record<string, unknown> = {};
-    if (patch.description !== undefined) row.description = patch.description;
-    if (patch.amountCents !== undefined) row.amount_cents = patch.amountCents;
-    if (patch.categoryId !== undefined) row.category_id = patch.categoryId;
-    if (patch.memberId !== undefined) row.member_id = patch.memberId;
-    if (patch.status !== undefined) row.status = patch.status;
-    if (patch.note !== undefined) row.note = patch.note;
-    if (patch.shared !== undefined) row.shared = current.kind === 'income' ? false : patch.shared;
-
-    const nextDate = patch.dateISO ?? current.date;
-    const nextAccountId = patch.accountId ?? current.accountId;
-    if (patch.dateISO !== undefined) row.date = patch.dateISO;
-    if (patch.accountId !== undefined) row.account_id = patch.accountId;
-
-    const acc = accounts.find((a) => a.id === nextAccountId);
-    if (patch.dateISO !== undefined || patch.accountId !== undefined) {
-      if (acc?.kind === 'card') {
-        row.card_invoice_id = await ensureInvoice(acc, nextDate);
-      } else {
-        row.card_invoice_id = null;
-      }
-    }
-    // Lançamento de recorrência não-cartão: a competência fica presa à âncora da
-    // ocorrência (occ_month/occ_year), não à data — mudar o dia da baixa não
-    // muda de que mês aquela ocorrência é.
-    const pinnedToOcc = current.recurrenceId && acc?.kind !== 'card' && current.occMonth != null;
-    if (pinnedToOcc) {
-      row.ref_month = current.occMonth;
-      row.ref_year = current.occYear;
-    } else if (patch.refMonth && patch.refYear && acc?.kind !== 'card') {
-      row.ref_month = patch.refMonth;
-      row.ref_year = patch.refYear;
-    } else if (patch.dateISO !== undefined || patch.accountId !== undefined) {
-      const ref = refFor(nextDate, acc, { refMonth: patch.refMonth, refYear: patch.refYear });
-      row.ref_month = ref.refMonth;
-      row.ref_year = ref.refYear;
-    }
-
-    const { error } = await supabase.from('transactions').update(row).eq('id', id);
-    if (error) throw error;
+    const wid = requireWallet();
+    await apiFetch('/transactions', { method: 'PATCH', body: JSON.stringify({ walletId: wid, id, ...patch }) });
     await reload();
   };
 
   const deleteTransaction: FinanceApi['deleteTransaction'] = async (id) => {
-    const tx = transactions.find((t) => t.id === id);
-    if (tx?.transferPeerId) {
-      const inv = invoices.find((i) => i.paidTransactionId === id || i.paidTransactionId === tx.transferPeerId);
-      if (inv) await supabase.from('card_invoices').update({ status: 'open', paid_transaction_id: null }).eq('id', inv.id);
-      await supabase.from('transactions').delete().eq('id', tx.transferPeerId);
-    }
-    const { error } = await supabase.from('transactions').delete().eq('id', id);
-    if (error) throw error;
+    const wid = requireWallet();
+    await apiFetch('/transactions', { method: 'DELETE', body: JSON.stringify({ walletId: wid, id }) });
     await reload();
   };
 
   const setTransactionStatus: FinanceApi['setTransactionStatus'] = async (id, status) => {
-    const { error } = await supabase.from('transactions').update({ status }).eq('id', id);
-    if (error) throw error;
+    const wid = requireWallet();
+    await apiFetch('/transactions', { method: 'PATCH', body: JSON.stringify({ walletId: wid, id, status }) });
     await reload();
   };
 
@@ -706,91 +592,50 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     if (view.status === 'paid') throw new Error('Fatura já está paga.');
     if (view.postedCents <= 0) throw new Error('Fatura sem lançamentos.');
 
+    // mensagem amigável na hora; a trigger do banco é quem barra de verdade
     const fromBal = accountBalance(fromAcc, transactions, today);
     if (fromBal < view.postedCents) {
       throw new Error(`Saldo insuficiente em ${fromAcc.name} — disponível: ${formatBRL(fromBal)}, fatura: ${formatBRL(view.postedCents)}.`);
     }
 
-    const { m: pm, y: py } = { m: isoParts(dateISO).m, y: isoParts(dateISO).y };
-    const label = `Pagamento fatura ${card?.name ?? 'cartão'} ${String(month + 1).padStart(2, '0')}/${year}`;
-
-    const { data: outTx, error: outErr } = await supabase.from('transactions').insert({
-      wallet_id: wid, account_id: fromAccountId, kind: 'transfer', amount_cents: view.postedCents,
-      date: dateISO, ref_month: pm + 1, ref_year: py, status: 'cleared', description: label,
-      member_id: memberId, created_by: userId,
-    }).select('id').single();
-    if (outErr) throw outErr;
-
-    const { data: inTx, error: inErr } = await supabase.from('transactions').insert({
-      wallet_id: wid, account_id: cardId, kind: 'transfer', amount_cents: view.postedCents,
-      date: dateISO, ref_month: pm + 1, ref_year: py, status: 'cleared', description: label,
-      member_id: memberId, transfer_peer_id: outTx.id, card_invoice_id: view.invoice.id, created_by: userId,
-    }).select('id').single();
-    if (inErr) throw inErr;
-
-    await supabase.from('transactions').update({ transfer_peer_id: inTx.id }).eq('id', outTx.id);
-    const { error: invErr } = await supabase.from('card_invoices')
-      .update({ status: 'paid', paid_transaction_id: outTx.id }).eq('id', view.invoice.id);
-    if (invErr) throw invErr;
+    await apiFetch('/invoices', {
+      method: 'POST',
+      body: JSON.stringify({
+        walletId: wid, action: 'pay', cardId, cardName: card?.name ?? 'cartão',
+        fromAccountId, month, year, dateISO, memberId,
+      }),
+    });
     await reload();
   };
 
   const unpayCardInvoice: FinanceApi['unpayCardInvoice'] = async (invoiceId) => {
-    const inv = invoices.find((i) => i.id === invoiceId);
-    if (!inv?.paidTransactionId) return;
-    await supabase.from('card_invoices').update({ status: 'open', paid_transaction_id: null }).eq('id', invoiceId);
-    const peer = transactions.find((t) => t.id === inv.paidTransactionId)?.transferPeerId;
-    await supabase.from('transactions').delete().in('id', [inv.paidTransactionId, peer].filter(Boolean) as string[]);
+    const wid = requireWallet();
+    await apiFetch('/invoices', { method: 'POST', body: JSON.stringify({ walletId: wid, action: 'unpay', invoiceId }) });
     await reload();
   };
 
   const setInvoiceStatus: FinanceApi['setInvoiceStatus'] = async (invoiceId, status) => {
-    const { error } = await supabase.from('card_invoices').update({ status }).eq('id', invoiceId);
-    if (error) throw error;
+    const wid = requireWallet();
+    await apiFetch('/invoices', { method: 'POST', body: JSON.stringify({ walletId: wid, action: 'setStatus', invoiceId, status }) });
     await reload();
   };
 
   // --- recorrências -----------------------------------------
   const addRecurrence: FinanceApi['addRecurrence'] = async (r) => {
     const wid = requireWallet();
-    const { error } = await supabase.from('recurrences').insert({
-      wallet_id: wid, description: r.description, kind: r.kind, amount_cents: r.amountCents,
-      category_id: r.categoryId ?? null, account_id: r.accountId ?? null, day: r.day,
-      start_date: r.startDate, end_date: r.endDate ?? null,
-      autopay: r.autopay ?? false, variable_amount: r.variableAmount ?? false, shared: r.shared ?? false,
-      installments_total: r.installmentsTotal ?? null, installments_done: r.installmentsDone ?? 0,
-    });
-    if (error) throw error;
+    await apiFetch('/recurrences', { method: 'POST', body: JSON.stringify({ walletId: wid, ...r }) });
     await reload();
   };
 
   const updateRecurrence: FinanceApi['updateRecurrence'] = async (id, patch) => {
-    const row: Record<string, unknown> = {};
-    if (patch.description !== undefined) row.description = patch.description;
-    if (patch.amountCents !== undefined) row.amount_cents = patch.amountCents;
-    if (patch.categoryId !== undefined) row.category_id = patch.categoryId;
-    if (patch.accountId !== undefined) row.account_id = patch.accountId;
-    if (patch.day !== undefined) row.day = patch.day;
-    if (patch.startDate !== undefined) row.start_date = patch.startDate;
-    if (patch.endDate !== undefined) row.end_date = patch.endDate;
-    if (patch.autopay !== undefined) row.autopay = patch.autopay;
-    if (patch.variableAmount !== undefined) row.variable_amount = patch.variableAmount;
-    if (patch.shared !== undefined) row.shared = patch.shared;
-    if (patch.installmentsTotal !== undefined) row.installments_total = patch.installmentsTotal;
-    if (patch.installmentsDone !== undefined) row.installments_done = patch.installmentsDone;
-    if (patch.active !== undefined) row.active = patch.active;
-    const { error } = await supabase.from('recurrences').update(row).eq('id', id);
-    if (error) throw error;
+    const wid = requireWallet();
+    await apiFetch('/recurrences', { method: 'PATCH', body: JSON.stringify({ walletId: wid, id, ...patch }) });
     await reload();
   };
 
   const deleteRecurrence: FinanceApi['deleteRecurrence'] = async (id) => {
-    // solta os lançamentos já gerados (mantém histórico) antes de apagar o modelo
-    const { error: uErr } = await supabase.from('transactions')
-      .update({ recurrence_id: null, occ_month: null, occ_year: null }).eq('recurrence_id', id);
-    if (uErr) throw uErr;
-    const { error } = await supabase.from('recurrences').delete().eq('id', id);
-    if (error) throw error;
+    const wid = requireWallet();
+    await apiFetch('/recurrences', { method: 'DELETE', body: JSON.stringify({ walletId: wid, id }) });
     await reload();
   };
 
@@ -810,99 +655,35 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     const wid = requireWallet();
     const rec = recurrences.find((r) => r.id === recurrenceId);
     if (!rec) throw new Error('Recorrência não encontrada.');
-    const dueISO = recurrenceDueISO(year, month, rec.day);
 
-    // Fonte da verdade é o banco (o estado local pode estar defasado logo após
-    // um desfazer/refazer). A ocorrência é identificada pela ÂNCORA
-    // recurrence_id + occ_month/occ_year — estável, independe do dia da baixa
-    // e da competência da fatura.
-    const { data: existingRows, error: exErr } = await supabase
-      .from('transactions')
-      .select('id, status')
-      .eq('recurrence_id', recurrenceId)
-      .eq('occ_month', month + 1)
-      .eq('occ_year', year)
-      .order('created_at')
-      .limit(1);
-    if (exErr) throw exErr;
-    const existing = existingRows?.[0] ?? null;
-    // nunca rebaixa uma ocorrência já paga para pendente
-    const nextStatus: TxStatus = existing?.status === 'cleared' ? 'cleared' : status;
-
-    // conta: override do diálogo de pagamento > conta da recorrência > 1ª conta de dinheiro
-    const overrideAcc = accountIdOverride ? accounts.find((a) => a.id === accountIdOverride) : null;
-    const account = overrideAcc
-      ?? (rec.accountId ? accounts.find((a) => a.id === rec.accountId) : null)
-      ?? spendingAccountsMemo[0];
-    if (!account) throw new Error('Defina uma forma de pagamento para esta recorrência (Fixos → editar).');
-    const onCard = account.kind === 'card';
-    const chargeISO = paidOnISO ?? dueISO;
-    // cartão: fatura/competência seguem o dia da baixa; senão competência = mês da ocorrência
-    const ref = onCard ? refFor(chargeISO, account) : { refMonth: month + 1, refYear: year };
-    const isShared = rec.kind === 'expense' && (shared ?? rec.shared) === true;
-
-    // cartão: se a fatura-alvo já está fechada/paga, o trigger do banco barra o
-    // lançamento — devolve um erro claro em vez da exceção crua.
-    if (onCard && nextStatus === 'cleared') {
-      const target = invoices.find(
-        (i) => i.accountId === account.id && i.refMonth === ref.refMonth && i.refYear === ref.refYear,
-      );
-      if (target && target.status !== 'open') {
-        throw new Error(
-          `A fatura de ${MONTHS_PT[ref.refMonth - 1]}/${ref.refYear} está ${target.status === 'paid' ? 'paga' : 'fechada'}. `
-          + 'Reabra a fatura (Cartões) ou lance manualmente.',
-        );
-      }
-    }
-
-    // limites rígidos, quando a baixa é uma saída de dinheiro/cartão
-    if (rec.kind === 'expense' && nextStatus === 'cleared') {
-      if (onCard && account.creditLimitCents != null) {
-        const free = account.creditLimitCents - cardCommitted(account.id, transactions, invoices, existing?.id);
-        if (amountCents > free) {
-          throw new Error(`Ultrapassa o limite do cartão ${account.name} — livre: ${formatBRL(free)}.`);
-        }
-      } else if (!onCard) {
-        const bal = accountBalance(account, transactions, today, existing?.id);
-        if (bal - amountCents < 0) {
-          throw new Error(`Saldo insuficiente em ${account.name} — disponível: ${formatBRL(bal)}.`);
+    // mensagens amigáveis na hora; o banco (trigger de limite + markOccurrence
+    // no servidor) é a fonte da verdade
+    if (status === 'cleared') {
+      const overrideAcc = accountIdOverride ? accounts.find((a) => a.id === accountIdOverride) : null;
+      const account = overrideAcc
+        ?? (rec.accountId ? accounts.find((a) => a.id === rec.accountId) : null)
+        ?? spendingAccountsMemo[0];
+      if (!account) throw new Error('Defina uma forma de pagamento para esta recorrência (Fixos → editar).');
+      const onCard = account.kind === 'card';
+      if (rec.kind === 'expense') {
+        if (onCard && account.creditLimitCents != null) {
+          const free = account.creditLimitCents - cardCommitted(account.id, transactions, invoices);
+          if (amountCents > free) throw new Error(`Ultrapassa o limite do cartão ${account.name} — livre: ${formatBRL(free)}.`);
+        } else if (!onCard) {
+          const bal = accountBalance(account, transactions, today);
+          if (bal - amountCents < 0) throw new Error(`Saldo insuficiente em ${account.name} — disponível: ${formatBRL(bal)}.`);
         }
       }
     }
 
-    // data-caixa: quando a baixa foi dada (paidOnISO); pendente/sem data = vencimento.
-    // Antes gravava sempre o vencimento, e um salário marcado como recebido antes
-    // do dia de vencimento ficava com data futura → sumia do saldo e da projeção.
-    const cashDateISO = nextStatus === 'cleared' ? chargeISO : dueISO;
-
-    if (existing) {
-      const patch: Record<string, unknown> = { amount_cents: amountCents, status: nextStatus, shared: isShared };
-      if (nextStatus === 'cleared') { patch.member_id = memberId; patch.date = cashDateISO; }
-      if (overrideAcc && !onCard) patch.account_id = account.id;
-      if (paidOnISO) {
-        patch.ref_month = ref.refMonth;
-        patch.ref_year = ref.refYear;
-        if (onCard) patch.card_invoice_id = await ensureInvoice(account, chargeISO);
-      }
-      await supabase.from('transactions').update(patch).eq('id', existing.id);
-      await reload();
-      return;
-    }
-
-    const invoiceId = onCard ? await ensureInvoice(account, chargeISO) : null;
-    const { error } = await supabase.from('transactions').insert({
-      wallet_id: wid, account_id: account.id, kind: rec.kind, amount_cents: amountCents,
-      date: cashDateISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: nextStatus,
-      description: rec.description, category_id: rec.categoryId,
-      member_id: nextStatus === 'cleared' ? memberId : null,
-      recurrence_id: rec.id, occ_month: month + 1, occ_year: year,
-      card_invoice_id: invoiceId, shared: isShared, created_by: userId,
+    await apiFetch('/recurrence-occurrence', {
+      method: 'POST',
+      body: JSON.stringify({
+        walletId: wid, recurrenceId, month, year,
+        action: status === 'cleared' ? 'mark' : 'setAmount',
+        amountCents, memberId, paidOnISO, shared, accountId: accountIdOverride ?? null,
+      }),
     });
-    if (error) {
-      // corrida perdida contra outra baixa da mesma ocorrência: só recarrega
-      if (error.code === '23505') { await reload(); return; }
-      throw error;
-    }
     await reload();
   };
 
@@ -913,66 +694,54 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     upsertRecurrenceTx(recurrenceId, month, year, amountCents, null, 'pending');
 
   const unmarkRecurrenceOccurrence: FinanceApi['unmarkRecurrenceOccurrence'] = async (recurrenceId, month, year) => {
-    // apaga pela âncora da ocorrência (recurrence_id + occ_month/occ_year),
-    // sem depender do estado local — leva junto qualquer duplicata remanescente
-    const { error } = await supabase.from('transactions').delete()
-      .eq('recurrence_id', recurrenceId).eq('occ_month', month + 1).eq('occ_year', year);
-    if (error) throw error;
+    const wid = requireWallet();
+    await apiFetch('/recurrence-occurrence', {
+      method: 'POST',
+      body: JSON.stringify({ walletId: wid, recurrenceId, month, year, action: 'unmark' }),
+    });
     await reload();
   };
 
   // --- investimentos ------------------------------------
   const addInvestment: FinanceApi['addInvestment'] = async (i) => {
     const wid = requireWallet();
-    const { error } = await supabase.from('investments').insert({
-      wallet_id: wid, description: i.description, amount_cents: i.amountCents,
-      yield_rate_bps: i.yieldRateBps, date: i.dateISO, member_id: i.memberId ?? null,
+    await apiFetch('/investments', {
+      method: 'POST',
+      body: JSON.stringify({
+        walletId: wid, description: i.description, amountCents: i.amountCents,
+        yieldRateBps: i.yieldRateBps, dateISO: i.dateISO, memberId: i.memberId ?? null,
+      }),
     });
-    if (error) throw error;
     await reload();
   };
 
   const updateInvestment: FinanceApi['updateInvestment'] = async (id, patch) => {
-    const row: Record<string, unknown> = {};
-    if (patch.description !== undefined) row.description = patch.description;
-    if (patch.amountCents !== undefined) row.amount_cents = patch.amountCents;
-    if (patch.yieldRateBps !== undefined) row.yield_rate_bps = patch.yieldRateBps;
-    if (patch.dateISO !== undefined) row.date = patch.dateISO;
-    if (patch.memberId !== undefined) row.member_id = patch.memberId;
-    const { error } = await supabase.from('investments').update(row).eq('id', id);
-    if (error) throw error;
+    const wid = requireWallet();
+    await apiFetch('/investments', { method: 'PATCH', body: JSON.stringify({ walletId: wid, id, ...patch }) });
     await reload();
   };
 
   const deleteInvestment: FinanceApi['deleteInvestment'] = async (id) => {
-    const { error } = await supabase.from('investments').delete().eq('id', id);
-    if (error) throw error;
+    const wid = requireWallet();
+    await apiFetch('/investments', { method: 'DELETE', body: JSON.stringify({ walletId: wid, id }) });
     await reload();
   };
 
   const updateSettings: FinanceApi['updateSettings'] = async (patch) => {
     const wid = requireWallet();
-    const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (patch.initialInvestmentCents !== undefined) row.initial_investment_cents = patch.initialInvestmentCents;
-    if (patch.defaultYieldBps !== undefined) row.default_yield_bps = patch.defaultYieldBps;
-    const { error } = await supabase.from('wallet_settings').update(row).eq('wallet_id', wid);
-    if (error) throw error;
+    await apiFetch('/settings', { method: 'PATCH', body: JSON.stringify({ walletId: wid, ...patch }) });
     setSettings((s) => (s ? { ...s, ...patch } : s));
   };
 
   const lockPeriod: FinanceApi['lockPeriod'] = async (month, year) => {
     const wid = requireWallet();
-    const { error } = await supabase.from('period_locks')
-      .insert({ wallet_id: wid, ref_month: month + 1, ref_year: year, locked_by: userId });
-    if (error && error.code !== '23505') throw error;
+    await apiFetch('/periods', { method: 'POST', body: JSON.stringify({ walletId: wid, month, year, action: 'lock' }) });
     await reload();
   };
 
   const unlockPeriod: FinanceApi['unlockPeriod'] = async (month, year) => {
     const wid = requireWallet();
-    const { error } = await supabase.from('period_locks').delete()
-      .eq('wallet_id', wid).eq('ref_month', month + 1).eq('ref_year', year);
-    if (error) throw error;
+    await apiFetch('/periods', { method: 'POST', body: JSON.stringify({ walletId: wid, month, year, action: 'unlock' }) });
     await reload();
   };
 

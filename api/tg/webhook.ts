@@ -93,7 +93,7 @@ async function onMessage(msg: TgMessage) {
     const { m, y } = isoParts(todayISO);
     const occ = await occurrenceTx(rec.id, m, y);
     const amount = action.amountCents ?? occ?.amount_cents ?? rec.amount_cents;
-    await markOccurrence(bundle, link.wallet_id, rec, m, y, amount, link.user_id, 'telegram', action.paidOnISO ?? todayISO);
+    await markOccurrence(bundle, link.wallet_id, rec, m, y, amount, link.user_id, link.user_id, 'telegram', action.paidOnISO ?? todayISO);
     await setPending(link.id, 'adjust_recurrence', { recId: rec.id, m: m + 1, y });
     await sendMessage(chatId,
       `✅ <b>${escapeHtml(rec.description)}</b> ${rec.kind === 'income' ? 'recebido' : 'pago'} (${formatBRL(amount)}).\n` +
@@ -173,7 +173,7 @@ async function onCallback(cq: TgCallbackQuery) {
       if (!rec) { await answerCallback(cq.id, 'Recorrência não encontrada'); return; }
       const occ = await occurrenceTx(rec.id, month0, year);
       const amount = occ?.amount_cents ?? rec.amount_cents;
-      await markOccurrence(bundle, link.wallet_id, rec, month0, year, amount, link.user_id, 'telegram', spDateISO(new Date()));
+      await markOccurrence(bundle, link.wallet_id, rec, month0, year, amount, link.user_id, link.user_id, 'telegram', spDateISO(new Date()));
       if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
       await answerCallback(cq.id, 'Pago ✅');
       await setPending(link.id, 'adjust_recurrence', { recId: rec.id, m: Number(a2), y: year });
@@ -205,7 +205,7 @@ async function adjustRecurrence(
   const bundle = await loadWalletBundle(link.wallet_id);
   const rec = bundle.recurrences.find((r) => r.id === payload.recId);
   if (!rec) { await sendMessage(chatId, 'Recorrência não encontrada.'); return; }
-  await markOccurrence(bundle, link.wallet_id, rec, payload.m - 1, payload.y, cents, link.user_id, 'telegram');
+  await markOccurrence(bundle, link.wallet_id, rec, payload.m - 1, payload.y, cents, link.user_id, link.user_id, 'telegram');
   await sendMessage(chatId, `✅ Valor de <b>${escapeHtml(rec.description)}</b> ajustado para ${formatBRL(cents)}.`);
 }
 

@@ -1,76 +1,84 @@
-// POST /api/v1/transactions — cria um lançamento (espelha addTransaction do
-// FinanceContext). Reusa a mesma insertEntry() que já serve o bot do Telegram.
-// Autorização: Bearer <access_token> do Supabase Auth + checagem de membro.
-// Limites de saldo/limite de cartão são aplicados pela trigger do banco
-// (enforce_spend_limits) — o erro dela já vem com mensagem amigável.
+// POST   /api/v1/transactions              — criar lançamento
+// PATCH  /api/v1/transactions {id, ...}     — editar
+// DELETE /api/v1/transactions {id}          — excluir
+//
+// Reusa insertEntry/updateEntry/deleteEntry de api/_lib/finance.ts — as
+// mesmas funções que já servem o bot do Telegram. Limites de saldo/cartão e
+// mês fechado são aplicados pelas triggers do banco (mensagem já amigável).
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { admin } from '../_lib/supabaseAdmin.js';
-import { loadWalletBundle, insertEntry, type EntryInput } from '../_lib/finance.js';
+import { loadWalletBundle, insertEntry, updateEntry, deleteEntry, type EntryInput, type EntryPatch } from '../_lib/finance.js';
+import { requireMember, requireUser } from './_util.js';
 
-interface Body {
+interface CreateBody extends Partial<EntryInput> {
   walletId?: string;
-  kind?: 'income' | 'expense';
-  description?: string;
-  amountCents?: number;
-  accountId?: string | null;
-  categoryId?: string | null;
-  dateISO?: string;
-  note?: string | null;
-  installments?: number | null;
-  installmentStart?: number | null;
-  shared?: boolean | null;
-  memberId?: string | null;
-  status?: 'pending' | 'cleared';
-  refMonth?: number | null;
-  refYear?: number | null;
+}
+interface UpdateBody extends EntryPatch {
+  walletId?: string;
+  id?: string;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') { res.status(405).json({ error: 'method_not_allowed' }); return; }
+  const auth = await requireUser(req.headers.authorization, res);
+  if (!auth) return;
+  const { db, user } = auth;
 
-  const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '').trim();
-  if (!token) { res.status(401).json({ error: 'missing_token' }); return; }
+  if (req.method === 'POST') {
+    const body = (req.body ?? {}) as CreateBody;
+    const { walletId } = body;
+    if (!walletId) { res.status(400).json({ error: 'missing_wallet' }); return; }
+    if (!body.kind || !body.accountId || !body.amountCents || body.amountCents <= 0 || !body.dateISO) {
+      res.status(400).json({ error: 'invalid_entry' }); return;
+    }
+    if (!(await requireMember(db, res, walletId, user.id))) return;
 
-  const db = admin();
-  const { data: userData, error: authErr } = await db.auth.getUser(token);
-  const user = userData?.user;
-  if (authErr || !user) { res.status(401).json({ error: 'invalid_token' }); return; }
-
-  const body = (req.body ?? {}) as Body;
-  const { walletId } = body;
-  if (!walletId) { res.status(400).json({ error: 'missing_wallet' }); return; }
-  if (!body.kind || !body.accountId || !body.amountCents || body.amountCents <= 0) {
-    res.status(400).json({ error: 'invalid_entry' });
+    try {
+      const bundle = await loadWalletBundle(walletId);
+      const entry: EntryInput = {
+        kind: body.kind, description: body.description ?? '', amountCents: body.amountCents,
+        accountId: body.accountId, categoryId: body.categoryId ?? null, dateISO: body.dateISO,
+        note: body.note ?? null, installments: body.installments ?? null,
+        installmentStart: body.installmentStart ?? null, shared: body.shared ?? null,
+        memberId: body.memberId ?? null, status: body.status ?? 'cleared',
+        refMonth: body.refMonth ?? null, refYear: body.refYear ?? null,
+      };
+      const result = await insertEntry(bundle, walletId, user.id, entry, 'app');
+      res.status(200).json(result);
+    } catch (e) {
+      res.status(400).json({ error: 'insert_failed', detail: (e as Error).message });
+    }
     return;
   }
-  if (!body.dateISO) { res.status(400).json({ error: 'missing_date' }); return; }
 
-  const { data: membership, error: memErr } = await db
-    .from('wallet_members').select('role').eq('wallet_id', walletId).eq('user_id', user.id).maybeSingle();
-  if (memErr) { res.status(500).json({ error: 'db_error', detail: memErr.message }); return; }
-  if (!membership) { res.status(403).json({ error: 'not_a_member' }); return; }
+  if (req.method === 'PATCH') {
+    const body = (req.body ?? {}) as UpdateBody;
+    const { walletId, id } = body;
+    if (!walletId || !id) { res.status(400).json({ error: 'missing_fields' }); return; }
+    if (!(await requireMember(db, res, walletId, user.id))) return;
 
-  try {
-    const bundle = await loadWalletBundle(walletId);
-    const entry: EntryInput = {
-      kind: body.kind,
-      description: body.description ?? '',
-      amountCents: body.amountCents,
-      accountId: body.accountId,
-      categoryId: body.categoryId ?? null,
-      dateISO: body.dateISO,
-      note: body.note ?? null,
-      installments: body.installments ?? null,
-      installmentStart: body.installmentStart ?? null,
-      shared: body.shared ?? null,
-      memberId: body.memberId ?? null,
-      status: body.status ?? 'cleared',
-      refMonth: body.refMonth ?? null,
-      refYear: body.refYear ?? null,
-    };
-    const result = await insertEntry(bundle, walletId, user.id, entry, 'app');
-    res.status(200).json(result);
-  } catch (e) {
-    res.status(400).json({ error: 'insert_failed', detail: (e as Error).message });
+    try {
+      const bundle = await loadWalletBundle(walletId);
+      const { walletId: _w, id: _id, ...patch } = body;
+      await updateEntry(bundle, walletId, id, patch);
+      res.status(200).json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ error: 'update_failed', detail: (e as Error).message });
+    }
+    return;
   }
+
+  if (req.method === 'DELETE') {
+    const { walletId, id } = (req.body ?? {}) as { walletId?: string; id?: string };
+    if (!walletId || !id) { res.status(400).json({ error: 'missing_fields' }); return; }
+    if (!(await requireMember(db, res, walletId, user.id))) return;
+
+    try {
+      await deleteEntry(walletId, id);
+      res.status(200).json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ error: 'delete_failed', detail: (e as Error).message });
+    }
+    return;
+  }
+
+  res.status(405).json({ error: 'method_not_allowed' });
 }
