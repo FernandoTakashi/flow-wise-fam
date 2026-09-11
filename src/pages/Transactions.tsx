@@ -8,13 +8,12 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { formatBRL, splitInstallments } from '@/lib/money';
 import { formatDayMonth, isoParts, MONTHS_PT, resolveInvoiceRef } from '@/lib/dates';
-import { cn } from '@/lib/utils';
+import { cn, SHEET_DIALOG_CLASS } from '@/lib/utils';
 import type { Transaction } from '@/types';
 import { Plus, Pencil, Trash2, ArrowLeftRight, Users, AlertTriangle, Lock, Search } from 'lucide-react';
 
@@ -331,12 +330,19 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
 
       {/* dialog nova/editar */}
       <Dialog open={showForm} onOpenChange={(o) => (o ? setShowForm(true) : resetForm())}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className={cn('sm:max-w-lg', SHEET_DIALOG_CLASS)}>
           <div className="mx-auto mb-1 h-[5px] w-11 shrink-0 rounded-full bg-[#DDD1C9] sm:hidden" />
           <DialogHeader>
             <DialogTitle>{editing ? 'Editar' : 'Nova'} {isIncome ? 'entrada' : 'saída'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Descrição</Label>
+              <Input autoFocus value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder={isIncome ? 'Ex: Salário, freela' : 'Ex: Mercado, Uber'} />
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Valor</Label>
@@ -434,12 +440,6 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                 })()}
               </div>
             )}
-
-            <div className="space-y-1.5">
-              <Label>Descrição</Label>
-              <Textarea rows={2} value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="resize-none" />
-            </div>
 
             {(overdrawWarn || limitWarn) && (
               <p className="flex items-start gap-2 rounded-[12px] border border-[#E7B7A6] bg-[#FBE9E4] p-3 text-[12px] text-[#8A3B25]">

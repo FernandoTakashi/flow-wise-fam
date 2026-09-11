@@ -12,7 +12,7 @@ import { OnboardingTip } from '@/components/OnboardingTip';
 import { useToast } from '@/hooks/use-toast';
 import { formatBRL } from '@/lib/money';
 import { MONTHS_PT, isoParts } from '@/lib/dates';
-import { cn } from '@/lib/utils';
+import { cn, SHEET_DIALOG_CLASS } from '@/lib/utils';
 import { CreditCard, Repeat, TrendingUp, Lock } from 'lucide-react';
 import type { OccurrenceView } from '@/contexts/FinanceContext';
 
@@ -326,7 +326,7 @@ export default function Dashboard() {
 
       {/* Dialog pagar fatura */}
       <Dialog open={!!payCard} onOpenChange={(o) => !o && setPayCard(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className={cn("sm:max-w-md", SHEET_DIALOG_CLASS)}>
           <DialogHeader><DialogTitle>Pagar fatura</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="rounded-lg bg-muted/50 p-2 text-center text-sm">Valor: <strong className="tabular-nums">{payCard && formatBRL(payCard.total)}</strong></div>
@@ -354,7 +354,7 @@ export default function Dashboard() {
 
       {/* Dialog confirmar fixo */}
       <Dialog open={!!fixo} onOpenChange={(o) => !o && setFixo(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className={cn("sm:max-w-md", SHEET_DIALOG_CLASS)}>
           <DialogHeader>
             <DialogTitle>{fixo?.recurrence.kind === 'income' ? 'Confirmar recebimento' : fixo?.onCard ? 'Lançar no cartão' : 'Confirmar pagamento'}</DialogTitle>
           </DialogHeader>

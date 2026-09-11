@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { useToast } from '@/hooks/use-toast';
 import { formatBRL } from '@/lib/money';
 import { formatDayMonth, MONTHS_PT } from '@/lib/dates';
-import { cn } from '@/lib/utils';
+import { cn, SHEET_DIALOG_CLASS } from '@/lib/utils';
 import type { Account } from '@/types';
 import { CreditCard as CardIcon, Plus, Pencil, Trash2 } from 'lucide-react';
 
@@ -268,7 +268,7 @@ export default function Cards() {
       )}
 
       <Dialog open={showForm} onOpenChange={(o) => (o ? setShowForm(true) : reset())}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className={cn("sm:max-w-md", SHEET_DIALOG_CLASS)}>
           <DialogHeader><DialogTitle>{editing ? 'Editar cartão' : 'Novo cartão'}</DialogTitle></DialogHeader>
           <form onSubmit={submit} className="space-y-4">
             <div className="space-y-1.5">
@@ -300,7 +300,7 @@ export default function Cards() {
       </Dialog>
 
       <Dialog open={!!payDialog} onOpenChange={(o) => !o && setPayDialog(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className={cn("sm:max-w-md", SHEET_DIALOG_CLASS)}>
           <DialogHeader><DialogTitle>Pagar fatura — {payDialog?.card.name}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="rounded-lg bg-muted/50 p-2 text-center text-sm">Valor: <strong className="tabular-nums">{payDialog && formatBRL(payDialog.total)}</strong></div>

@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { formatBRL } from '@/lib/money';
 import { MONTHS_PT, todayISO, dayOfMonthISO } from '@/lib/dates';
 import type { CategoryKind, Recurrence } from '@/types';
+import { cn, SHEET_DIALOG_CLASS } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import { Plus, Pencil, Trash2, Check, X, Repeat, Lock, Receipt, Zap } from 'lucide-react';
 
@@ -304,7 +305,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
       )}
 
       <Dialog open={!!mark} onOpenChange={(o) => !o && setMark(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className={cn("sm:max-w-md", SHEET_DIALOG_CLASS)}>
           <DialogHeader>
             <DialogTitle>{mark?.onCard ? 'Lançar no cartão' : tab === 'income' ? 'Confirmar recebimento' : 'Confirmar pagamento'}</DialogTitle>
           </DialogHeader>
@@ -359,7 +360,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
       </Dialog>
 
       <Dialog open={!!inform} onOpenChange={(o) => !o && setInform(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className={cn("sm:max-w-md", SHEET_DIALOG_CLASS)}>
           <DialogHeader>
             <DialogTitle>{tab === 'income' ? 'Valor previsto do mês' : 'Valor da conta deste mês'}</DialogTitle>
           </DialogHeader>
@@ -388,7 +389,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
       </Dialog>
 
       <Dialog open={showForm} onOpenChange={(o) => (o ? setShowForm(true) : reset())}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className={cn("sm:max-w-lg", SHEET_DIALOG_CLASS)}>
           <DialogHeader>
             <DialogTitle>
               {editing ? 'Editar' : 'Nova'} {form.kind === 'income' ? 'receita fixa' : 'despesa fixa'}

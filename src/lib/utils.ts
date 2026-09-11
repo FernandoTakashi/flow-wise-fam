@@ -5,6 +5,16 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * className extra do DialogContent pra virar uma "folha" subindo da base no
+ * mobile (e um modal centralizado normal no desktop) — o estilo original do
+ * modal de "Novo lançamento". Usar em todo modal de criar/editar pra manter
+ * a mesma aparência em vez de reescrever a string em cada tela.
+ */
+export const SHEET_DIALOG_CLASS =
+  'max-h-[92vh] overflow-y-auto max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:max-w-none ' +
+  'max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:rounded-t-[28px] max-sm:border-x-0 max-sm:border-b-0';
+
 /** UUID v4 — usa crypto.randomUUID quando disponível, com fallback. */
 export function newId(): string {
   const c = globalThis.crypto as Crypto | undefined;

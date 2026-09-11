@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { formatBRL, formatPct, pctToBps, bpsToPct } from '@/lib/money';
 import { formatFullDate, todayISO } from '@/lib/dates';
 import type { Investment } from '@/types';
+import { cn, SHEET_DIALOG_CLASS } from '@/lib/utils';
 import { Plus, Pencil, Trash2, PiggyBank, TrendingUp, Target } from 'lucide-react';
 
 interface FormState { description: string; amountCents: number; ratePct: string; memberId: string; dateISO: string; }
@@ -135,7 +136,7 @@ export default function Investments() {
       )}
 
       <Dialog open={showForm} onOpenChange={(o) => (o ? setShowForm(true) : reset())}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className={cn("sm:max-w-md", SHEET_DIALOG_CLASS)}>
           <DialogHeader><DialogTitle>{editing ? 'Editar aplicação' : 'Nova aplicação'}</DialogTitle></DialogHeader>
           <form onSubmit={submit} className="space-y-4">
             <div className="space-y-1.5">
