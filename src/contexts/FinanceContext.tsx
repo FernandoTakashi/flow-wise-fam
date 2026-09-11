@@ -442,37 +442,37 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const renameWallet: FinanceApi['renameWallet'] = async (id, name) => {
-    await apiFetch('/wallets', { method: 'PATCH', body: JSON.stringify({ id, name }) });
+    await apiFetch('/crud', { method: 'PATCH', body: JSON.stringify({ resource: 'wallet', walletId: id, name }) });
     await loadWallets(userId!);
   };
 
   const deleteWallet: FinanceApi['deleteWallet'] = async (id) => {
     if (wallets.length <= 1) throw new Error('Você precisa manter ao menos uma carteira.');
-    await apiFetch('/wallets', { method: 'DELETE', body: JSON.stringify({ id }) });
+    await apiFetch('/crud', { method: 'DELETE', body: JSON.stringify({ resource: 'wallet', walletId: id }) });
     const next = await loadWallets(userId!);
     if (next) await loadWalletData(next);
   };
 
   const addMemberByEmail: FinanceApi['addMemberByEmail'] = async (email) => {
     const wid = requireWallet();
-    await apiFetch('/members', { method: 'POST', body: JSON.stringify({ walletId: wid, email: email.trim() }) });
+    await apiFetch('/crud', { method: 'POST', body: JSON.stringify({ resource: 'member', walletId: wid, email: email.trim() }) });
     await reload();
   };
 
   const removeMember: FinanceApi['removeMember'] = async (uid) => {
     const wid = requireWallet();
     if (uid === userId) throw new Error('Use "sair da carteira" para remover a si mesmo.');
-    await apiFetch('/members', { method: 'DELETE', body: JSON.stringify({ walletId: wid, userId: uid }) });
+    await apiFetch('/crud', { method: 'DELETE', body: JSON.stringify({ resource: 'member', walletId: wid, userId: uid }) });
     await reload();
   };
 
   // --- contas ----------------------------------------------------
   const addAccount: FinanceApi['addAccount'] = async (a) => {
     const wid = requireWallet();
-    await apiFetch('/accounts', {
+    await apiFetch('/crud', {
       method: 'POST',
       body: JSON.stringify({
-        walletId: wid, name: a.name, kind: a.kind, openingBalanceCents: a.openingBalanceCents ?? 0,
+        resource: 'account', walletId: wid, name: a.name, kind: a.kind, openingBalanceCents: a.openingBalanceCents ?? 0,
         closingDay: a.kind === 'card' ? a.closingDay ?? null : null,
         dueDay: a.kind === 'card' ? a.dueDay ?? null : null,
         creditLimitCents: a.kind === 'card' ? a.creditLimitCents ?? null : null,
@@ -483,35 +483,35 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
   const updateAccount: FinanceApi['updateAccount'] = async (id, patch) => {
     const wid = requireWallet();
-    await apiFetch('/accounts', { method: 'PATCH', body: JSON.stringify({ walletId: wid, id, ...patch }) });
+    await apiFetch('/crud', { method: 'PATCH', body: JSON.stringify({ resource: 'account', walletId: wid, id, ...patch }) });
     await reload();
   };
 
   const deleteAccount: FinanceApi['deleteAccount'] = async (id) => {
     const wid = requireWallet();
-    await apiFetch('/accounts', { method: 'DELETE', body: JSON.stringify({ walletId: wid, id }) });
+    await apiFetch('/crud', { method: 'DELETE', body: JSON.stringify({ resource: 'account', walletId: wid, id }) });
     await reload();
   };
 
   // --- categorias ---------------------------------------------
   const addCategory: FinanceApi['addCategory'] = async (c) => {
     const wid = requireWallet();
-    await apiFetch('/categories', {
+    await apiFetch('/crud', {
       method: 'POST',
-      body: JSON.stringify({ walletId: wid, name: c.name, kind: c.kind, icon: c.icon ?? null, color: c.color ?? null }),
+      body: JSON.stringify({ resource: 'category', walletId: wid, name: c.name, kind: c.kind, icon: c.icon ?? null, color: c.color ?? null }),
     });
     await reload();
   };
 
   const updateCategory: FinanceApi['updateCategory'] = async (id, patch) => {
     const wid = requireWallet();
-    await apiFetch('/categories', { method: 'PATCH', body: JSON.stringify({ walletId: wid, id, ...patch }) });
+    await apiFetch('/crud', { method: 'PATCH', body: JSON.stringify({ resource: 'category', walletId: wid, id, ...patch }) });
     await reload();
   };
 
   const deleteCategory: FinanceApi['deleteCategory'] = async (id) => {
     const wid = requireWallet();
-    await apiFetch('/categories', { method: 'DELETE', body: JSON.stringify({ walletId: wid, id }) });
+    await apiFetch('/crud', { method: 'DELETE', body: JSON.stringify({ resource: 'category', walletId: wid, id }) });
     await reload();
   };
 
@@ -539,11 +539,12 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
-    // escrita de verdade passa pela API própria (POST /api/v1/transactions),
-    // que reusa a mesma insertEntry() do bot do Telegram.
-    await apiFetch('/transactions', {
+    // escrita de verdade passa pela API própria (POST /api/v1/crud), que
+    // reusa a mesma insertEntry() do bot do Telegram.
+    await apiFetch('/crud', {
       method: 'POST',
       body: JSON.stringify({
+        resource: 'transaction',
         walletId: wid,
         kind: input.kind,
         description: input.description?.trim() || '',
@@ -566,19 +567,19 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
   const updateTransaction: FinanceApi['updateTransaction'] = async (id, patch) => {
     const wid = requireWallet();
-    await apiFetch('/transactions', { method: 'PATCH', body: JSON.stringify({ walletId: wid, id, ...patch }) });
+    await apiFetch('/crud', { method: 'PATCH', body: JSON.stringify({ resource: 'transaction', walletId: wid, id, ...patch }) });
     await reload();
   };
 
   const deleteTransaction: FinanceApi['deleteTransaction'] = async (id) => {
     const wid = requireWallet();
-    await apiFetch('/transactions', { method: 'DELETE', body: JSON.stringify({ walletId: wid, id }) });
+    await apiFetch('/crud', { method: 'DELETE', body: JSON.stringify({ resource: 'transaction', walletId: wid, id }) });
     await reload();
   };
 
   const setTransactionStatus: FinanceApi['setTransactionStatus'] = async (id, status) => {
     const wid = requireWallet();
-    await apiFetch('/transactions', { method: 'PATCH', body: JSON.stringify({ walletId: wid, id, status }) });
+    await apiFetch('/crud', { method: 'PATCH', body: JSON.stringify({ resource: 'transaction', walletId: wid, id, status }) });
     await reload();
   };
 
@@ -598,10 +599,10 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       throw new Error(`Saldo insuficiente em ${fromAcc.name} — disponível: ${formatBRL(fromBal)}, fatura: ${formatBRL(view.postedCents)}.`);
     }
 
-    await apiFetch('/invoices', {
+    await apiFetch('/actions', {
       method: 'POST',
       body: JSON.stringify({
-        walletId: wid, action: 'pay', cardId, cardName: card?.name ?? 'cartão',
+        resource: 'invoice', walletId: wid, action: 'pay', cardId, cardName: card?.name ?? 'cartão',
         fromAccountId, month, year, dateISO, memberId,
       }),
     });
@@ -610,32 +611,32 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
   const unpayCardInvoice: FinanceApi['unpayCardInvoice'] = async (invoiceId) => {
     const wid = requireWallet();
-    await apiFetch('/invoices', { method: 'POST', body: JSON.stringify({ walletId: wid, action: 'unpay', invoiceId }) });
+    await apiFetch('/actions', { method: 'POST', body: JSON.stringify({ resource: 'invoice', walletId: wid, action: 'unpay', invoiceId }) });
     await reload();
   };
 
   const setInvoiceStatus: FinanceApi['setInvoiceStatus'] = async (invoiceId, status) => {
     const wid = requireWallet();
-    await apiFetch('/invoices', { method: 'POST', body: JSON.stringify({ walletId: wid, action: 'setStatus', invoiceId, status }) });
+    await apiFetch('/actions', { method: 'POST', body: JSON.stringify({ resource: 'invoice', walletId: wid, action: 'setStatus', invoiceId, status }) });
     await reload();
   };
 
   // --- recorrências -----------------------------------------
   const addRecurrence: FinanceApi['addRecurrence'] = async (r) => {
     const wid = requireWallet();
-    await apiFetch('/recurrences', { method: 'POST', body: JSON.stringify({ walletId: wid, ...r }) });
+    await apiFetch('/crud', { method: 'POST', body: JSON.stringify({ resource: 'recurrence', walletId: wid, ...r }) });
     await reload();
   };
 
   const updateRecurrence: FinanceApi['updateRecurrence'] = async (id, patch) => {
     const wid = requireWallet();
-    await apiFetch('/recurrences', { method: 'PATCH', body: JSON.stringify({ walletId: wid, id, ...patch }) });
+    await apiFetch('/crud', { method: 'PATCH', body: JSON.stringify({ resource: 'recurrence', walletId: wid, id, ...patch }) });
     await reload();
   };
 
   const deleteRecurrence: FinanceApi['deleteRecurrence'] = async (id) => {
     const wid = requireWallet();
-    await apiFetch('/recurrences', { method: 'DELETE', body: JSON.stringify({ walletId: wid, id }) });
+    await apiFetch('/crud', { method: 'DELETE', body: JSON.stringify({ resource: 'recurrence', walletId: wid, id }) });
     await reload();
   };
 
@@ -676,10 +677,10 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
-    await apiFetch('/recurrence-occurrence', {
+    await apiFetch('/actions', {
       method: 'POST',
       body: JSON.stringify({
-        walletId: wid, recurrenceId, month, year,
+        resource: 'occurrence', walletId: wid, recurrenceId, month, year,
         action: status === 'cleared' ? 'mark' : 'setAmount',
         amountCents, memberId, paidOnISO, shared, accountId: accountIdOverride ?? null,
       }),
@@ -695,9 +696,9 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
   const unmarkRecurrenceOccurrence: FinanceApi['unmarkRecurrenceOccurrence'] = async (recurrenceId, month, year) => {
     const wid = requireWallet();
-    await apiFetch('/recurrence-occurrence', {
+    await apiFetch('/actions', {
       method: 'POST',
-      body: JSON.stringify({ walletId: wid, recurrenceId, month, year, action: 'unmark' }),
+      body: JSON.stringify({ resource: 'occurrence', walletId: wid, recurrenceId, month, year, action: 'unmark' }),
     });
     await reload();
   };
@@ -705,10 +706,10 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   // --- investimentos ------------------------------------
   const addInvestment: FinanceApi['addInvestment'] = async (i) => {
     const wid = requireWallet();
-    await apiFetch('/investments', {
+    await apiFetch('/crud', {
       method: 'POST',
       body: JSON.stringify({
-        walletId: wid, description: i.description, amountCents: i.amountCents,
+        resource: 'investment', walletId: wid, description: i.description, amountCents: i.amountCents,
         yieldRateBps: i.yieldRateBps, dateISO: i.dateISO, memberId: i.memberId ?? null,
       }),
     });
@@ -717,31 +718,31 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
   const updateInvestment: FinanceApi['updateInvestment'] = async (id, patch) => {
     const wid = requireWallet();
-    await apiFetch('/investments', { method: 'PATCH', body: JSON.stringify({ walletId: wid, id, ...patch }) });
+    await apiFetch('/crud', { method: 'PATCH', body: JSON.stringify({ resource: 'investment', walletId: wid, id, ...patch }) });
     await reload();
   };
 
   const deleteInvestment: FinanceApi['deleteInvestment'] = async (id) => {
     const wid = requireWallet();
-    await apiFetch('/investments', { method: 'DELETE', body: JSON.stringify({ walletId: wid, id }) });
+    await apiFetch('/crud', { method: 'DELETE', body: JSON.stringify({ resource: 'investment', walletId: wid, id }) });
     await reload();
   };
 
   const updateSettings: FinanceApi['updateSettings'] = async (patch) => {
     const wid = requireWallet();
-    await apiFetch('/settings', { method: 'PATCH', body: JSON.stringify({ walletId: wid, ...patch }) });
+    await apiFetch('/crud', { method: 'PATCH', body: JSON.stringify({ resource: 'settings', walletId: wid, ...patch }) });
     setSettings((s) => (s ? { ...s, ...patch } : s));
   };
 
   const lockPeriod: FinanceApi['lockPeriod'] = async (month, year) => {
     const wid = requireWallet();
-    await apiFetch('/periods', { method: 'POST', body: JSON.stringify({ walletId: wid, month, year, action: 'lock' }) });
+    await apiFetch('/actions', { method: 'POST', body: JSON.stringify({ resource: 'period', walletId: wid, month, year, action: 'lock' }) });
     await reload();
   };
 
   const unlockPeriod: FinanceApi['unlockPeriod'] = async (month, year) => {
     const wid = requireWallet();
-    await apiFetch('/periods', { method: 'POST', body: JSON.stringify({ walletId: wid, month, year, action: 'unlock' }) });
+    await apiFetch('/actions', { method: 'POST', body: JSON.stringify({ resource: 'period', walletId: wid, month, year, action: 'unlock' }) });
     await reload();
   };
 
