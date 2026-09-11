@@ -6,6 +6,7 @@ import { Sidebar, NAV_ITEMS } from './Sidebar';
 import { WalletSelector } from './WalletSelector';
 import MonthSelector from './MonthSelector';
 import { PageHeaderProvider, usePageHeader } from './PageHeader';
+import { OnboardingWizard } from './OnboardingWizard';
 import { Button } from '@/components/ui/button';
 import {
   Menu as MenuIcon, X, LogOut, LayoutDashboard, Plus, Repeat, CreditCard,
@@ -126,6 +127,7 @@ function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background text-foreground md:grid md:h-screen md:grid-cols-[252px_minmax(0,1fr)]">
+      <OnboardingWizard />
       <aside className="hidden md:block md:h-screen md:overflow-hidden">
         <Sidebar />
       </aside>

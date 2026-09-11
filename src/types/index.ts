@@ -13,10 +13,18 @@ export type MemberRole = 'owner' | 'member';
 export type InvoiceStatus = 'open' | 'closed' | 'paid';
 export type TxSource = 'app' | 'telegram' | 'whatsapp' | 'import' | 'auto';
 
+/** Progresso do onboarding guiado — por pessoa, não por carteira. */
+export interface OnboardingState {
+  wizardDone?: boolean;
+  /** uma chave por página com dica de primeira visita já vista, ex.: { dashboard: true } */
+  tips?: Record<string, boolean>;
+}
+
 export interface Profile {
   id: UUID;
   name: string;
   email?: string | null;
+  onboarding?: OnboardingState;
 }
 
 export interface Wallet {

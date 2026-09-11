@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MoneyInput } from '@/components/MoneyInput';
 import { PageHeader } from '@/components/PageHeader';
+import { OnboardingTip } from '@/components/OnboardingTip';
 import { useToast } from '@/hooks/use-toast';
 import { formatBRL } from '@/lib/money';
 import { MONTHS_PT, isoParts } from '@/lib/dates';
@@ -161,6 +162,10 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       <PageHeader title="Dashboard" subtitle={`Competência de ${MONTHS_PT[month]} de ${year}`} extra={locked ? <LockPill /> : undefined} />
+
+      <OnboardingTip pageKey="dashboard" title="Este é o resumo do mês por competência">
+        O saldo grande é o de hoje; o resto da tela olha pro mês selecionado acima — o que já entrou/saiu e o que ainda falta pagar ou receber, mesmo que a data caia em outro mês.
+      </OnboardingTip>
 
       {/* HERO */}
       <div className="flex flex-col gap-6 rounded-[18px] bg-ink px-[26px] py-6 text-on-ink sm:flex-row sm:items-end sm:justify-between sm:gap-8">

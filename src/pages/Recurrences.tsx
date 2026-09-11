@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useFinance, type NewRecurrence, type OccurrenceView } from '@/contexts/FinanceContext';
 import { PageHeader, EmptyState } from '@/components/PageHeader';
+import { OnboardingTip } from '@/components/OnboardingTip';
 import { MoneyInput } from '@/components/MoneyInput';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
@@ -188,6 +189,12 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
           subtitle={`Recorrências de ${MONTHS_PT[month].toLowerCase()} de ${year}`}
           action={newBtn}
         />
+      )}
+
+      {!embedded && (
+        <OnboardingTip pageKey="fixos" title="Cadastre uma vez, baixe todo mês">
+          Um fixo não lança nada sozinho — todo mês você "dá baixa" quando pagar (ou recebe). O valor pode variar mês a mês; a baixa fica marcada mesmo se você editar ou desfazer depois.
+        </OnboardingTip>
       )}
 
       {locked && (

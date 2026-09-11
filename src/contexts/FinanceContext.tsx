@@ -24,7 +24,9 @@ const WALLET_KEY = 'financeapp.walletId';
 // gen types typescript` na Fase 4 substitui o `any` por Database['public'].
 // ---------------------------------------------------------------------------
 /* eslint-disable @typescript-eslint/no-explicit-any */
-const mapProfile = (r: any): Profile => ({ id: r.id, name: r.name ?? '', email: r.email });
+const mapProfile = (r: any): Profile => ({
+  id: r.id, name: r.name ?? '', email: r.email, onboarding: r.onboarding ?? {},
+});
 const mapWallet = (r: any): Wallet => ({ id: r.id, name: r.name, baseCurrency: r.base_currency, createdBy: r.created_by });
 const mapMember = (r: any): WalletMember => ({
   walletId: r.wallet_id, userId: r.user_id, role: r.role,
@@ -223,6 +225,8 @@ interface FinanceApi {
   settlements(): Settlement[];
 
   updateProfile(patch: { name: string }): Promise<void>;
+  /** Mescla `patch` em profile.onboarding (não substitui o objeto inteiro). */
+  updateOnboarding(patch: Partial<{ wizardDone: boolean; tips: Record<string, boolean> }>): Promise<void>;
   createWallet(name: string): Promise<UUID>;
   renameWallet(id: UUID, name: string): Promise<void>;
   deleteWallet(id: UUID): Promise<void>;
@@ -428,6 +432,19 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     const { error } = await supabase.from('profiles').update({ name }).eq('id', userId);
     if (error) throw error;
     setProfile((p) => (p ? { ...p, name } : p));
+  };
+
+  const updateOnboarding: FinanceApi['updateOnboarding'] = async (patch) => {
+    if (!userId) return;
+    const current = profile?.onboarding ?? {};
+    const merged = {
+      ...current,
+      ...patch,
+      tips: { ...(current.tips ?? {}), ...(patch.tips ?? {}) },
+    };
+    const { error } = await supabase.from('profiles').update({ onboarding: merged }).eq('id', userId);
+    if (error) throw error;
+    setProfile((p) => (p ? { ...p, onboarding: merged } : p));
   };
 
   const createWallet: FinanceApi['createWallet'] = async (name) => {
@@ -810,7 +827,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     invoiceView, monthTransactionsByDate, monthTransactionsByRef, monthSummary, recurrenceOccurrences,
     spendByMember, jointSpendCents, isPeriodLocked, wouldOverdraw, wouldExceedLimit,
     totalInvestedCents, investmentMonthlyYieldCents, memberBalances, settlements,
-    updateProfile, createWallet, renameWallet, deleteWallet, addMemberByEmail, removeMember,
+    updateProfile, updateOnboarding, createWallet, renameWallet, deleteWallet, addMemberByEmail, removeMember,
     addAccount, updateAccount, deleteAccount,
     addCategory, updateCategory, deleteCategory,
     addTransaction, updateTransaction, deleteTransaction, setTransactionStatus,

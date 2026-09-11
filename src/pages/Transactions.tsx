@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useFinance } from '@/contexts/FinanceContext';
 import { PageHeader, EmptyState } from '@/components/PageHeader';
+import { OnboardingTip } from '@/components/OnboardingTip';
 import { MoneyInput } from '@/components/MoneyInput';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
@@ -177,6 +178,14 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
   return (
     <div className="space-y-4">
       {!embedded && <PageHeader title={isIncome ? 'Receitas' : 'Lançamentos'} subtitle={`Competência de ${mes} de ${year}`} extra={locked ? <LockPill /> : undefined} />}
+
+      {!embedded && (
+        <OnboardingTip pageKey={isIncome ? 'receitas' : 'lancamentos'} title={isIncome ? 'Todo recebimento entra aqui' : 'Todo gasto entra aqui'}>
+          {isIncome
+            ? 'Lance salário, extras ou qualquer entrada avulsa. Recebimento fixo todo mês? Cadastre em Fixos em vez de lançar na mão.'
+            : 'Escolha a conta ou o cartão na hora de lançar — o gasto de cartão entra na fatura certa sozinho. Marque "gasto em conjunto" quando for uma despesa dos dois.'}
+        </OnboardingTip>
+      )}
 
       {locked && !embedded && (
         <div className="flex items-center gap-2 rounded-[12px] border border-[#F2C98A] bg-[#F3EBE5] p-3 text-[12.5px] text-[#5C4C45]">

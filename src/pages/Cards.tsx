@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useFinance } from '@/contexts/FinanceContext';
 import { PageHeader, EmptyState } from '@/components/PageHeader';
+import { OnboardingTip } from '@/components/OnboardingTip';
 import { MoneyInput } from '@/components/MoneyInput';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
@@ -116,6 +117,10 @@ export default function Cards() {
         subtitle="Limites e faturas"
         action={<Button onClick={() => { setEditing(null); setForm(emptyForm()); setShowForm(true); }}><Plus className="mr-2 h-4 w-4" /> Novo cartão</Button>}
       />
+
+      <OnboardingTip pageKey="cartoes" title="O limite é travado no banco">
+        Cada gasto no cartão entra na fatura do mês certo sozinho, e o app recusa lançar acima do limite disponível. Pagar a fatura aqui só move dinheiro de uma conta — não gera lançamento duplicado.
+      </OnboardingTip>
 
       {cards.length > 0 && (
         <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">

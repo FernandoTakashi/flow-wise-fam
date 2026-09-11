@@ -281,4 +281,11 @@ begin
 end;
 $$;
 
+-- 20260911000001 — estado do onboarding guiado (wizard + dicas por página),
+-- por pessoa (fica no perfil, não na carteira)
+alter table public.profiles
+  add column if not exists onboarding jsonb not null default '{}'::jsonb;
+comment on column public.profiles.onboarding is
+  'Progresso do onboarding guiado: { wizardDone: bool, tips: { <pageKey>: bool } }';
+
 commit;
