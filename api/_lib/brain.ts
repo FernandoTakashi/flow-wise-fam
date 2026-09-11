@@ -28,14 +28,26 @@ export interface BotEntry {
   note: string | null;
 }
 
+export interface BotFixo {
+  description: string;
+  kind: 'income' | 'expense';
+  amountCents: number;
+  day: number;
+  accountId: string | null;
+  categoryId: string | null;
+}
+
 export type BotAction =
   | { intent: 'reply'; text: string }
   | { intent: 'lancamento'; entry: BotEntry }
-  | { intent: 'pagar_fixo'; recurrenceId: string; amountCents: number | null; paidOnISO: string | null };
+  | { intent: 'pagar_fixo'; recurrenceId: string; amountCents: number | null; paidOnISO: string | null }
+  | { intent: 'pagar_fatura'; cardId: string; fromAccountId: string; paidOnISO: string | null }
+  | { intent: 'criar_fixo'; fixo: BotFixo }
+  | { intent: 'desfazer' };
 
 const Schema = z.object({
-  intent: z.enum(['consulta', 'lancamento', 'pagar_fixo', 'ajuda', 'desconhecido']),
-  reply: z.string().describe('Resposta pronta em pt-BR (consulta/ajuda/desconhecido). Curta, com os números do contexto. Vazio para lancamento/pagar_fixo.'),
+  intent: z.enum(['consulta', 'lancamento', 'pagar_fixo', 'pagar_fatura', 'criar_fixo', 'desfazer', 'ajuda', 'desconhecido']),
+  reply: z.string().describe('Resposta pronta em pt-BR (consulta/ajuda/desconhecido). Curta, com os números do contexto. Vazio pros outros intents.'),
   entry: z.object({
     kind: z.enum(['expense', 'income']),
     description: z.string(),
@@ -51,6 +63,19 @@ const Schema = z.object({
     recurrence_id: z.string().describe('id EXATO de fixosAPagar/fixosAReceber'),
     amount_cents: z.number().int().nullable(),
     paid_on: z.string().nullable().describe('yyyy-mm-dd, senão null (= hoje)'),
+  }).nullable(),
+  fatura: z.object({
+    card_id: z.string().describe('cartaoId EXATO de faturas'),
+    from_account_id: z.string().describe('id EXATO de contasParaLancar cujo tipo NÃO seja "card" — de onde sai o dinheiro'),
+    paid_on: z.string().nullable().describe('yyyy-mm-dd, senão null (= hoje)'),
+  }).nullable(),
+  fixo: z.object({
+    description: z.string(),
+    kind: z.enum(['expense', 'income']),
+    amount_cents: z.number().int(),
+    day: z.number().int().describe('1-31 = dia fixo do mês; 0 = último dia do mês'),
+    account_id: z.string().nullable().describe('id EXATO de contasParaLancar, ou null'),
+    category_id: z.string().nullable().describe('id EXATO de categorias, ou null'),
   }).nullable(),
 });
 
@@ -88,6 +113,9 @@ export async function interpret(text: string, ctx: WalletContext): Promise<BotAc
         '- "lancamento": a mensagem descreve um gasto ou recebimento com valor. Preencha `entry` (ids EXATOS das listas; ' +
         'account_id/category_id = null se não citado; datas relativas viram yyyy-mm-dd com hoje = ' + ctx.hoje + ').\n' +
         '- "pagar_fixo": a pessoa diz que pagou/recebeu uma conta fixa (ex.: "paguei o aluguel"). Preencha `pay` com o recurrence_id do fixo correspondente em fixosAPagar/fixosAReceber.\n' +
+        '- "pagar_fatura": a pessoa diz que pagou a fatura de um cartão (ex.: "paguei a fatura do nubank"). Preencha `fatura` com o cartaoId (de `faturas`) e a conta de onde saiu o dinheiro (de `contasParaLancar`, tipo diferente de "card").\n' +
+        '- "criar_fixo": a pessoa quer CADASTRAR uma conta fixa nova, sem estar pagando agora (ex.: "cadastra academia 89,90 todo dia 10", "todo mês recebo 200 de aluguel no dia 5"). Preencha `fixo`. NÃO confundir com "lancamento" (que é um gasto avulso de agora) nem com "pagar_fixo" (que já existe e a pessoa está dando baixa).\n' +
+        '- "desfazer": a pessoa quer desfazer/cancelar/apagar o último lançamento que ela fez (ex.: "desfaz", "cancela isso", "lancei errado, apaga"). Não precisa preencher nada extra — o último lançamento é resolvido fora daqui.\n' +
         '- "ajuda"/"desconhecido": responda em `reply` explicando o que sabe fazer.',
       messages: [{ role: 'user', content: `ESTADO:\n${JSON.stringify(ctx)}\n\nMENSAGEM:\n${text}` }],
       output_config: { format: zodOutputFormat(Schema) },
@@ -126,6 +154,37 @@ export async function interpret(text: string, ctx: WalletContext): Promise<BotAc
         };
       }
     }
+
+    if (p.intent === 'pagar_fatura' && p.fatura?.card_id && p.fatura?.from_account_id) {
+      const cardOk = ctx.faturas.some((f) => f.cartaoId === p.fatura!.card_id);
+      const accOk = ctx.contasParaLancar.some((a) => a.id === p.fatura!.from_account_id && a.tipo !== 'card');
+      if (cardOk && accOk) {
+        return {
+          intent: 'pagar_fatura',
+          cardId: p.fatura.card_id,
+          fromAccountId: p.fatura.from_account_id,
+          paidOnISO: p.fatura.paid_on && /^\d{4}-\d{2}-\d{2}$/.test(p.fatura.paid_on) ? p.fatura.paid_on : null,
+        };
+      }
+    }
+
+    if (p.intent === 'criar_fixo' && p.fixo && p.fixo.amount_cents > 0) {
+      const acc = p.fixo.account_id && ctx.contasParaLancar.some((a) => a.id === p.fixo!.account_id) ? p.fixo.account_id : null;
+      const cat = p.fixo.category_id && ctx.categorias.some((c) => c.id === p.fixo!.category_id) ? p.fixo.category_id : null;
+      return {
+        intent: 'criar_fixo',
+        fixo: {
+          description: p.fixo.description.trim().slice(0, 80) || 'Fixo',
+          kind: p.fixo.kind,
+          amountCents: p.fixo.amount_cents,
+          day: Math.min(Math.max(p.fixo.day, 0), 31),
+          accountId: acc,
+          categoryId: cat,
+        },
+      };
+    }
+
+    if (p.intent === 'desfazer') return { intent: 'desfazer' };
 
     return { intent: 'reply', text: p.reply?.trim() || 'Não entendi. Manda um gasto ("uber 23 nubank") ou uma pergunta ("qual meu saldo?").' };
   } catch (e) {

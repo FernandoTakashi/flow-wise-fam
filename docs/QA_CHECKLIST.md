@@ -75,8 +75,13 @@ não corrige "de passagem" sem anotar o que era.
 - [ ] Lançar por mensagem ("mercado 42,90 nubank")
 - [ ] Perguntar saldo/quanto falta pagar — resposta bate com o app
 - [ ] Dizer "paguei o aluguel" → marca o fixo certo
+- [ ] Dizer "paguei a fatura do [cartão]" → confirma e quita a fatura certa
+- [ ] Dizer "cadastra [descrição] [valor] todo dia [N]" → confirma e cria o fixo
+- [ ] Dizer "desfaz" (ou `/desfazer`) logo após lançar algo → apaga o lançamento certo
+- [ ] `/desfazer` sem nenhum lançamento recente → avisa que não achou nada, não quebra
 - [ ] Mandar só um número depois de pedir ajuste de valor → não sequestra um lançamento novo digitado em seguida
 - [ ] Lembrete diário chega (ou simular via cron manualmente)
+- [ ] `/ajuda` lista as capacidades novas; menu de comandos do Telegram mostra `/ajuda`, `/desfazer`, `/id`
 
 ## Mobile / PWA
 

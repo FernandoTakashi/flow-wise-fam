@@ -61,6 +61,10 @@ export function clearButtons(chatId: number | string, messageId: number): Promis
   return call('editMessageReplyMarkup', { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } });
 }
 
+export function setMyCommands(commands: { command: string; description: string }[]): Promise<unknown> {
+  return call('setMyCommands', { commands });
+}
+
 export function setWebhook(url: string, secret?: string): Promise<unknown> {
   return call('setWebhook', {
     url,

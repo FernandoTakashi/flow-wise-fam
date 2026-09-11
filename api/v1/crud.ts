@@ -7,7 +7,8 @@
 // vez de um arquivo por recurso, despachamos pelo campo `resource`.
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
-  loadWalletBundle, insertEntry, updateEntry, deleteEntry, type EntryInput, type EntryPatch,
+  loadWalletBundle, insertEntry, updateEntry, deleteEntry, createRecurrence,
+  type EntryInput, type EntryPatch,
 } from '../_lib/finance.js';
 import { requireMember, requireRowInWallet, requireUser } from './_util.js';
 
@@ -87,14 +88,17 @@ async function recurrence(req: VercelRequest, res: VercelResponse, db: any, wall
     if (!body.description || !body.kind || !body.amountCents || !body.day || !body.startDate) {
       res.status(400).json({ error: 'invalid_recurrence' }); return;
     }
-    const { error } = await db.from('recurrences').insert({
-      wallet_id: walletId, description: body.description, kind: body.kind, amount_cents: body.amountCents,
-      category_id: body.categoryId ?? null, account_id: body.accountId ?? null, day: body.day,
-      start_date: body.startDate, end_date: body.endDate ?? null,
-      autopay: body.autopay ?? false, variable_amount: body.variableAmount ?? false, shared: body.shared ?? false,
-      installments_total: body.installmentsTotal ?? null, installments_done: body.installmentsDone ?? 0,
-    });
-    if (error) { res.status(400).json({ error: 'insert_failed', detail: error.message }); return; }
+    try {
+      await createRecurrence(walletId, {
+        description: body.description, kind: body.kind, amountCents: body.amountCents,
+        categoryId: body.categoryId ?? null, accountId: body.accountId ?? null, day: body.day,
+        startDate: body.startDate, endDate: body.endDate ?? null,
+        autopay: body.autopay ?? false, variableAmount: body.variableAmount ?? false, shared: body.shared ?? false,
+        installmentsTotal: body.installmentsTotal ?? null, installmentsDone: body.installmentsDone ?? 0,
+      });
+    } catch (e) {
+      res.status(400).json({ error: 'insert_failed', detail: (e as Error).message }); return;
+    }
     res.status(200).json({ ok: true });
     return;
   }

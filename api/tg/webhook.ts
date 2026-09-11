@@ -6,10 +6,13 @@ import {
   sendMessage, answerCallback, clearButtons, type TgUpdate, type TgMessage, type TgCallbackQuery,
 } from '../_lib/telegram.js';
 import { findLink, redeemToken, setPending, takePending, type ChatLink } from '../_lib/chat.js';
-import { loadWalletBundle, insertEntry, markOccurrence, occurrenceTx } from '../_lib/finance.js';
+import {
+  loadWalletBundle, insertEntry, markOccurrence, occurrenceTx,
+  payInvoice, createRecurrence, lastTransaction, deleteEntry,
+} from '../_lib/finance.js';
 import { buildWalletContext } from '../_lib/context.js';
 import { interpret } from '../_lib/brain.js';
-import { spDateISO, formatBRL, toCents, isoParts } from '../_lib/shared.js';
+import { spDateISO, formatBRL, toCents, isoParts, dayOfMonthISO } from '../_lib/shared.js';
 
 const HELP =
   'Oi, eu sou a <b>Carolina</b> 👋 — a assistente da <b>CaRe Wallet</b>.\n\n' +
@@ -17,7 +20,12 @@ const HELP =
   '<code>uber 23</code>, <code>tv 3000 em 10x nubank</code> — que eu mostro um resumo pra você confirmar.\n\n' +
   'Pergunta à vontade: <i>qual meu saldo?</i> · <i>quanto falta pagar esse mês?</i> · ' +
   '<i>quanto gastei?</i> · <i>quando vence a fatura?</i>\n\n' +
-  'E dá pra dizer <i>paguei o aluguel</i> pra marcar um fixo. Os lembretes de conta também chegam por aqui.';
+  'Também entendo:\n' +
+  '• <i>paguei o aluguel</i> — dá baixa num fixo\n' +
+  '• <i>paguei a fatura do nubank</i> — quita a fatura do cartão\n' +
+  '• <i>cadastra academia 89,90 todo dia 10</i> — cria um fixo novo\n' +
+  '• <i>desfaz</i> ou /desfazer — apaga o último lançamento que você fez\n\n' +
+  'Os lembretes de conta também chegam por aqui.';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
@@ -65,6 +73,8 @@ async function onMessage(msg: TgMessage) {
     return;
   }
 
+  if (text === '/desfazer') { await promptUndo(link, chatId); return; }
+
   const pending = await takePending(link.id);
   if (pending?.kind === 'adjust_recurrence') {
     const bare = parseBareAmount(text);
@@ -101,6 +111,41 @@ async function onMessage(msg: TgMessage) {
       [[{ text: '✏️ Corrigir valor', callback_data: `adj:${rec.id}:${m + 1}:${y}` }]]);
     return;
   }
+
+  if (action.intent === 'pagar_fatura') {
+    const bundle = await loadWalletBundle(link.wallet_id);
+    const card = bundle.accounts.find((a) => a.id === action.cardId);
+    const fromAcc = bundle.accounts.find((a) => a.id === action.fromAccountId);
+    if (!card || !fromAcc) { await sendMessage(chatId, 'Não achei esse cartão ou conta.'); return; }
+    const fatura = ctx.faturas.find((f) => f.cartaoId === action.cardId);
+    const pendingId = await setPending(link.id, 'pay_fatura', {
+      cardId: action.cardId, fromAccountId: action.fromAccountId, paidOnISO: action.paidOnISO,
+    });
+    await sendMessage(chatId,
+      `💳 Pagar a fatura do <b>${escapeHtml(card.name)}</b>${fatura ? ` (${fatura.aberto})` : ''} ` +
+      `com <b>${escapeHtml(fromAcc.name)}</b>?`,
+      [[
+        { text: '✅ Confirmar', callback_data: `ok:${pendingId}` },
+        { text: '✖️ Cancelar', callback_data: `no:${pendingId}` },
+      ]]);
+    return;
+  }
+
+  if (action.intent === 'criar_fixo') {
+    const f = action.fixo;
+    const pendingId = await setPending(link.id, 'criar_fixo', { fixo: f });
+    const diaLabel = f.day <= 0 ? 'último dia do mês' : `dia ${f.day}`;
+    await sendMessage(chatId,
+      `🔁 Novo fixo (${f.kind === 'income' ? 'entrada' : 'saída'}): <b>${escapeHtml(f.description)}</b> — ` +
+      `<b>${formatBRL(f.amountCents)}</b>, todo ${diaLabel}. Confirma?`,
+      [[
+        { text: '✅ Confirmar', callback_data: `ok:${pendingId}` },
+        { text: '✖️ Cancelar', callback_data: `no:${pendingId}` },
+      ]]);
+    return;
+  }
+
+  if (action.intent === 'desfazer') { await promptUndo(link, chatId); return; }
 
   // lançamento
   const e = action.entry;
@@ -147,18 +192,59 @@ async function onCallback(cq: TgCallbackQuery) {
 
   if (action === 'ok') {
     const p = await takePending(link.id, a1);
-    if (!p || p.kind !== 'new_tx') { await answerCallback(cq.id, 'Esse pedido expirou.'); return; }
-    const entry = (p.payload as { entry: Parameters<typeof insertEntry>[3] }).entry;
+    if (!p) { await answerCallback(cq.id, 'Esse pedido expirou.'); return; }
+
     try {
-      const bundle = await loadWalletBundle(link.wallet_id);
-      const r = await insertEntry(bundle, link.wallet_id, link.user_id, entry, 'telegram');
-      if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
-      await answerCallback(cq.id, 'Lançado ✅');
-      await sendMessage(chatId,
-        `✅ Lançado: <b>${escapeHtml(entry.description)}</b> — ${formatBRL(entry.amountCents)} · ${escapeHtml(r.accountName)}` +
-        (r.parts > 1 ? ` em ${r.parts}×` : '') + (r.onCard ? ' (na fatura)' : ''));
+      if (p.kind === 'new_tx') {
+        const entry = (p.payload as { entry: Parameters<typeof insertEntry>[3] }).entry;
+        const bundle = await loadWalletBundle(link.wallet_id);
+        const r = await insertEntry(bundle, link.wallet_id, link.user_id, entry, 'telegram');
+        if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
+        await answerCallback(cq.id, 'Lançado ✅');
+        await sendMessage(chatId,
+          `✅ Lançado: <b>${escapeHtml(entry.description)}</b> — ${formatBRL(entry.amountCents)} · ${escapeHtml(r.accountName)}` +
+          (r.parts > 1 ? ` em ${r.parts}×` : '') + (r.onCard ? ' (na fatura)' : ''));
+        return;
+      }
+
+      if (p.kind === 'pay_fatura') {
+        const { cardId, fromAccountId, paidOnISO } = p.payload as { cardId: string; fromAccountId: string; paidOnISO: string | null };
+        const bundle = await loadWalletBundle(link.wallet_id);
+        const card = bundle.accounts.find((acc) => acc.id === cardId);
+        const dateISO = paidOnISO ?? spDateISO(new Date());
+        const { m, y } = isoParts(dateISO);
+        await payInvoice(link.wallet_id, cardId, card?.name ?? 'cartão', fromAccountId, m, y, dateISO, link.user_id, link.user_id);
+        if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
+        await answerCallback(cq.id, 'Fatura paga ✅');
+        await sendMessage(chatId, `✅ Fatura do <b>${escapeHtml(card?.name ?? 'cartão')}</b> paga.`);
+        return;
+      }
+
+      if (p.kind === 'criar_fixo') {
+        const f = (p.payload as { fixo: import('../_lib/brain.js').BotFixo }).fixo;
+        const { y, m } = isoParts(spDateISO(new Date()));
+        await createRecurrence(link.wallet_id, {
+          description: f.description, kind: f.kind, amountCents: f.amountCents, day: f.day,
+          accountId: f.accountId, categoryId: f.categoryId, startDate: dayOfMonthISO(y, m, 1),
+        });
+        if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
+        await answerCallback(cq.id, 'Fixo criado ✅');
+        await sendMessage(chatId, `✅ Fixo <b>${escapeHtml(f.description)}</b> criado — ${formatBRL(f.amountCents)}.`);
+        return;
+      }
+
+      if (p.kind === 'undo_tx') {
+        const { txId, description, amountCents } = p.payload as { txId: string; description: string; amountCents: number };
+        await deleteEntry(link.wallet_id, txId);
+        if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
+        await answerCallback(cq.id, 'Apagado ✅');
+        await sendMessage(chatId, `🗑️ Apagado: <b>${escapeHtml(description)}</b> — ${formatBRL(amountCents)}.`);
+        return;
+      }
+
+      await answerCallback(cq.id, 'Esse pedido expirou.');
     } catch (e) {
-      await answerCallback(cq.id, 'Erro ao lançar');
+      await answerCallback(cq.id, 'Erro');
       await sendMessage(chatId, `❌ ${escapeHtml((e as Error).message)}`);
     }
     return;
@@ -207,6 +293,21 @@ async function adjustRecurrence(
   if (!rec) { await sendMessage(chatId, 'Recorrência não encontrada.'); return; }
   await markOccurrence(bundle, link.wallet_id, rec, payload.m - 1, payload.y, cents, link.user_id, link.user_id, 'telegram');
   await sendMessage(chatId, `✅ Valor de <b>${escapeHtml(rec.description)}</b> ajustado para ${formatBRL(cents)}.`);
+}
+
+/** Acha o último lançamento desta pessoa e pergunta se é pra apagar. Usado por /desfazer e pelo intent "desfazer". */
+async function promptUndo(link: ChatLink, chatId: number): Promise<void> {
+  const tx = await lastTransaction(link.wallet_id, link.user_id);
+  if (!tx) { await sendMessage(chatId, 'Não achei nenhum lançamento seu recente pra desfazer.'); return; }
+  const pendingId = await setPending(link.id, 'undo_tx', {
+    txId: tx.id, description: tx.description || (tx.kind === 'income' ? 'Entrada' : 'Saída'), amountCents: tx.amount_cents,
+  });
+  await sendMessage(chatId,
+    `🗑️ Apagar <b>${escapeHtml(tx.description || '—')}</b> — ${formatBRL(tx.amount_cents)} (${tx.date})?`,
+    [[
+      { text: '✅ Sim, apagar', callback_data: `ok:${pendingId}` },
+      { text: '✖️ Cancelar', callback_data: `no:${pendingId}` },
+    ]]);
 }
 
 /**

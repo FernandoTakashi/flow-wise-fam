@@ -13,7 +13,10 @@ Implementa:
   - **lançar** ("ifood 42,90 crédito nubank", "tv 3000 em 10x nubank", "mercado 120 dividido")
     → resumo → **[Confirmar]**;
   - **responder** ("qual meu saldo?", "quanto falta pagar?", "quando vence a fatura?");
-  - **marcar fixo pago** ("paguei o aluguel").
+  - **marcar fixo pago** ("paguei o aluguel");
+  - **pagar fatura de cartão** ("paguei a fatura do nubank") → resumo → **[Confirmar]**;
+  - **cadastrar um fixo novo** ("cadastra academia 89,90 todo dia 10") → resumo → **[Confirmar]**;
+  - **desfazer o último lançamento** ("desfaz", "cancela isso", ou `/desfazer`) → **[Sim, apagar]**.
   Sem `ANTHROPIC_API_KEY` cai num regex simples só para lançamento. Custo Haiku ≈ US$0,002/mensagem.
 
 Arquitetura: `api/` (Vercel Functions) + `api/cron/reminders.ts` (Vercel Cron) +

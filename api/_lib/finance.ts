@@ -359,6 +359,41 @@ export async function payInvoice(
   if (statusErr) throw statusErr;
 }
 
+export interface RecurrenceInput {
+  description: string; kind: 'income' | 'expense'; amountCents: number;
+  categoryId?: string | null; accountId?: string | null; day: number;
+  startDate: string; endDate?: string | null;
+  autopay?: boolean; variableAmount?: boolean; shared?: boolean;
+  installmentsTotal?: number | null; installmentsDone?: number;
+}
+
+/** Cria um fixo (recorrência). Espelha addRecurrence do FinanceContext / POST recurrence de api/v1/crud.ts. */
+export async function createRecurrence(walletId: string, input: RecurrenceInput): Promise<void> {
+  const db = admin();
+  const { error } = await db.from('recurrences').insert({
+    wallet_id: walletId, description: input.description, kind: input.kind, amount_cents: input.amountCents,
+    category_id: input.categoryId ?? null, account_id: input.accountId ?? null, day: input.day,
+    start_date: input.startDate, end_date: input.endDate ?? null,
+    autopay: input.autopay ?? false, variable_amount: input.variableAmount ?? false, shared: input.shared ?? false,
+    installments_total: input.installmentsTotal ?? null, installments_done: input.installmentsDone ?? 0,
+  });
+  if (error) throw error;
+}
+
+export interface LastTxRow {
+  id: string; description: string | null; amount_cents: number; kind: string; date: string;
+}
+
+/** Último lançamento avulso (não-transferência) criado por essa pessoa nesta carteira — pro "desfazer". */
+export async function lastTransaction(walletId: string, createdBy: string): Promise<LastTxRow | null> {
+  const db = admin();
+  const { data } = await db.from('transactions')
+    .select('id, description, amount_cents, kind, date')
+    .eq('wallet_id', walletId).eq('created_by', createdBy).neq('kind', 'transfer')
+    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  return (data as LastTxRow) ?? null;
+}
+
 /** Estorna o pagamento de uma fatura: reabre e apaga a transferência. */
 export async function unpayInvoice(walletId: string, invoiceId: string): Promise<void> {
   const db = admin();

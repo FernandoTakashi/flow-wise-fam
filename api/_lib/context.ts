@@ -23,7 +23,7 @@ export interface WalletContext {
   };
   fixosAPagar: { recurrenceId: string; descricao: string; valor: string; dia: number; parcela: string | null }[];
   fixosAReceber: { recurrenceId: string; descricao: string; valor: string; dia: number }[];
-  faturas: { cartao: string; aberto: string; status: string }[];
+  faturas: { cartaoId: string; cartao: string; aberto: string; status: string }[];
   ultimosLancamentos: { data: string; descricao: string; valor: string; conta: string }[];
 }
 
@@ -103,7 +103,7 @@ export async function buildWalletContext(walletId: string, todayISO: string): Pr
     const inv = bundle.invoices.find((i) => i.account_id === card.id && i.ref_month === refMonth && i.ref_year === y);
     const posted = inv ? txs.filter((t) => t.card_invoice_id === inv.id && t.kind === 'expense').reduce((s, t) => s + t.amount_cents, 0) : 0;
     if (posted > 0 || (inv && inv.status !== 'paid')) {
-      faturas.push({ cartao: card.name, aberto: formatBRL(posted), status: inv?.status ?? 'sem fatura' });
+      faturas.push({ cartaoId: card.id, cartao: card.name, aberto: formatBRL(posted), status: inv?.status ?? 'sem fatura' });
     }
   }
 
