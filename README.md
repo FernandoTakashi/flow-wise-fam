@@ -78,3 +78,14 @@ Configurado para **Vercel** (`vercel.json` faz o rewrite de SPA).
 3. Build command `npm run build`, output `dist`.
 
 Alternativas: Netlify, Cloudflare Pages (mesmo build, adicionar rewrite `/* -> /index.html`).
+
+---
+
+## Ambientes e qualidade
+
+- **Staging/QA** isolado (banco, bot do Telegram e env vars próprios,
+  separados de produção): [docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md).
+- **Checklist manual** pra rodar antes de promover staging → produção:
+  [docs/QA_CHECKLIST.md](docs/QA_CHECKLIST.md).
+- **CI** (`.github/workflows/ci.yml`) roda typecheck/build/test/lint em
+  todo push e PR.
