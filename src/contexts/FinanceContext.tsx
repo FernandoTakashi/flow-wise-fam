@@ -4,10 +4,9 @@ import {
 } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  addMonthsISO, invoiceDates, isoParts, MONTHS_PT, recurrenceDueISO, resolveInvoiceRef, spDateISO, todayISO,
+  invoiceDates, isoParts, MONTHS_PT, recurrenceDueISO, resolveInvoiceRef, spDateISO, todayISO,
 } from '@/lib/dates';
-import { formatBRL, splitInstallments } from '@/lib/money';
-import { newId } from '@/lib/utils';
+import { formatBRL } from '@/lib/money';
 import { apiFetch } from '@/lib/api';
 import * as core from '@/core';
 import { accountBalance, cardCommitted } from '@/core';
@@ -592,7 +591,8 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
     const isCard = account.kind === 'card';
 
-    // limites rígidos (o banco também barra; aqui é a mensagem amigável)
+    // limites rígidos: mensagem amigável na hora, sem esperar o round-trip da
+    // API (o banco também barra do lado de lá, via enforce_spend_limits).
     if (input.kind === 'expense' && (input.status ?? 'cleared') === 'cleared') {
       if (isCard && account.creditLimitCents != null) {
         const free = account.creditLimitCents - cardCommitted(account.id, transactions, invoices);
@@ -607,41 +607,28 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
-    const n = isCard ? Math.max(1, Math.floor(input.installments ?? 1)) : 1;
-    // parcela atual: só materializa da `start` até a `n` (parcelas já pagas ficam de fora)
-    const start = Math.min(Math.max(1, Math.floor(input.installmentStart ?? 1)), n);
-    const parts = splitInstallments(input.amountCents, n);
-    const group = n > 1 ? newId() : null;
-    const baseDesc = input.description?.trim() || '';
-    const isShared = input.kind === 'expense' && input.shared === true;
-
-    for (let k = 0; k <= n - start; k += 1) {
-      const no = start + k;                                  // nº da parcela (1..n)
-      const dISO = n > 1 ? addMonthsISO(input.dateISO, k) : input.dateISO;
-      const invoiceId = isCard ? await ensureInvoice(account, dISO) : null;
-      const ref = refFor(dISO, account, { refMonth: input.refMonth, refYear: input.refYear });
-      const { error } = await supabase.from('transactions').insert({
-        wallet_id: wid,
-        account_id: account.id,
+    // escrita de verdade passa pela API própria (POST /api/v1/transactions),
+    // que reusa a mesma insertEntry() do bot do Telegram.
+    await apiFetch('/transactions', {
+      method: 'POST',
+      body: JSON.stringify({
+        walletId: wid,
         kind: input.kind,
-        amount_cents: parts[no - 1],
-        date: dISO,
-        ref_month: ref.refMonth,
-        ref_year: ref.refYear,
-        status: input.status ?? 'cleared',
-        description: n > 1 ? `${baseDesc} (${no}/${n})` : baseDesc,
-        category_id: input.categoryId ?? null,
-        member_id: input.memberId ?? null,
-        card_invoice_id: invoiceId,
-        installment_group: group,
-        installment_no: n > 1 ? no : null,
-        installment_of: n > 1 ? n : null,
+        description: input.description?.trim() || '',
+        amountCents: input.amountCents,
+        accountId: input.accountId,
+        categoryId: input.categoryId ?? null,
+        dateISO: input.dateISO,
         note: input.note ?? null,
-        shared: isShared,
-        created_by: userId,
-      }).select('id').single();
-      if (error) throw error;
-    }
+        installments: input.installments ?? null,
+        installmentStart: input.installmentStart ?? null,
+        shared: input.shared ?? null,
+        memberId: input.memberId ?? null,
+        status: input.status ?? 'cleared',
+        refMonth: input.refMonth ?? null,
+        refYear: input.refYear ?? null,
+      }),
+    });
     await reload();
   };
 

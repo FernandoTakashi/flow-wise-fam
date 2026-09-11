@@ -49,8 +49,12 @@ export async function loadWalletBundle(walletId: string): Promise<WalletBundle> 
   };
 }
 
-function refFor(dateISO: string, account: Pick<AccountRow, 'kind' | 'closing_day'>): { refMonth: number; refYear: number } {
+function refFor(
+  dateISO: string, account: Pick<AccountRow, 'kind' | 'closing_day'>,
+  explicit?: { refMonth?: number | null; refYear?: number | null },
+): { refMonth: number; refYear: number } {
   if (account.kind === 'card') return resolveInvoiceRef(dateISO, account.closing_day ?? 1);
+  if (explicit?.refMonth && explicit?.refYear) return { refMonth: explicit.refMonth, refYear: explicit.refYear };
   const { y, m } = isoParts(dateISO);
   return { refMonth: m + 1, refYear: y };
 }
@@ -91,10 +95,18 @@ export interface EntryInput {
   dateISO: string;
   note: string | null;
   installments?: number | null;
+  /** parcela em que a compra está agora (1 = compra nova). Só o bot omite (sempre 1). */
+  installmentStart?: number | null;
   shared?: boolean | null;
+  /** quem pagou/recebeu. Omitido (bot) = quem lançou; `null` explícito (app) = sem responsável. */
+  memberId?: string | null;
+  status?: 'pending' | 'cleared';
+  /** competência manual (só para não-cartão). Omitido = derivado da data. */
+  refMonth?: number | null;
+  refYear?: number | null;
 }
 
-/** Cria um lançamento avulso do bot (com parcelas de cartão e divisão opcionais). */
+/** Cria um lançamento (bot: avulso com parcelas/divisão opcionais; app: espelha addTransaction). */
 export async function insertEntry(
   bundle: WalletBundle, walletId: string, createdBy: string, entry: EntryInput, source: string,
 ): Promise<{ accountName: string; onCard: boolean; parts: number }> {
@@ -106,21 +118,27 @@ export async function insertEntry(
 
   const onCard = account.kind === 'card';
   const n = onCard && entry.installments && entry.installments > 1 ? Math.min(entry.installments, 60) : 1;
+  // parcela atual: só materializa da `start` até a `n` (parcelas já pagas ficam de fora)
+  const start = Math.min(Math.max(1, Math.floor(entry.installmentStart ?? 1)), n);
   const parts = splitInstallments(entry.amountCents, n);
   const group = n > 1 ? randomUUID() : null;
+  const status = entry.status ?? 'cleared';
+  const memberId = entry.memberId === undefined ? createdBy : entry.memberId;
+  const baseDesc = entry.description ?? '';
 
   const isShared = entry.kind === 'expense' && entry.shared === true;
-  for (let i = 0; i < n; i += 1) {
-    const dISO = n > 1 ? addMonthsISO(entry.dateISO, i) : entry.dateISO;
+  for (let k = 0; k <= n - start; k += 1) {
+    const no = start + k;                                  // nº da parcela (1..n)
+    const dISO = n > 1 ? addMonthsISO(entry.dateISO, k) : entry.dateISO;
     const invoiceId = onCard ? await ensureInvoice(walletId, account, dISO) : null;
-    const ref = refFor(dISO, account);
+    const ref = refFor(dISO, account, { refMonth: entry.refMonth, refYear: entry.refYear });
     const { error } = await db.from('transactions').insert({
-      wallet_id: walletId, account_id: account.id, kind: entry.kind, amount_cents: parts[i],
-      date: dISO, ref_month: ref.refMonth, ref_year: ref.refYear, status: 'cleared',
-      description: n > 1 ? `${entry.description} (${i + 1}/${n})` : entry.description,
-      category_id: entry.categoryId, member_id: createdBy, created_by: createdBy,
+      wallet_id: walletId, account_id: account.id, kind: entry.kind, amount_cents: parts[no - 1],
+      date: dISO, ref_month: ref.refMonth, ref_year: ref.refYear, status,
+      description: n > 1 ? `${baseDesc} (${no}/${n})` : baseDesc,
+      category_id: entry.categoryId, member_id: memberId, created_by: createdBy,
       card_invoice_id: invoiceId, note: entry.note, source, shared: isShared,
-      installment_group: group, installment_no: n > 1 ? i + 1 : null, installment_of: n > 1 ? n : null,
+      installment_group: group, installment_no: n > 1 ? no : null, installment_of: n > 1 ? n : null,
     });
     if (error) throw error;
   }

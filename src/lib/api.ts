@@ -23,7 +23,8 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 
   if (!res.ok) {
     let detail = res.statusText;
-    try { detail = (await res.json())?.error ?? detail; } catch { /* ignora */ }
+    // `detail` = mensagem amigável (ex.: erro da trigger do banco); `error` = código curto.
+    try { const body = await res.json(); detail = body?.detail ?? body?.error ?? detail; } catch { /* ignora */ }
     throw new ApiError(res.status, detail);
   }
   return res.json() as Promise<T>;
