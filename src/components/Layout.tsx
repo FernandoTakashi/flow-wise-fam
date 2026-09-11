@@ -57,7 +57,7 @@ function MobileNav() {
   return (
     <>
       {menuOpen && (
-        <div className="fixed inset-0 z-40 flex flex-col bg-background md:hidden">
+        <div className="fixed inset-0 z-[60] flex flex-col bg-background md:hidden">
           <div className="flex items-center justify-between border-b p-4 pt-[max(1rem,env(safe-area-inset-top))]">
             <span className="font-display text-lg font-bold">Menu</span>
             <Button variant="ghost" size="icon" onClick={() => setMenuOpen(false)}><X className="h-6 w-6" /></Button>

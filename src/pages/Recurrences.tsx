@@ -229,9 +229,9 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
             const changed = (done || informed) && o.amountCents !== o.estimatedCents;
             return (
               <Card key={o.recurrence.id} className={done ? 'bg-muted/30 opacity-80' : ''}>
-                <CardContent className="flex items-center justify-between gap-3 p-3">
+                <CardContent className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate text-sm font-medium">{o.recurrence.description}</span>
                       <Badge
                         variant={done ? 'default' : informed ? 'outline' : 'secondary'}
@@ -243,22 +243,35 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
                             : 'Pendente'}
                       </Badge>
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
-                      <span>{o.recurrence.day <= 0 ? 'Último dia' : `Dia ${o.recurrence.day}`}</span>
-                      {o.installmentsTotal && o.installmentNo != null && (
-                        <><span>·</span><span className="font-medium text-foreground">
-                          Parcela {o.installmentNo}/{o.installmentsTotal}
-                          {o.installmentsTotal - o.installmentNo > 0 && ` · faltam ${o.installmentsTotal - o.installmentNo} · devendo ≈ ${formatBRL((o.installmentsTotal - o.installmentNo + (done ? 0 : 1)) * o.amountCents)}`}
-                        </span></>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                      <span className="text-[11px] text-muted-foreground">
+                        {o.recurrence.day <= 0 ? 'Último dia' : `Dia ${o.recurrence.day}`}
+                      </span>
+                      {o.recurrence.accountId && (
+                        <Badge variant="outline" className="px-1.5 py-0 text-[10.5px] font-normal text-muted-foreground">{accountName(o.recurrence.accountId)}</Badge>
                       )}
-                      {o.recurrence.accountId && <><span>·</span><span>{accountName(o.recurrence.accountId)}</span></>}
-                      {o.recurrence.categoryId && <><span>·</span><span>{categoryName(o.recurrence.categoryId)}</span></>}
-                      {o.recurrence.variableAmount && <><span>·</span><span className="text-amber-600">valor variável</span></>}
-                      {o.recurrence.autopay && <><span>·</span><span className="inline-flex items-center gap-0.5 text-sky-600"><Zap className="h-3 w-3" /> débito automático</span></>}
+                      {o.recurrence.categoryId && (
+                        <Badge variant="outline" className="px-1.5 py-0 text-[10.5px] font-normal text-muted-foreground">{categoryName(o.recurrence.categoryId)}</Badge>
+                      )}
+                      {o.recurrence.variableAmount && (
+                        <Badge variant="outline" className="border-amber-300 px-1.5 py-0 text-[10.5px] font-normal text-amber-700">valor variável</Badge>
+                      )}
+                      {o.recurrence.autopay && (
+                        <Badge variant="outline" className="border-sky-300 px-1.5 py-0 text-[10.5px] font-normal text-sky-700">
+                          <Zap className="mr-0.5 h-2.5 w-2.5" /> débito automático
+                        </Badge>
+                      )}
                     </div>
+                    {o.installmentsTotal && o.installmentNo != null && (
+                      <p className="mt-1 text-[11px] font-medium text-foreground">
+                        Parcela {o.installmentNo}/{o.installmentsTotal}
+                        {o.installmentsTotal - o.installmentNo > 0
+                          && ` · faltam ${o.installmentsTotal - o.installmentNo} · devendo ≈ ${formatBRL((o.installmentsTotal - o.installmentNo + (done ? 0 : 1)) * o.amountCents)}`}
+                      </p>
+                    )}
                   </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <div className="text-right">
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:flex-nowrap">
+                    <div className="mr-1 text-right">
                       <span className="text-sm font-bold tabular-nums">{formatBRL(done || informed ? o.amountCents : o.estimatedCents)}</span>
                       {changed && <span className="ml-1 text-[11px] text-muted-foreground line-through">{formatBRL(o.estimatedCents)}</span>}
                     </div>

@@ -19,7 +19,7 @@ import { formatBRL, pctToBps, bpsToPct } from '@/lib/money';
 import { MONTHS_PT } from '@/lib/dates';
 import type { Account, Category, CategoryKind } from '@/types';
 import { cn } from '@/lib/utils';
-import { Plus, Trash2, Pencil, Check, X, Lock, LockOpen } from 'lucide-react';
+import { Plus, Trash2, Pencil, Check, X, Lock, LockOpen, LogOut } from 'lucide-react';
 
 const TABS = ['perfil', 'carteiras', 'contas', 'categorias', 'membros', 'períodos', 'integrações'] as const;
 type Tab = typeof TABS[number];
@@ -100,6 +100,13 @@ function ProfileTab() {
       <Button onClick={save} disabled={busy}>{busy ? 'Salvando…' : 'Salvar'}</Button>
 
       <ChangePassword />
+
+      <div className="border-t pt-4">
+        <Button variant="outline" className="w-full text-muted-foreground sm:w-auto"
+          onClick={() => void supabase.auth.signOut()}>
+          <LogOut className="mr-2 h-4 w-4" /> Sair da conta
+        </Button>
+      </div>
     </CardContent></Card>
   );
 }

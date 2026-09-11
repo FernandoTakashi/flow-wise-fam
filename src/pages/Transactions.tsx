@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useFinance } from '@/contexts/FinanceContext';
 import { PageHeader, EmptyState } from '@/components/PageHeader';
@@ -45,7 +45,7 @@ const emptyForm = (dateISO: string): FormState => {
   };
 };
 
-const COLS = 'grid-cols-[78px_minmax(0,1fr)_132px_124px_104px_122px_72px]';
+const COLS = 'grid-cols-[minmax(0,1fr)_78px_132px_124px_104px_122px_72px]';
 
 export default function Transactions({ kind = 'expense', embedded = false }: { kind?: Kind; embedded?: boolean }) {
   const {
@@ -65,7 +65,6 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
-  const autoOpened = useRef(false);
 
   const monthTx = useMemo(
     () => transactions.filter((t) => t.refMonth === month + 1 && t.refYear === year)
@@ -95,10 +94,12 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
     return { income, expense, net: income - expense };
   }, [monthTx]);
 
-  // abre o formulário direto quando vem do botão "Lançar" da tab bar mobile (/lancamentos?new=1)
+  // Abre o formulário direto quando vem do botão "Lançar" da tab bar mobile
+  // (/lancamentos?new=1). O próprio efeito remove o parâmetro assim que abre,
+  // então clicar de novo (já na tela) volta a disparar — sem precisar de um
+  // ref "já abri uma vez" (que travava aberturas seguintes pra sempre).
   useEffect(() => {
-    if (autoOpened.current || searchParams.get('new') !== '1') return;
-    autoOpened.current = true;
+    if (searchParams.get('new') !== '1') return;
     if (!locked) {
       setForm({
         ...emptyForm(today), kind,
@@ -228,7 +229,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
           {/* tabela desktop */}
           <div className="hidden overflow-hidden rounded-[16px] border border-border bg-card md:block">
             <div className={cn('grid gap-3 border-b border-border bg-[#FDFAF8] px-[22px] py-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#7E6E66]', COLS)}>
-              <span>Data</span><span>Descrição</span><span>Conta</span><span>Categoria</span><span>Quem</span>
+              <span>Descrição</span><span>Data</span><span>Conta</span><span>Categoria</span><span>Quem</span>
               <span className="text-right">Valor</span><span />
             </div>
             {rows.map((t) => {
@@ -238,7 +239,6 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
               const sign = t.kind === 'income' ? '+' : t.kind === 'expense' ? '−' : '';
               return (
                 <div key={t.id} className={cn('group grid items-center gap-3 border-b border-[#F4EDE7] px-[22px] py-[13px] transition-colors last:border-0 hover:bg-[#FDFAF8]', COLS, t.status === 'pending' && 'opacity-[.62]')}>
-                  <span className="text-[13px] tabular-nums text-[#5C4C45]">{formatDayMonth(t.date)}</span>
                   <span className="flex min-w-0 items-center gap-2">
                     <i className={cn('h-2 w-2 shrink-0 rounded-full', dot)} />
                     <span className="truncate text-[14px] font-semibold text-foreground">{desc}</span>
@@ -250,6 +250,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                       <span className="shrink-0 rounded-full bg-[#F4EDE7] px-1.5 py-px text-[10.5px] font-bold text-[#8A6A57]">conta chegou</span>
                     )}
                   </span>
+                  <span className="text-[13px] tabular-nums text-[#5C4C45]">{formatDayMonth(t.date)}</span>
                   <span className="truncate text-[12.5px] text-[#5C4C45]">{accountName(t.accountId)}</span>
                   <span className="truncate text-[12.5px] text-[#5C4C45]">{t.categoryId ? categoryName(t.categoryId) : '—'}</span>
                   <span className="truncate text-[12.5px] text-[#5C4C45]">
@@ -330,7 +331,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
 
       {/* dialog nova/editar */}
       <Dialog open={showForm} onOpenChange={(o) => (o ? setShowForm(true) : resetForm())}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:rounded-t-[28px] max-sm:border-x-0 max-sm:border-b-0">
+        <DialogContent className="sm:max-w-lg">
           <div className="mx-auto mb-1 h-[5px] w-11 shrink-0 rounded-full bg-[#DDD1C9] sm:hidden" />
           <DialogHeader>
             <DialogTitle>{editing ? 'Editar' : 'Nova'} {isIncome ? 'entrada' : 'saída'}</DialogTitle>
