@@ -58,7 +58,7 @@ function MobileNav() {
     <>
       {menuOpen && (
         <div className="fixed inset-0 z-40 flex flex-col bg-background md:hidden">
-          <div className="flex items-center justify-between border-b p-4">
+          <div className="flex items-center justify-between border-b p-4 pt-[max(1rem,env(safe-area-inset-top))]">
             <span className="font-display text-lg font-bold">Menu</span>
             <Button variant="ghost" size="icon" onClick={() => setMenuOpen(false)}><X className="h-6 w-6" /></Button>
           </div>
@@ -82,7 +82,7 @@ function MobileNav() {
               );
             })}
           </div>
-          <div className="border-t p-4">
+          <div className="border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
             <Button variant="outline" className="w-full text-muted-foreground"
               onClick={() => { setMenuOpen(false); void supabase.auth.signOut(); }}>
               <LogOut className="mr-2 h-4 w-4" /> Sair
@@ -91,7 +91,7 @@ function MobileNav() {
         </div>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 z-50 flex h-[86px] items-start justify-around border-t border-[#EAE1DA] bg-background px-2 pt-2.5 md:hidden">
+      <div className="fixed bottom-0 left-0 right-0 z-50 flex h-[calc(86px+env(safe-area-inset-bottom))] items-start justify-around border-t border-[#EAE1DA] bg-background px-2 pt-2.5 md:hidden">
         {MOBILE_PRIMARY.slice(0, 2).map((item) => (
           <TabItem key={item.href} item={item} location={location} onClick={() => setMenuOpen(false)} />
         ))}
@@ -149,13 +149,13 @@ function Shell({ children }: { children: ReactNode }) {
         </header>
 
         {/* header mobile */}
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4 py-2 md:hidden">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
           <WalletSelector />
           {showMonthSelector && <MonthSelector />}
         </header>
 
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-6xl px-4 pb-24 pt-4 md:px-8 md:pb-10 md:pt-7">
+          <div className="mx-auto w-full max-w-6xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-4 md:px-8 md:pb-10 md:pt-7">
             {children}
           </div>
         </main>

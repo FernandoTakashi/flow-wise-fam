@@ -143,7 +143,7 @@ export default function AuthPage() {
   if (sent) {
     const isConfirm = sent === 'confirm';
     return (
-      <div className="flex min-h-screen flex-col justify-center bg-background px-[26px] pb-10 pt-8">
+      <div className="flex min-h-screen flex-col justify-center bg-background px-[26px] pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]">
         <div className="mx-auto flex w-full max-w-sm flex-col gap-6 text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[18px] bg-[#E7F2F1] text-accent">
             <MailCheck className="h-7 w-7" />
@@ -176,7 +176,7 @@ export default function AuthPage() {
   // ---- "esqueci minha senha" ---------------------------------------------
   if (showForgot) {
     return (
-      <div className="flex min-h-screen flex-col justify-center bg-background px-[26px] pb-10 pt-8">
+      <div className="flex min-h-screen flex-col justify-center bg-background px-[26px] pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]">
         <div className="mx-auto flex w-full max-w-sm flex-col gap-6">
           <div>
             <h1 className="font-display text-[24px] font-bold text-foreground">Esqueci minha senha</h1>
@@ -205,7 +205,7 @@ export default function AuthPage() {
 
   // ---- formulário -------------------------------------------------------
   return (
-    <div className="flex min-h-screen flex-col justify-center bg-background px-[26px] pb-10 pt-8">
+    <div className="flex min-h-screen flex-col justify-center bg-background px-[26px] pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]">
       <div className="mx-auto flex w-full max-w-sm flex-col gap-[26px]">
         <div className="flex flex-col gap-4">
           <Mascot size={60} tile className="rounded-[18px] p-[5px]" />
