@@ -34,6 +34,8 @@ export default function AuthPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   /** null = formulário; 'confirm' = "confirme seu e-mail"; 'reset' = "link de senha enviado" */
   const [sent, setSent] = useState<null | 'confirm' | 'reset'>(null);
+  const [showForgot, setShowForgot] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
   const isRegister = mode === 'register';
 
   const fail = (title: string, err: unknown) =>
@@ -91,16 +93,14 @@ export default function AuthPage() {
     }
   };
 
-  const handleReset = async () => {
-    if (!email.trim()) {
-      toast({ title: 'Informe o e-mail', description: 'Preencha o campo de e-mail primeiro.', variant: 'destructive' });
-      return;
-    }
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetEmail.trim()) return; // o campo é `required`; isso é só uma trava extra
     setResetting(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: REDIRECT });
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(), { redirectTo: REDIRECT });
       if (error) fail('Erro ao enviar o link', error);
-      else setSent('reset');
+      else { setEmail(resetEmail.trim()); setShowForgot(false); setSent('reset'); }
     } catch (err) {
       fail('Erro ao enviar o link', err);
     } finally {
@@ -173,6 +173,36 @@ export default function AuthPage() {
     );
   }
 
+  // ---- "esqueci minha senha" ---------------------------------------------
+  if (showForgot) {
+    return (
+      <div className="flex min-h-screen flex-col justify-center bg-background px-[26px] pb-10 pt-8">
+        <div className="mx-auto flex w-full max-w-sm flex-col gap-6">
+          <div>
+            <h1 className="font-display text-[24px] font-bold text-foreground">Esqueci minha senha</h1>
+            <p className="mt-2 text-[14px] leading-[1.5] text-[#5C4C45]">
+              Informe o e-mail da sua conta — enviamos um link pra você definir uma senha nova.
+            </p>
+          </div>
+          <form onSubmit={handleReset} className="flex flex-col gap-4">
+            <div className="space-y-1.5">
+              <label htmlFor="reset-email" className={LABEL}>E-mail</label>
+              <Input id="reset-email" type="email" inputMode="email" placeholder="voce@email.com" autoComplete="email"
+                autoFocus value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} required className={FIELD} />
+            </div>
+            <Button type="submit" disabled={resetting} className="h-[54px] rounded-[14px] text-[16px] font-bold">
+              {resetting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando…</> : 'Enviar link de redefinição'}
+            </Button>
+            <button type="button" onClick={() => setShowForgot(false)}
+              className="text-center text-[13.5px] font-semibold text-accent hover:underline">
+              Voltar para o login
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   // ---- formulário -------------------------------------------------------
   return (
     <div className="flex min-h-screen flex-col justify-center bg-background px-[26px] pb-10 pt-8">
@@ -189,20 +219,6 @@ export default function AuthPage() {
                 : 'Acesse sua carteira para lançar gastos, acompanhar as faturas e a projeção do mês.'}
             </p>
           </div>
-        </div>
-
-        <Button type="button" variant="outline" disabled={googleLoading || loading} onClick={handleGoogle}
-          className="h-[52px] rounded-[14px] border-[#E2D7CF] bg-white text-[15px] font-semibold text-[#3C3229] hover:bg-[#FAF6F2]">
-          {googleLoading
-            ? <Loader2 className="mr-2.5 h-[18px] w-[18px] animate-spin" />
-            : <GoogleG className="mr-2.5 h-[18px] w-[18px]" />}
-          Continuar com Google
-        </Button>
-
-        <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-[#EAE1DA]" />
-          <span className="text-[12px] font-semibold text-[#A9968C]">ou</span>
-          <div className="h-px flex-1 bg-[#EAE1DA]" />
         </div>
 
         <form onSubmit={isRegister ? handleSignUp : handleLogin} className="flex flex-col gap-4">
@@ -248,9 +264,9 @@ export default function AuthPage() {
             {isRegister ? (
               <span className="text-[13.5px] text-[#7E6E66]">Já tem conta?</span>
             ) : (
-              <button type="button" onClick={handleReset} disabled={resetting}
+              <button type="button" onClick={() => { setResetEmail(email); setShowForgot(true); }}
                 className="text-[13.5px] text-[#7E6E66] hover:underline">
-                {resetting ? 'Enviando…' : 'Esqueci minha senha'}
+                Esqueci minha senha
               </button>
             )}
             <button type="button" onClick={() => setMode(isRegister ? 'login' : 'register')}
@@ -259,6 +275,20 @@ export default function AuthPage() {
             </button>
           </div>
         </form>
+
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-[#EAE1DA]" />
+          <span className="text-[12px] font-semibold text-[#A9968C]">ou</span>
+          <div className="h-px flex-1 bg-[#EAE1DA]" />
+        </div>
+
+        <Button type="button" variant="outline" disabled={googleLoading || loading} onClick={handleGoogle}
+          className="h-[52px] rounded-[14px] border-[#E2D7CF] bg-white text-[15px] font-semibold text-[#3C3229] hover:bg-[#FAF6F2]">
+          {googleLoading
+            ? <Loader2 className="mr-2.5 h-[18px] w-[18px] animate-spin" />
+            : <GoogleG className="mr-2.5 h-[18px] w-[18px]" />}
+          Continuar com Google
+        </Button>
 
         <p className="text-center text-[12px] text-muted-foreground">
           &copy; {new Date().getFullYear()} CaRe Wallet
