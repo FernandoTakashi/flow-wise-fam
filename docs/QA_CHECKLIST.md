@@ -80,8 +80,11 @@ não corrige "de passagem" sem anotar o que era.
 - [ ] Dizer "desfaz" (ou `/desfazer`) logo após lançar algo → apaga o lançamento certo
 - [ ] Mandar foto de um comprovante (PIX/cartão/boleto) → lê valor/estabelecimento/data e confirma
 - [ ] Mandar foto de algo que não é comprovante → avisa que não conseguiu ler, não quebra
-- [ ] Comprovante sem conta identificável → aparece "✏️ Completar conta/categoria"; responder com o nome da conta/categoria atualiza o resumo antes de confirmar
-- [ ] No passo de completar, mandar um nome que não existe na carteira → avisa e deixa tentar de novo
+- [ ] Comprovante sem conta identificável → aparece "✏️ Completar conta/categoria"; tocar mostra botões com as contas de verdade da carteira
+- [ ] Escolher a conta por botão → se a categoria também estiver faltando, aparecem botões de categoria em seguida
+- [ ] No passo de completar, responder por texto (em vez de tocar no botão) com o nome da conta/categoria também funciona
+- [ ] No passo de completar por texto, mandar um nome que não existe na carteira → avisa e deixa tentar de novo
+- [ ] Duas contas com nome parecido (ex.: "Nubank Ellen" e "Nubank Fernando") → digitar só "Nubank" é ambíguo; usar os botões resolve sem ambiguidade
 - [ ] `/desfazer` sem nenhum lançamento recente → avisa que não achou nada, não quebra
 - [ ] Mandar só um número depois de pedir ajuste de valor → não sequestra um lançamento novo digitado em seguida
 - [ ] Lembrete diário chega (ou simular via cron manualmente)

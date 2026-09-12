@@ -235,6 +235,41 @@ async function promptLancamento(link: ChatLink, chatId: number, e: BotEntry): Pr
     buttons);
 }
 
+/** Agrupa itens em pares por linha, pro teclado inline do Telegram. */
+function pairUp(buttons: InlineButton[]): InlineButton[][] {
+  const rows: InlineButton[][] = [];
+  for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2));
+  return rows;
+}
+
+/**
+ * Mostra botões pra escolher a conta (se faltar) ou a categoria (se a conta
+ * já estiver definida mas a categoria não) — evita depender só do texto
+ * livre, que fica ambíguo quando duas contas têm nome parecido.
+ */
+async function promptComplementPicker(link: ChatLink, chatId: number, entry: BotEntry): Promise<void> {
+  await setPending(link.id, 'complement_tx', { entry });
+  const bundle = await loadWalletBundle(link.wallet_id);
+
+  if (!entry.accountId) {
+    const accounts = bundle.accounts.filter((a) => !a.archived);
+    if (accounts.length > 0) {
+      await sendMessage(chatId, '🏦 Qual conta? (ou responda com o nome)',
+        pairUp(accounts.map((a) => ({ text: a.name, callback_data: `accsel:${a.id}` }))));
+      return;
+    }
+  }
+
+  const categories = bundle.categories.filter((c) => c.kind === entry.kind);
+  if (!entry.categoryId && categories.length > 0) {
+    await sendMessage(chatId, '🏷️ Qual categoria? (ou responda com o nome, ou toque em Confirmar sem categoria)',
+      pairUp(categories.map((c) => ({ text: c.name, callback_data: `catsel:${c.id}` }))));
+    return;
+  }
+
+  await promptLancamento(link, chatId, entry);
+}
+
 /** Acha, entre `items`, o de nome mais específico (mais longo) citado em `text`. */
 function matchByName<T extends { id: string; name: string }>(text: string, items: T[]): T | null {
   const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -375,11 +410,29 @@ async function onCallback(cq: TgCallbackQuery) {
   if (action === 'comp' && a1) {
     const p = await takePending(link.id, a1);
     if (!p || p.kind !== 'new_tx') { await answerCallback(cq.id, 'Esse pedido expirou.'); return; }
-    const entry = (p.payload as { entry: BotEntry }).entry;
-    await setPending(link.id, 'complement_tx', { entry });
     if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
     await answerCallback(cq.id);
-    await sendMessage(chatId, 'Me diz a conta e/ou a categoria (ex.: "Nubank, mercado").');
+    await promptComplementPicker(link, chatId, (p.payload as { entry: BotEntry }).entry);
+    return;
+  }
+
+  if (action === 'accsel' && a1) {
+    const p = await takePending(link.id);
+    if (!p || p.kind !== 'complement_tx') { await answerCallback(cq.id, 'Esse pedido expirou.'); return; }
+    const entry = { ...(p.payload as { entry: BotEntry }).entry, accountId: a1 };
+    if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
+    await answerCallback(cq.id, 'Conta escolhida ✅');
+    await promptComplementPicker(link, chatId, entry);
+    return;
+  }
+
+  if (action === 'catsel' && a1) {
+    const p = await takePending(link.id);
+    if (!p || p.kind !== 'complement_tx') { await answerCallback(cq.id, 'Esse pedido expirou.'); return; }
+    const entry = { ...(p.payload as { entry: BotEntry }).entry, categoryId: a1 };
+    if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
+    await answerCallback(cq.id, 'Categoria escolhida ✅');
+    await promptLancamento(link, chatId, entry);
     return;
   }
 
