@@ -54,7 +54,7 @@ export async function redeemToken(
 
 export interface Pending {
   id: string;
-  kind: 'new_tx' | 'adjust_recurrence' | 'pay_fatura' | 'criar_fixo' | 'undo_tx';
+  kind: 'new_tx' | 'adjust_recurrence' | 'pay_fatura' | 'criar_fixo' | 'undo_tx' | 'complement_tx';
   payload: Record<string, unknown>;
 }
 

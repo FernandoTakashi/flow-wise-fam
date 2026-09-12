@@ -4,7 +4,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { env } from '../_lib/env.js';
 import {
   sendMessage, answerCallback, clearButtons, downloadPhoto,
-  type TgUpdate, type TgMessage, type TgCallbackQuery,
+  type TgUpdate, type TgMessage, type TgCallbackQuery, type InlineButton,
 } from '../_lib/telegram.js';
 import { findLink, redeemToken, setPending, takePending, type ChatLink } from '../_lib/chat.js';
 import {
@@ -78,6 +78,9 @@ async function onMessage(msg: TgMessage) {
 
   if (text === '/desfazer') { await promptUndo(link, chatId); return; }
 
+  const todayISO = spDateISO(new Date());
+  const ctx = await buildWalletContext(link.wallet_id, todayISO);
+
   const pending = await takePending(link.id);
   if (pending?.kind === 'adjust_recurrence') {
     const bare = parseBareAmount(text);
@@ -90,8 +93,23 @@ async function onMessage(msg: TgMessage) {
     // normal com o texto original.
   }
 
-  const todayISO = spDateISO(new Date());
-  const ctx = await buildWalletContext(link.wallet_id, todayISO);
+  if (pending?.kind === 'complement_tx') {
+    const entry = (pending.payload as { entry: BotEntry }).entry;
+    const acc = matchByName(text, ctx.contasParaLancar.map((a) => ({ id: a.id, name: a.nome })));
+    const cat = matchByName(text, ctx.categorias.map((c) => ({ id: c.id, name: c.nome })));
+    if (!acc && !cat) {
+      await setPending(link.id, 'complement_tx', { entry });
+      await sendMessage(chatId, 'Não achei essa conta/categoria na sua carteira. Tenta o nome como aparece no app (ex.: "Nubank", "Mercado").');
+      return;
+    }
+    await promptLancamento(link, chatId, {
+      ...entry,
+      accountId: acc?.id ?? entry.accountId,
+      categoryId: cat?.id ?? entry.categoryId,
+    });
+    return;
+  }
+
   const action = await interpret(text, ctx);
 
   if (action.intent === 'reply') {
@@ -179,7 +197,12 @@ async function onPhoto(msg: TgMessage) {
   }
 }
 
-/** Mostra o resumo de um lançamento (texto ou foto de comprovante) com [Confirmar]/[Cancelar]. */
+/**
+ * Mostra o resumo de um lançamento (texto ou foto de comprovante) com
+ * [Confirmar]/[Cancelar]. Se a conta ou a categoria não foram identificadas
+ * (comum em foto de comprovante), oferece um botão pra completar por texto
+ * antes de confirmar, em vez de só aceitar o palpite calado.
+ */
 async function promptLancamento(link: ChatLink, chatId: number, e: BotEntry): Promise<void> {
   const bundle = await loadWalletBundle(link.wallet_id);
   const pendingId = await setPending(link.id, 'new_tx', { entry: e });
@@ -194,13 +217,31 @@ async function promptLancamento(link: ChatLink, chatId: number, e: BotEntry): Pr
     e.shared ? 'em conjunto' : null,
   ].filter(Boolean).join(' · ');
 
+  const missingAcc = !e.accountId;
+  const missingCat = !e.categoryId;
+  const warn = missingAcc ? `\n⚠️ Não identifiquei a conta — usei <b>${escapeHtml(accName)}</b>.` : '';
+
+  const buttons: InlineButton[][] = [[
+    { text: '✅ Confirmar', callback_data: `ok:${pendingId}` },
+    { text: '✖️ Cancelar', callback_data: `no:${pendingId}` },
+  ]];
+  if (missingAcc || missingCat) {
+    buttons.push([{ text: '✏️ Completar conta/categoria', callback_data: `comp:${pendingId}` }]);
+  }
+
   await sendMessage(chatId,
     `${tipo}\n<b>${escapeHtml(e.description)}</b> — <b>${formatBRL(e.amountCents)}</b>\n` +
-    `${escapeHtml(accName)} · ${e.dateISO}${catName ? ` · ${escapeHtml(catName)}` : ''}${extra ? ` · ${extra}` : ''}`,
-    [[
-      { text: '✅ Confirmar', callback_data: `ok:${pendingId}` },
-      { text: '✖️ Cancelar', callback_data: `no:${pendingId}` },
-    ]]);
+    `${escapeHtml(accName)} · ${e.dateISO}${catName ? ` · ${escapeHtml(catName)}` : ''}${extra ? ` · ${extra}` : ''}${warn}`,
+    buttons);
+}
+
+/** Acha, entre `items`, o de nome mais específico (mais longo) citado em `text`. */
+function matchByName<T extends { id: string; name: string }>(text: string, items: T[]): T | null {
+  const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const t = norm(text);
+  const hits = items.filter((it) => it.name && t.includes(norm(it.name)));
+  hits.sort((a, b) => b.name.length - a.name.length);
+  return hits[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -310,6 +351,17 @@ async function onCallback(cq: TgCallbackQuery) {
     await setPending(link.id, 'adjust_recurrence', { recId: a1, m: Number(a2), y: Number(a3) });
     await answerCallback(cq.id, 'Manda o valor');
     await sendMessage(chatId, 'Qual o valor real? Responda só com o número (ex.: <code>243,10</code>).');
+    return;
+  }
+
+  if (action === 'comp' && a1) {
+    const p = await takePending(link.id, a1);
+    if (!p || p.kind !== 'new_tx') { await answerCallback(cq.id, 'Esse pedido expirou.'); return; }
+    const entry = (p.payload as { entry: BotEntry }).entry;
+    await setPending(link.id, 'complement_tx', { entry });
+    if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
+    await answerCallback(cq.id);
+    await sendMessage(chatId, 'Me diz a conta e/ou a categoria (ex.: "Nubank, mercado").');
     return;
   }
 

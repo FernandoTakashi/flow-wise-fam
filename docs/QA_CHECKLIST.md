@@ -80,6 +80,8 @@ não corrige "de passagem" sem anotar o que era.
 - [ ] Dizer "desfaz" (ou `/desfazer`) logo após lançar algo → apaga o lançamento certo
 - [ ] Mandar foto de um comprovante (PIX/cartão/boleto) → lê valor/estabelecimento/data e confirma
 - [ ] Mandar foto de algo que não é comprovante → avisa que não conseguiu ler, não quebra
+- [ ] Comprovante sem conta identificável → aparece "✏️ Completar conta/categoria"; responder com o nome da conta/categoria atualiza o resumo antes de confirmar
+- [ ] No passo de completar, mandar um nome que não existe na carteira → avisa e deixa tentar de novo
 - [ ] `/desfazer` sem nenhum lançamento recente → avisa que não achou nada, não quebra
 - [ ] Mandar só um número depois de pedir ajuste de valor → não sequestra um lançamento novo digitado em seguida
 - [ ] Lembrete diário chega (ou simular via cron manualmente)
