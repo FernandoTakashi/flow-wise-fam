@@ -14,11 +14,19 @@ export interface TgUpdate {
   message?: TgMessage;
   callback_query?: TgCallbackQuery;
 }
+export interface TgPhotoSize {
+  file_id: string;
+  file_size?: number;
+  width: number;
+  height: number;
+}
 export interface TgMessage {
   message_id: number;
   from?: { id: number; first_name?: string; username?: string };
   chat: { id: number; type: string };
   text?: string;
+  photo?: TgPhotoSize[];
+  caption?: string;
 }
 export interface TgCallbackQuery {
   id: string;
@@ -75,4 +83,19 @@ export function setWebhook(url: string, secret?: string): Promise<unknown> {
 
 export function getMe(): Promise<{ id: number; username?: string }> {
   return call('getMe', {});
+}
+
+export type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/webp';
+
+/** Baixa uma foto enviada pelo usuário (maior resolução) e devolve em base64 + o media type. */
+export async function downloadPhoto(fileId: string): Promise<{ base64: string; mediaType: ImageMediaType }> {
+  const file = await call<{ file_path?: string }>('getFile', { file_id: fileId });
+  if (!file.file_path) throw new Error('Telegram não devolveu o arquivo.');
+  const url = `https://api.telegram.org/file/bot${env.telegramToken()}/${file.file_path}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Falha ao baixar a foto (${res.status}).`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  const ext = file.file_path.split('.').pop()?.toLowerCase();
+  const mediaType: ImageMediaType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  return { base64: buf.toString('base64'), mediaType };
 }

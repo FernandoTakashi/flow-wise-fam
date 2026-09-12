@@ -78,6 +78,8 @@ não corrige "de passagem" sem anotar o que era.
 - [ ] Dizer "paguei a fatura do [cartão]" → confirma e quita a fatura certa
 - [ ] Dizer "cadastra [descrição] [valor] todo dia [N]" → confirma e cria o fixo
 - [ ] Dizer "desfaz" (ou `/desfazer`) logo após lançar algo → apaga o lançamento certo
+- [ ] Mandar foto de um comprovante (PIX/cartão/boleto) → lê valor/estabelecimento/data e confirma
+- [ ] Mandar foto de algo que não é comprovante → avisa que não conseguiu ler, não quebra
 - [ ] `/desfazer` sem nenhum lançamento recente → avisa que não achou nada, não quebra
 - [ ] Mandar só um número depois de pedir ajuste de valor → não sequestra um lançamento novo digitado em seguida
 - [ ] Lembrete diário chega (ou simular via cron manualmente)

@@ -3,7 +3,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { env } from '../_lib/env.js';
 import {
-  sendMessage, answerCallback, clearButtons, type TgUpdate, type TgMessage, type TgCallbackQuery,
+  sendMessage, answerCallback, clearButtons, downloadPhoto,
+  type TgUpdate, type TgMessage, type TgCallbackQuery,
 } from '../_lib/telegram.js';
 import { findLink, redeemToken, setPending, takePending, type ChatLink } from '../_lib/chat.js';
 import {
@@ -11,13 +12,14 @@ import {
   payInvoice, createRecurrence, lastTransaction, deleteEntry,
 } from '../_lib/finance.js';
 import { buildWalletContext } from '../_lib/context.js';
-import { interpret } from '../_lib/brain.js';
+import { interpret, interpretImage, type BotEntry } from '../_lib/brain.js';
 import { spDateISO, formatBRL, toCents, isoParts, dayOfMonthISO } from '../_lib/shared.js';
 
 const HELP =
   'Oi, eu sou a <b>Carolina</b> 👋 — a assistente da <b>CaRe Wallet</b>.\n\n' +
   'Manda um gasto em uma linha — <code>mercado 87,50 nubank</code>, ' +
   '<code>uber 23</code>, <code>tv 3000 em 10x nubank</code> — que eu mostro um resumo pra você confirmar.\n\n' +
+  'Ou manda a <b>foto de um comprovante</b> (PIX, cartão, boleto) que eu leio o valor sozinha.\n\n' +
   'Pergunta à vontade: <i>qual meu saldo?</i> · <i>quanto falta pagar esse mês?</i> · ' +
   '<i>quanto gastei?</i> · <i>quando vence a fatura?</i>\n\n' +
   'Também entendo:\n' +
@@ -38,6 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const update = req.body as TgUpdate;
     if (update?.message?.text) await onMessage(update.message);
+    else if (update?.message?.photo?.length) await onPhoto(update.message);
     else if (update?.callback_query) await onCallback(update.callback_query);
   } catch (e) {
     console.error('[tg webhook]', e);
@@ -148,7 +151,36 @@ async function onMessage(msg: TgMessage) {
   if (action.intent === 'desfazer') { await promptUndo(link, chatId); return; }
 
   // lançamento
-  const e = action.entry;
+  await promptLancamento(link, chatId, action.entry);
+}
+
+// ---------------------------------------------------------------------------
+async function onPhoto(msg: TgMessage) {
+  const chatId = msg.chat.id;
+  const link = await findLink('telegram', String(chatId));
+  if (!link) {
+    await sendMessage(chatId, 'Este chat não está conectado. Abra o app → Ajustes → Integrações → Conectar Telegram.');
+    return;
+  }
+  const photo = msg.photo?.at(-1); // maior resolução
+  if (!photo) return;
+
+  try {
+    const { base64, mediaType } = await downloadPhoto(photo.file_id);
+    const todayISO = spDateISO(new Date());
+    const ctx = await buildWalletContext(link.wallet_id, todayISO);
+    const action = await interpretImage(base64, mediaType, ctx, msg.caption);
+
+    if (action.intent === 'reply') { await sendMessage(chatId, escapeHtml(action.text)); return; }
+    if (action.intent === 'lancamento') { await promptLancamento(link, chatId, action.entry); return; }
+  } catch (e) {
+    console.error('[tg webhook] onPhoto', e);
+    await sendMessage(chatId, '❌ Não consegui processar essa foto. Tenta de novo ou manda o valor em texto.');
+  }
+}
+
+/** Mostra o resumo de um lançamento (texto ou foto de comprovante) com [Confirmar]/[Cancelar]. */
+async function promptLancamento(link: ChatLink, chatId: number, e: BotEntry): Promise<void> {
   const bundle = await loadWalletBundle(link.wallet_id);
   const pendingId = await setPending(link.id, 'new_tx', { entry: e });
   // mostra a MESMA conta que o insertEntry vai usar (conta citada, senão a 1ª de dinheiro)

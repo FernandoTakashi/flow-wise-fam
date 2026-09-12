@@ -7,6 +7,7 @@ import * as z from 'zod/v4';
 import { env } from './env.js';
 import { toCents } from './shared.js';
 import type { WalletContext } from './context.js';
+import type { ImageMediaType } from './telegram.js';
 
 function anthropic(): Anthropic {
   const wsId = env.anthropicWorkspaceId();
@@ -211,5 +212,83 @@ export async function interpret(text: string, ctx: WalletContext): Promise<BotAc
       return { intent: 'reply', text: `⚠️ Erro ao chamar o Haiku: ${msg}` };
     }
     return { intent: 'reply', text: `⚠️ Não consegui pensar nisso. (${msg})` };
+  }
+}
+
+const ImageSchema = z.object({
+  found: z.boolean().describe('true se a imagem é um comprovante/recibo de pagamento com valor legível'),
+  entry: z.object({
+    kind: z.enum(['expense', 'income']),
+    description: z.string().describe('estabelecimento/pra quem foi, curto'),
+    amount_cents: z.number().int(),
+    account_id: z.string().nullable().describe('id EXATO de contasParaLancar — só se o nome do banco/cartão do comprovante bater com uma conta da lista, senão null'),
+    category_id: z.string().nullable().describe('id EXATO de categorias, ou null'),
+    date: z.string().describe('yyyy-mm-dd — a data do comprovante, se legível; senão hoje'),
+    note: z.string().nullable(),
+  }).nullable(),
+  reply: z.string().describe('se found=false, explica objetivamente o que não deu pra ler (pouca luz, cortado, não parece comprovante...); se found=true, deixe vazio'),
+});
+
+/** Lê uma foto de comprovante/recibo (PIX, cartão, boleto) e tenta extrair um lançamento. */
+export async function interpretImage(
+  imageBase64: string, mediaType: ImageMediaType, ctx: WalletContext, caption?: string,
+): Promise<BotAction> {
+  const key = env.anthropicKey();
+  if (!key) {
+    return { intent: 'reply', text: 'Configure ANTHROPIC_API_KEY pra eu ler fotos de comprovante. Por enquanto, manda o valor em texto.' };
+  }
+
+  try {
+    const client = anthropic();
+    const response = await client.messages.parse({
+      model: 'claude-haiku-4-5',
+      max_tokens: 700,
+      system:
+        'Você é a Carolina, assistente da CaRe Wallet (pt-BR), no Telegram. ' +
+        'A pessoa mandou uma FOTO de um comprovante/recibo (PIX, cartão, boleto pago, nota fiscal). ' +
+        'Extraia o gasto/recebimento pro schema. Regras:\n' +
+        '- amount_cents = valor total, em centavos.\n' +
+        '- description = nome do estabelecimento/pra quem foi (não invente; use o que está escrito).\n' +
+        '- account_id: só preencha se o nome do banco/instituição no comprovante bater claramente com o nome de uma conta em contasParaLancar; senão null.\n' +
+        '- category_id: tente adivinhar pela descrição, usando o id EXATO de categorias; senão null.\n' +
+        '- date: use a data do comprovante se estiver legível (yyyy-mm-dd); senão ' + ctx.hoje + '.\n' +
+        '- Se a legenda da foto (se houver) der uma pista (ex.: categoria, "foi em conjunto"), use-a.\n' +
+        '- Se a imagem não for um comprovante legível, found=false e explique objetivamente por quê em `reply`.',
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
+          { type: 'text', text: `ESTADO:\n${JSON.stringify(ctx)}${caption ? `\n\nLEGENDA DA FOTO:\n${caption}` : ''}` },
+        ],
+      }],
+      output_config: { format: zodOutputFormat(ImageSchema) },
+    });
+
+    const p = response.parsed_output;
+    if (!p) throw new Error('sem parsed_output');
+
+    if (p.found && p.entry && p.entry.amount_cents > 0) {
+      const acc = p.entry.account_id && ctx.contasParaLancar.some((a) => a.id === p.entry!.account_id) ? p.entry.account_id : null;
+      const cat = p.entry.category_id && ctx.categorias.some((c) => c.id === p.entry!.category_id) ? p.entry.category_id : null;
+      return {
+        intent: 'lancamento',
+        entry: {
+          kind: p.entry.kind,
+          description: p.entry.description.trim().slice(0, 80) || 'Comprovante',
+          amountCents: p.entry.amount_cents,
+          accountId: acc,
+          categoryId: cat,
+          dateISO: /^\d{4}-\d{2}-\d{2}$/.test(p.entry.date) ? p.entry.date : ctx.hoje,
+          installments: null,
+          shared: false,
+          note: p.entry.note?.trim() || null,
+        },
+      };
+    }
+
+    return { intent: 'reply', text: p.reply?.trim() || 'Não consegui ler esse comprovante. Manda o valor em texto ou uma foto mais nítida.' };
+  } catch (e) {
+    console.error('[brain] interpretImage falhou:', (e as Error).message ?? e);
+    return { intent: 'reply', text: 'Não consegui ler essa foto agora. Manda o valor em texto, ou tenta de novo.' };
   }
 }

@@ -16,8 +16,12 @@ Implementa:
   - **marcar fixo pago** ("paguei o aluguel");
   - **pagar fatura de cartão** ("paguei a fatura do nubank") → resumo → **[Confirmar]**;
   - **cadastrar um fixo novo** ("cadastra academia 89,90 todo dia 10") → resumo → **[Confirmar]**;
-  - **desfazer o último lançamento** ("desfaz", "cancela isso", ou `/desfazer`) → **[Sim, apagar]**.
-  Sem `ANTHROPIC_API_KEY` cai num regex simples só para lançamento. Custo Haiku ≈ US$0,002/mensagem.
+  - **desfazer o último lançamento** ("desfaz", "cancela isso", ou `/desfazer`) → **[Sim, apagar]**;
+  - **ler foto de comprovante** (PIX, cartão, boleto) — a pessoa manda a foto, o Haiku lê o valor/
+    estabelecimento/data direto da imagem → resumo → **[Confirmar]**. Sem `ANTHROPIC_API_KEY` não dá
+    pra ler foto (não tem fallback de regex pra imagem).
+  Sem `ANTHROPIC_API_KEY` o texto cai num regex simples só para lançamento. Custo Haiku ≈ US$0,002/mensagem
+  (foto custa um pouco mais que texto, ainda assim frações de centavo).
 
 Arquitetura: `api/` (Vercel Functions) + `api/cron/reminders.ts` (Vercel Cron) +
 `supabase/migrations/20260908000001_bot_autopay_reminders.sql`. Sem servidor dedicado.
