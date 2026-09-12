@@ -238,10 +238,28 @@ async function promptLancamento(link: ChatLink, chatId: number, e: BotEntry): Pr
 /** Acha, entre `items`, o de nome mais específico (mais longo) citado em `text`. */
 function matchByName<T extends { id: string; name: string }>(text: string, items: T[]): T | null {
   const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const words = (s: string) => norm(s).split(/[^a-z0-9]+/).filter(Boolean);
   const t = norm(text);
-  const hits = items.filter((it) => it.name && t.includes(norm(it.name)));
-  hits.sort((a, b) => b.name.length - a.name.length);
-  return hits[0] ?? null;
+  const tWords = new Set(words(text));
+
+  const scored = items
+    .filter((it) => it.name)
+    .map((it) => {
+      const nameNorm = norm(it.name);
+      // "Nubank" digitado deve achar a conta "Nubank Ellen" (e vice-versa) —
+      // por isso confere as duas direções, não só texto-contém-nome.
+      const fullMatch = t.includes(nameNorm) || nameNorm.includes(t);
+      const wordHits = words(it.name).filter((w) => tWords.has(w)).length;
+      return { it, fullMatch, wordHits };
+    })
+    .filter((s) => s.fullMatch || s.wordHits > 0)
+    .sort((a, b) => {
+      if (a.fullMatch !== b.fullMatch) return a.fullMatch ? -1 : 1;
+      if (b.wordHits !== a.wordHits) return b.wordHits - a.wordHits;
+      return b.it.name.length - a.it.name.length;
+    });
+
+  return scored[0]?.it ?? null;
 }
 
 // ---------------------------------------------------------------------------
