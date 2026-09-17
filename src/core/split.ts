@@ -1,7 +1,7 @@
 // "Dividir" — regras puras de saldo/divisão de despesa em grupo.
 // Deliberadamente sem nenhum tipo/importação de `@/core/types` (FinanceData):
 // esse domínio não tem relação nenhuma com carteira, conta ou categoria.
-import { splitInstallments } from '@/lib/money';
+import { equalSplitCents } from '@/lib/money';
 
 export interface SplitExpenseInput {
   id: string;
@@ -77,10 +77,10 @@ export function simplifySplitDebts(balances: SplitBalance[]): SplitSettlement[] 
   return out;
 }
 
-/** Divide `amountCents` igualmente entre `memberIds` — resto vai pro último, soma sempre bate. */
+/** Divide `amountCents` igualmente entre `memberIds` — resto distribuído 1 centavo por vez, soma sempre bate. */
 export function equalSplitShares(amountCents: number, memberIds: string[]): Record<string, number> {
   if (memberIds.length === 0) return {};
-  const parts = splitInstallments(amountCents, memberIds.length);
+  const parts = equalSplitCents(amountCents, memberIds.length);
   const out: Record<string, number> = {};
   memberIds.forEach((id, i) => { out[id] = parts[i]; });
   return out;

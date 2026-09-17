@@ -84,3 +84,17 @@ export const splitInstallments = (totalCents: number, n: number): number[] => {
   parts[n - 1] = totalCents - base * (n - 1);
   return parts;
 };
+
+/**
+ * Divide um total em `n` partes iguais pra dividir uma despesa entre pessoas
+ * (diferente de `splitInstallments`, que é pra parcelas de fatura). O resto
+ * em centavos vai 1 a 1 pras primeiras pessoas, em vez de empilhar tudo numa
+ * pessoa só — senão, quem sempre cai por último acumula o resto despesa
+ * após despesa.
+ */
+export const equalSplitCents = (totalCents: number, n: number): number[] => {
+  if (n <= 1) return [totalCents];
+  const base = Math.floor(totalCents / n);
+  const remainder = totalCents - base * n;
+  return Array.from({ length: n }, (_, i) => base + (i < remainder ? 1 : 0));
+};

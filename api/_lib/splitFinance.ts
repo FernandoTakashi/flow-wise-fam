@@ -2,7 +2,7 @@
 // finance.ts: nenhuma função daqui sabe o que é uma wallet, uma conta ou uma
 // categoria — é um domínio à parte de propósito.
 import { admin } from './supabaseAdmin.js';
-import { splitInstallments } from './shared.js';
+import { equalSplitCents } from './shared.js';
 
 export interface SplitGroupRow { id: string; name: string; created_by: string | null; archived: boolean; created_at: string }
 export interface SplitMemberRow {
@@ -136,14 +136,6 @@ export async function updateSplitGroup(groupId: string, patch: { name?: string; 
   if (error) throw error;
 }
 
-export async function addSplitMember(groupId: string, displayName: string): Promise<string> {
-  const db = admin();
-  const { data, error } = await db.from('split_members')
-    .insert({ group_id: groupId, display_name: displayName.trim() || 'Sem nome' }).select('id').single();
-  if (error) throw error;
-  return data.id as string;
-}
-
 export async function removeSplitMember(groupId: string, memberId: string): Promise<void> {
   const db = admin();
   const { error } = await db.from('split_members')
@@ -232,7 +224,7 @@ function resolveShares(amountCents: number, participants: string[], exact?: Reco
     if (sum !== amountCents) throw new Error('A soma dos valores não bate com o total da despesa.');
     return exact;
   }
-  const parts = splitInstallments(amountCents, participants.length);
+  const parts = equalSplitCents(amountCents, participants.length);
   const out: Record<string, number> = {};
   participants.forEach((id, i) => { out[id] = parts[i]; });
   return out;

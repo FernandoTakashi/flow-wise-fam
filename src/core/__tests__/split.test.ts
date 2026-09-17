@@ -71,12 +71,19 @@ describe('equalSplitShares', () => {
     expect(equalSplitShares(9000, ['A', 'B', 'C'])).toEqual({ A: 3000, B: 3000, C: 3000 });
   });
 
-  it('resto de centavos vai pro último — soma sempre bate com o total', () => {
+  it('resto de centavos é distribuído 1 a 1 pelos primeiros — soma sempre bate com o total', () => {
     const shares = equalSplitShares(10000, ['A', 'B', 'C']);
     expect(Object.values(shares).reduce((s, c) => s + c, 0)).toBe(10000);
-    expect(shares.A).toBe(3333);
+    expect(shares.A).toBe(3334);
     expect(shares.B).toBe(3333);
-    expect(shares.C).toBe(3334);
+    expect(shares.C).toBe(3333);
+  });
+
+  it('900 reais em 11 pessoas — ninguém fica com um valor destoante', () => {
+    const shares = equalSplitShares(90000, Array.from({ length: 11 }, (_, i) => `m${i}`));
+    expect(Object.values(shares).reduce((s, c) => s + c, 0)).toBe(90000);
+    const values = Object.values(shares);
+    expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(1);
   });
 
   it('lista vazia devolve objeto vazio', () => {

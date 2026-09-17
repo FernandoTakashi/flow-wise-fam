@@ -45,10 +45,10 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     ],
   },
   {
-    label: 'Dividir',
+    label: 'Split CaRe',
     items: [
       // rota própria, fora do Layout/FinanceProvider da carteira — ver src/pages/split/SplitApp.tsx
-      { title: 'Dividir contas', href: '/dividir', icon: Users2 },
+      { title: 'Grupos', href: '/dividir', icon: Users2 },
     ],
   },
 ];

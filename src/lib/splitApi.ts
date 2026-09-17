@@ -61,10 +61,6 @@ export async function archiveSplitGroup(groupId: string, archived: boolean): Pro
   await apiFetch('/split', { method: 'PATCH', body: JSON.stringify({ resource: 'group', groupId, archived }) });
 }
 
-export async function addSplitMember(groupId: string, displayName: string): Promise<void> {
-  await apiFetch('/split', { method: 'POST', body: JSON.stringify({ resource: 'member', groupId, displayName }) });
-}
-
 export async function removeSplitMember(groupId: string, memberId: string): Promise<void> {
   await apiFetch('/split', { method: 'PATCH', body: JSON.stringify({ resource: 'member', action: 'remove', groupId, memberId }) });
 }

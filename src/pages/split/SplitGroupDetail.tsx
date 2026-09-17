@@ -15,14 +15,14 @@ import { useToast } from '@/hooks/use-toast';
 import { formatBRL } from '@/lib/money';
 import { todayISO, formatDayMonth, isoParts, MONTHS_PT } from '@/lib/dates';
 import { cn, SHEET_DIALOG_CLASS } from '@/lib/utils';
-import { computeSplitBalances, simplifySplitDebts, equalSplitShares, exactSharesMatchTotal } from '@/core/split';
+import { computeSplitBalances, simplifySplitDebts, equalSplitShares, exactSharesMatchTotal, type SplitSettlement } from '@/core/split';
 import {
-  fetchSplitGroup, createSplitInvite, addSplitMember, removeSplitMember,
+  fetchSplitGroup, createSplitInvite, removeSplitMember,
   createSplitExpense, updateSplitExpense, deleteSplitExpense, createSplitPayment, deleteSplitPayment,
   type ExpenseFormInput,
 } from '@/lib/splitApi';
 import type { SplitGroupDetail as SplitGroupDetailType, SplitExpense, SplitPayment, SplitMember } from '@/types/split';
-import { Plus, UserPlus, Link2, Trash2, Pencil, ArrowRightLeft, Receipt } from 'lucide-react';
+import { Plus, Link2, Trash2, Pencil, ArrowRightLeft, Receipt } from 'lucide-react';
 
 type ActivityItem =
   | { kind: 'expense'; date: string; createdAt: string; expense: SplitExpense }
@@ -40,8 +40,6 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
   const [showPayment, setShowPayment] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const [newMemberName, setNewMemberName] = useState('');
-  const [addingMember, setAddingMember] = useState(false);
 
   const load = async () => {
     if (!groupId) return;
@@ -122,18 +120,6 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
     }
   };
 
-  const addMember = async () => {
-    if (!newMemberName.trim()) return;
-    setAddingMember(true);
-    try {
-      await addSplitMember(data.group.id, newMemberName.trim());
-      setNewMemberName('');
-      await load();
-    } catch (err) {
-      toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' });
-    } finally { setAddingMember(false); }
-  };
-
   const kickMember = async (memberId: string) => {
     try { await removeSplitMember(data.group.id, memberId); await load(); }
     catch (err) { toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' }); }
@@ -162,15 +148,6 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
           </div>
         </div>
         <Button variant="outline" size="sm" className="h-9 shrink-0" onClick={openInvite}><Link2 className="mr-1.5 h-3.5 w-3.5" /> Convidar</Button>
-      </div>
-
-      <div className="mb-4 flex items-center gap-2 rounded-[12px] border border-border bg-card p-2">
-        <Input value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)}
-          placeholder="Adicionar alguém pelo nome" className="h-10 border-0 text-[16px] shadow-none focus-visible:ring-0 sm:h-9 sm:text-sm"
-          onKeyDown={(e) => e.key === 'Enter' && void addMember()} />
-        <Button size="sm" variant="ghost" className="h-10 w-10 shrink-0 p-0 sm:h-9 sm:w-9" disabled={addingMember || !newMemberName.trim()} onClick={() => void addMember()}>
-          <UserPlus className="h-4 w-4" />
-        </Button>
       </div>
 
       <div className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
@@ -310,6 +287,8 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
         onClose={() => setShowPayment(false)}
         groupId={data.group.id}
         members={activeMembers}
+        settlements={settlements}
+        myMemberId={myMemberId}
         onSaved={async () => { setShowPayment(false); await load(); }}
       />
 
@@ -456,28 +435,53 @@ function ExpenseDialog({
 }
 
 // ---------------------------------------------------------------------------
+// "Registrar acerto" no estilo settle-up: mostra direto quem você deve/te
+// deve (a partir do saldo já simplificado) — sem campo de valor livre pra
+// preencher. "Outro acerto" é a válvula de escape pra um caso manual
+// (ex: dono do grupo acertando em nome de duas outras pessoas).
 function PaymentDialog({
-  open, onClose, groupId, members, onSaved,
-}: { open: boolean; onClose: () => void; groupId: string; members: SplitMember[]; onSaved: () => void }) {
+  open, onClose, groupId, members, settlements, myMemberId, onSaved,
+}: {
+  open: boolean; onClose: () => void; groupId: string; members: SplitMember[];
+  settlements: SplitSettlement[]; myMemberId: string | null; onSaved: () => void;
+}) {
   const { toast } = useToast();
-  const [fromMember, setFromMember] = useState('');
-  const [toMember, setToMember] = useState('');
-  const [amountCents, setAmountCents] = useState(0);
+  const nameOf = (id: string) => members.find((m) => m.id === id)?.displayName ?? '—';
+
+  const [step, setStep] = useState<'list' | 'confirm' | 'manual'>('list');
+  const [selected, setSelected] = useState<SplitSettlement | null>(null);
   const [dateISO, setDateISO] = useState(todayISO());
   const [busy, setBusy] = useState(false);
 
-  const save = async () => {
-    if (!fromMember || !toMember || fromMember === toMember || amountCents <= 0) {
-      toast({ title: 'Escolha duas pessoas diferentes e um valor', variant: 'destructive' }); return;
-    }
+  const [fromMember, setFromMember] = useState('');
+  const [toMember, setToMember] = useState('');
+  const [amountCents, setAmountCents] = useState(0);
+
+  useEffect(() => {
+    if (!open) return;
+    setStep('list'); setSelected(null); setDateISO(todayISO());
+    setFromMember(''); setToMember(''); setAmountCents(0);
+  }, [open]);
+
+  const mySettlements = myMemberId
+    ? settlements.filter((s) => s.fromMemberId === myMemberId || s.toMemberId === myMemberId)
+    : settlements;
+
+  const confirm = async (fromM: string, toM: string, amount: number) => {
     setBusy(true);
     try {
-      await createSplitPayment(groupId, fromMember, toMember, amountCents, dateISO);
-      setFromMember(''); setToMember(''); setAmountCents(0);
+      await createSplitPayment(groupId, fromM, toM, amount, dateISO);
       onSaved();
     } catch (err) {
       toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' });
     } finally { setBusy(false); }
+  };
+
+  const saveManual = () => {
+    if (!fromMember || !toMember || fromMember === toMember || amountCents <= 0) {
+      toast({ title: 'Escolha duas pessoas diferentes e um valor', variant: 'destructive' }); return;
+    }
+    void confirm(fromMember, toMember, amountCents);
   };
 
   return (
@@ -485,32 +489,91 @@ function PaymentDialog({
       <DialogContent className={cn('sm:max-w-sm', SHEET_DIALOG_CLASS)}>
         <div className="mx-auto mb-1 h-[5px] w-11 shrink-0 rounded-full bg-[#DDD1C9] sm:hidden" />
         <DialogHeader><DialogTitle>Registrar acerto</DialogTitle></DialogHeader>
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Quem pagou</Label>
-              <Select value={fromMember} onValueChange={setFromMember}>
-                <SelectTrigger className="h-11 sm:h-10"><SelectValue placeholder="De" /></SelectTrigger>
-                <SelectContent>{members.map((m) => <SelectItem key={m.id} value={m.id}>{m.displayName}</SelectItem>)}</SelectContent>
-              </Select>
+
+        {step === 'list' && (
+          <div className="space-y-3">
+            {mySettlements.length === 0 ? (
+              <p className="rounded-[12px] border border-dashed p-4 text-center text-sm text-muted-foreground">
+                Tudo quite por aqui — ninguém precisa acertar nada. 🎉
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {mySettlements.map((s, i) => {
+                  const iOwe = s.fromMemberId === myMemberId;
+                  const otherId = iOwe ? s.toMemberId : s.fromMemberId;
+                  return (
+                    <button key={i} type="button"
+                      className="flex w-full items-center justify-between rounded-[12px] border border-border p-3.5 text-left hover:bg-muted/40"
+                      onClick={() => { setSelected(s); setStep('confirm'); }}>
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold">{nameOf(otherId)}</div>
+                        <div className={cn('text-[12.5px]', myMemberId ? (iOwe ? 'text-red-600' : 'text-emerald-600') : 'text-muted-foreground')}>
+                          {myMemberId ? (iOwe ? 'você deve' : 'deve pra você') : `${nameOf(s.fromMemberId)} deve pra ${nameOf(s.toMemberId)}`}
+                        </div>
+                      </div>
+                      <span className="shrink-0 font-bold tabular-nums">{formatBRL(s.amountCents)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <button type="button" className="text-[13px] font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              onClick={() => setStep('manual')}>
+              Registrar um acerto diferente
+            </button>
+          </div>
+        )}
+
+        {step === 'confirm' && selected && (
+          <div className="space-y-4">
+            <div className="rounded-[14px] border border-border p-5 text-center">
+              <p className="text-sm text-muted-foreground">Confirmar pagamento de</p>
+              <p className="mt-1 text-[28px] font-bold tabular-nums">{formatBRL(selected.amountCents)}</p>
+              <p className="mt-1.5 text-sm">
+                <strong>{nameOf(selected.fromMemberId)}</strong> paga <strong>{nameOf(selected.toMemberId)}</strong>
+              </p>
             </div>
             <div className="space-y-1.5">
-              <Label>Pra quem</Label>
-              <Select value={toMember} onValueChange={setToMember}>
-                <SelectTrigger className="h-11 sm:h-10"><SelectValue placeholder="Pra" /></SelectTrigger>
-                <SelectContent>{members.map((m) => <SelectItem key={m.id} value={m.id}>{m.displayName}</SelectItem>)}</SelectContent>
-              </Select>
+              <Label>Data</Label>
+              <Input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} className="h-11 text-[16px] sm:h-10 sm:text-sm" />
             </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStep('list')}>Voltar</Button>
+              <Button onClick={() => void confirm(selected.fromMemberId, selected.toMemberId, selected.amountCents)} disabled={busy}>
+                {busy ? 'Registrando…' : 'Confirmar'}
+              </Button>
+            </DialogFooter>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5"><Label>Valor</Label><MoneyInput valueCents={amountCents} onChangeCents={setAmountCents} /></div>
-            <div className="space-y-1.5"><Label>Data</Label><Input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} className="h-11 text-[16px] sm:h-10 sm:text-sm" /></div>
+        )}
+
+        {step === 'manual' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Quem pagou</Label>
+                <Select value={fromMember} onValueChange={setFromMember}>
+                  <SelectTrigger className="h-11 sm:h-10"><SelectValue placeholder="De" /></SelectTrigger>
+                  <SelectContent>{members.map((m) => <SelectItem key={m.id} value={m.id}>{m.displayName}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Pra quem</Label>
+                <Select value={toMember} onValueChange={setToMember}>
+                  <SelectTrigger className="h-11 sm:h-10"><SelectValue placeholder="Pra" /></SelectTrigger>
+                  <SelectContent>{members.map((m) => <SelectItem key={m.id} value={m.id}>{m.displayName}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5"><Label>Valor</Label><MoneyInput valueCents={amountCents} onChangeCents={setAmountCents} /></div>
+              <div className="space-y-1.5"><Label>Data</Label><Input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} className="h-11 text-[16px] sm:h-10 sm:text-sm" /></div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStep('list')}>Voltar</Button>
+              <Button onClick={saveManual} disabled={busy}>{busy ? 'Salvando…' : 'Registrar'}</Button>
+            </DialogFooter>
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={save} disabled={busy}>{busy ? 'Salvando…' : 'Registrar'}</Button>
-        </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

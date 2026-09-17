@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
+import { Mascot } from '@/components/Mascot';
 import { LogOut } from 'lucide-react';
 
 export function SplitShell({ children, isGuest }: { children: ReactNode; isGuest?: boolean }) {
@@ -12,7 +13,8 @@ export function SplitShell({ children, isGuest }: { children: ReactNode; isGuest
     <div className="min-h-screen bg-background">
       <header className="flex items-center justify-between border-b border-border px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6">
         <Link to="/dividir" className="flex items-center gap-2 font-display text-[17px] font-bold text-foreground">
-          <span aria-hidden>🤝</span> Dividir
+          <Mascot size={28} tile className="shrink-0 rounded-[9px] p-[3px]" />
+          Split CaRe
         </Link>
         <div className="flex items-center gap-2">
           {!isGuest && (

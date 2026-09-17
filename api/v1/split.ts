@@ -9,7 +9,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireUser } from './_util.js';
 import {
   loadSplitGroup, listSplitGroupsForUser, createSplitGroup, updateSplitGroup,
-  addSplitMember, removeSplitMember, renameSplitMember,
+  removeSplitMember, renameSplitMember,
   createSplitExpense, updateSplitExpense, deleteSplitExpense,
   createSplitPayment, deleteSplitPayment,
   createSplitInvite, getSplitInvitePreview, redeemSplitInviteAsUser,
@@ -145,12 +145,6 @@ async function handleMember(req: VercelRequest, res: VercelResponse, userId: str
   const bundle = await loadAndAuthorize(res, groupId, userId);
   if (!bundle) return;
 
-  if (req.method === 'POST') {
-    if (!body.displayName) { res.status(400).json({ error: 'missing_name' }); return; }
-    const id = await addSplitMember(groupId, body.displayName);
-    res.status(200).json({ id });
-    return;
-  }
   if (req.method === 'PATCH') {
     const memberId: string | undefined = body.memberId;
     if (!memberId) { res.status(400).json({ error: 'missing_member' }); return; }
