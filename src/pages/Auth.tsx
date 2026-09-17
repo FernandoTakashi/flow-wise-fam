@@ -9,7 +9,15 @@ import { Mascot } from '@/components/Mascot';
 
 const FIELD = 'h-[52px] rounded-[14px] border-[#E2D7CF] bg-white text-[15px]';
 const LABEL = 'text-[12.5px] font-semibold text-[#5C4C45]';
-const REDIRECT = typeof window !== 'undefined' ? window.location.origin : undefined;
+
+// Convite do Dividir (?invite=<id>) viaja na própria URL, não em
+// localStorage — assim sobrevive a confirmação de e-mail ou login via
+// Google mesmo se completarem numa aba/dispositivo diferente de onde
+// começaram: o link de confirmação/OAuth já aponta direto pro convite.
+const INVITE_ID = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('invite') : null;
+const REDIRECT = typeof window !== 'undefined'
+  ? (INVITE_ID ? `${window.location.origin}/dividir/convite/${INVITE_ID}` : window.location.origin)
+  : undefined;
 
 function GoogleG({ className }: { className?: string }) {
   return (
@@ -104,7 +112,10 @@ export default function AuthPage() {
     if (!resetEmail.trim()) return; // o campo é `required`; isso é só uma trava extra
     setResetting(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(), { redirectTo: REDIRECT });
+      // sempre pra raiz (não pro convite): a tela de recuperação precisa do
+      // hash "type=recovery" sendo lido em "/", não em "/dividir/..."
+      const resetRedirect = typeof window !== 'undefined' ? window.location.origin : undefined;
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(), { redirectTo: resetRedirect });
       if (error) fail('Erro ao enviar o link', error);
       else { setEmail(resetEmail.trim()); setShowForgot(false); setSent('reset'); }
     } catch (err) {

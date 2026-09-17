@@ -11,7 +11,6 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Layout } from '@/components/Layout';
 import AuthPage from '@/pages/Auth';
 import ResetPassword from '@/pages/ResetPassword';
-import { takePendingInvite } from '@/lib/pendingInvite';
 
 const SplitApp = lazy(() => import('@/pages/split/SplitApp'));
 const Dashboard = lazy(() => import('@/pages/Dashboard'));
@@ -59,13 +58,16 @@ const App = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Voltou de "Criar conta"/"Entrar" que abriu a partir de um convite do
-  // Dividir (via ?mode=register, ver Auth.tsx) — assim que a sessão de
-  // verdade aparece (login direto, ou depois de confirmar e-mail), volta
-  // pro convite que a pessoa queria abrir, em vez de cair no Dashboard.
+  // Voltou de "Criar conta"/"Entrar" aberto a partir de um convite do
+  // Dividir (?invite=<id>, ver SplitInvite.tsx/Auth.tsx) sem sair da
+  // página (login direto, sem precisar confirmar e-mail) — a sessão de
+  // verdade aparece mas a URL não muda sozinha, então volta pro convite
+  // manualmente em vez de cair no Dashboard. Quando o retorno vem de um
+  // redirect de verdade (confirmação de e-mail ou Google), o link já
+  // aponta direto pra /dividir/convite/<id> e nem passa por aqui.
   useEffect(() => {
     if (!session || session.user.is_anonymous) return;
-    const inviteId = takePendingInvite();
+    const inviteId = new URLSearchParams(window.location.search).get('invite');
     if (inviteId) window.location.href = `/dividir/convite/${inviteId}`;
   }, [session]);
 

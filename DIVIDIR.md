@@ -19,8 +19,9 @@ Depois, versione: `npx supabase migration repair --status applied 20260917000001
 ## 2. Pelo app
 
 - Menu lateral → **Dividir contas** → cria um grupo, convida por link.
-- Quem cria precisa de conta; quem entra pelo link vira **visitante**
-  (sessão anônima do Supabase — só digita um nome, sem senha nem e-mail).
+- Quem cria e quem entra pelo link precisam de conta no CaRe Wallet (login
+  ou cadastro) — sem visitante anônimo. Login/cadastro aberto a partir do
+  convite volta sozinho pro convite depois (o id viaja na própria URL).
 - Nova despesa: escolhe quem pagou, quem participa (todos ou alguns) e se
   divide igual ou por valor exato.
 
@@ -66,5 +67,6 @@ Detalhe completo de cada camada: seção 06 do dossiê linkado acima.
   alguém reivindicar) — dividir despesa e ver saldo funciona normalmente.
 - Sem leitura de foto de comprovante no modo grupo (só no chat privado).
 - Sem casamento automático de identidade entre canais (alguém que participa
-  pelo Telegram *e* como visitante web vira dois membros — juntar os dois é
-  manual, feature futura).
+  pelo Telegram *e* pelo app com a mesma pessoa vira dois membros, a menos
+  que já tenha conectado o Telegram pessoal à carteira — juntar os dois
+  manualmente é feature futura).

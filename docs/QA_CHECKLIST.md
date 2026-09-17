@@ -93,9 +93,10 @@ não corrige "de passagem" sem anotar o que era.
 ## Dividir (despesa em grupo) — ver DIVIDIR.md
 
 - [ ] Criar grupo pelo app → aparece em "Meus grupos", você já é membro
-- [ ] Gerar convite → abrir o link em janela anônima → entrar como visitante só com nome → cai no grupo
-- [ ] Abrir o mesmo link já logado → oferece entrar com a conta, sem pedir nome
-- [ ] Visitante NÃO ganha uma "Minha Carteira" (checar em Ajustes/no banco — `wallets` não deve ter linha nova pro anônimo)
+- [ ] Gerar convite → abrir o link em janela anônima (sem conta) → pede login/cadastro, sem opção de visitante
+- [ ] "Criar uma conta" a partir do convite → confirma e-mail (ou loga direto) → volta sozinho pro convite e entra no grupo
+- [ ] Abrir o mesmo link já logado → oferece entrar com a conta, um toque só
+- [ ] Reabrir um link de convite que você já usou (já é membro) → vai direto pro grupo, não pede pra entrar de novo
 - [ ] Nova despesa "todos" vs "selecionados" → saldo reflete só quem participou
 - [ ] Nova despesa "igual" vs "valor exato" (soma tem que bater, senão avisa)
 - [ ] Registrar acerto entre dois membros → saldo dos dois zera certo
