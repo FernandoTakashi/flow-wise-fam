@@ -101,6 +101,10 @@ não corrige "de passagem" sem anotar o que era.
 - [ ] Nova despesa "igual" vs "valor exato" (soma tem que bater, senão avisa)
 - [ ] Registrar acerto entre dois membros → saldo dos dois zera certo
 - [ ] Aba Saldo mostra a simplificação (menor nº de transferências), não uma lista de todo mundo com todo mundo
+- [ ] Botão de lápis no título (só dono) → editar nome do grupo → salva e reflete na hora
+- [ ] "Encerrar grupo" (só dono) → pede confirmação, mostra selo "Encerrado", "Nova despesa"/"Acerto" ficam desabilitados
+- [ ] "Reabrir grupo" → some o selo, botões voltam a funcionar
+- [ ] Quem não é dono não vê o lápis de editar nem a opção de encerrar
 - [ ] Remover um membro → despesas antigas dele continuam aparecendo; ele some das próximas
 - [ ] Tentar remover quem criou o grupo → recusa com mensagem clara
 - [ ] `/iniciar` num grupo do Telegram novo → cria o grupo, primeiro membro registrado

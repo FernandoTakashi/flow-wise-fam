@@ -47,7 +47,9 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: 'Split CaRe',
     items: [
       // rota própria, fora do Layout/FinanceProvider da carteira — ver src/pages/split/SplitApp.tsx
-      { title: 'Grupos', href: '/dividir', icon: Users2 },
+      // título repete a marca de propósito: no menu "Mais" do mobile os itens
+      // aparecem sem o rótulo da seção, e "Grupos" sozinho não dizia nada.
+      { title: 'Split CaRe', href: '/dividir', icon: Users2 },
     ],
   },
 ];
