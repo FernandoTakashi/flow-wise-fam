@@ -362,13 +362,13 @@ function ExpenseDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className={cn('sm:max-w-lg', SHEET_DIALOG_CLASS)}>
+      <DialogContent className={cn('sm:max-w-lg flex flex-col overflow-hidden', SHEET_DIALOG_CLASS)}>
         <div className="mx-auto mb-1 h-[5px] w-11 shrink-0 rounded-full bg-[#DDD1C9] sm:hidden" />
-        <DialogHeader><DialogTitle>{editing ? 'Editar despesa' : 'Nova despesa'}</DialogTitle></DialogHeader>
-        <div className="space-y-4">
+        <DialogHeader className="shrink-0"><DialogTitle>{editing ? 'Editar despesa' : 'Nova despesa'}</DialogTitle></DialogHeader>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-0.5">
           <div className="space-y-1.5">
             <Label>Descrição</Label>
-            <Input autoFocus value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex: Jantar, Uber, Airbnb" className="h-11 text-[16px] sm:h-10 sm:text-sm" />
+            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex: Jantar, Uber, Airbnb" className="h-11 text-[16px] sm:h-10 sm:text-sm" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -425,7 +425,7 @@ function ExpenseDialog({
             )}
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="shrink-0 border-t border-border pt-3">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button onClick={save} disabled={busy}>{busy ? 'Salvando…' : editing ? 'Salvar' : 'Registrar'}</Button>
         </DialogFooter>
@@ -486,10 +486,11 @@ function PaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className={cn('sm:max-w-sm', SHEET_DIALOG_CLASS)}>
+      <DialogContent className={cn('sm:max-w-sm flex flex-col overflow-hidden', SHEET_DIALOG_CLASS)}>
         <div className="mx-auto mb-1 h-[5px] w-11 shrink-0 rounded-full bg-[#DDD1C9] sm:hidden" />
-        <DialogHeader><DialogTitle>Registrar acerto</DialogTitle></DialogHeader>
+        <DialogHeader className="shrink-0"><DialogTitle>Registrar acerto</DialogTitle></DialogHeader>
 
+        <div className="min-h-0 flex-1 overflow-y-auto py-0.5">
         {step === 'list' && (
           <div className="space-y-3">
             {mySettlements.length === 0 ? (
@@ -574,6 +575,7 @@ function PaymentDialog({
             </DialogFooter>
           </div>
         )}
+        </div>
       </DialogContent>
     </Dialog>
   );

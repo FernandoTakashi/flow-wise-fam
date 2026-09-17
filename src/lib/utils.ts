@@ -11,8 +11,11 @@ export function cn(...inputs: ClassValue[]) {
  * modal de "Novo lançamento". Usar em todo modal de criar/editar pra manter
  * a mesma aparência em vez de reescrever a string em cada tela.
  */
+// `dvh` (não `vh`) porque no celular `vh` é medido pela tela "cheia" (sem
+// barra de endereço/teclado) — um modal alto com `bottom-0` acaba com o topo
+// cortado fora da área visível de verdade, parecendo "grudado" no topo.
 export const SHEET_DIALOG_CLASS =
-  'max-h-[92vh] overflow-y-auto max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:max-w-none ' +
+  'max-h-[92dvh] overflow-y-auto max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:max-w-none ' +
   'max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:rounded-t-[28px] max-sm:border-x-0 max-sm:border-b-0';
 
 /** UUID v4 — usa crypto.randomUUID quando disponível, com fallback. */
