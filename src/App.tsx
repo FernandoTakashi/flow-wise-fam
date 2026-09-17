@@ -71,6 +71,13 @@ const App = () => {
 
   if (checking) return <FullScreenLoader label="Carregando…" />;
 
+  // Sessão anônima (criada só pra entrar num grupo do Dividir como visitante)
+  // NUNCA conta como login de verdade aqui — sem isso, quem chega na
+  // carteira normal com essa sessão ainda ativa cai direto no Dashboard
+  // com uma conta sem nenhuma carteira (handle_new_user pula a criação pra
+  // anônimo de propósito), quebrando a tela em vez de pedir login.
+  const isRealSession = !!session && !session.user.is_anonymous;
+
   // "Dividir" é apartado de propósito: fora do Layout/FinanceProvider da
   // carteira, e acessível mesmo sem sessão (o convite cria uma na hora).
   if (location.pathname.startsWith('/dividir')) {
@@ -96,7 +103,7 @@ const App = () => {
     );
   }
 
-  if (!session) {
+  if (!isRealSession) {
     return (
       <QueryClientProvider client={queryClient}>
         <AuthPage />

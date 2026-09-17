@@ -7,20 +7,37 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { fetchInvitePreview, redeemSplitInvite } from '@/lib/splitApi';
+import { fetchInvitePreview, fetchSplitGroup, redeemSplitInvite } from '@/lib/splitApi';
 import { savePendingInvite } from '@/lib/pendingInvite';
 
 export default function SplitInvite({ session }: { session: Session | null }) {
   const { inviteId } = useParams();
   const { toast } = useToast();
-  const [preview, setPreview] = useState<{ groupName: string } | null | undefined>(undefined);
+  const [preview, setPreview] = useState<{ groupId: string; groupName: string } | null | undefined>(undefined);
+  const [checkingMembership, setCheckingMembership] = useState(true);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Se a sessão atual (visitante ou conta de verdade) já é membro desse
+  // grupo, pula a tela de entrada — sem isso, reabrir o mesmo link sempre
+  // pedia pra "entrar" de novo, mesmo já estando dentro.
   useEffect(() => {
     if (!inviteId) return;
-    void fetchInvitePreview(inviteId).then(setPreview);
-  }, [inviteId]);
+    let cancelled = false;
+    (async () => {
+      const p = await fetchInvitePreview(inviteId);
+      if (cancelled) return;
+      setPreview(p);
+      if (p && session) {
+        try {
+          await fetchSplitGroup(p.groupId);
+          if (!cancelled) { window.location.href = `/dividir/${p.groupId}`; return; }
+        } catch { /* ainda não é membro — segue pro fluxo normal de entrada */ }
+      }
+      if (!cancelled) setCheckingMembership(false);
+    })();
+    return () => { cancelled = true; };
+  }, [inviteId, session]);
 
   const isRealUser = !!session && !session.user.is_anonymous;
 
@@ -48,7 +65,7 @@ export default function SplitInvite({ session }: { session: Session | null }) {
     window.location.href = mode === 'register' ? '/?mode=register' : '/';
   };
 
-  if (preview === undefined) {
+  if (preview === undefined || checkingMembership) {
     return <SplitShell isGuest><div className="h-40 animate-pulse rounded-[16px] bg-muted" /></SplitShell>;
   }
   if (preview === null) {

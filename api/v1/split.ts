@@ -35,7 +35,7 @@ async function handleGet(req: VercelRequest, res: VercelResponse) {
     try {
       const preview = await getSplitInvitePreview(id);
       if (!preview) { res.status(404).json({ error: 'invite_not_found' }); return; }
-      res.status(200).json({ groupName: preview.groupName });
+      res.status(200).json({ groupId: preview.groupId, groupName: preview.groupName });
     } catch (e) {
       res.status(500).json({ error: 'db_error', detail: (e as Error).message });
     }

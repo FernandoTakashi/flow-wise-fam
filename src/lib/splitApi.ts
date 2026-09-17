@@ -40,9 +40,9 @@ export async function fetchSplitGroup(id: string): Promise<SplitGroupDetail> {
   };
 }
 
-export async function fetchInvitePreview(inviteId: string): Promise<{ groupName: string } | null> {
+export async function fetchInvitePreview(inviteId: string): Promise<{ groupId: string; groupName: string } | null> {
   try {
-    return await apiFetchPublic<{ groupName: string }>(`/split?scope=invite&id=${encodeURIComponent(inviteId)}`);
+    return await apiFetchPublic<{ groupId: string; groupName: string }>(`/split?scope=invite&id=${encodeURIComponent(inviteId)}`);
   } catch {
     return null;
   }
