@@ -20,7 +20,7 @@ import {
   findOrCreateTelegramMember, createSplitExpense, createSplitPayment, getSplitInvitePreview,
   resolveUserIdForTelegram, resolveSplitTelegramInvite, linkTelegramToUser,
 } from '../_lib/splitFinance.js';
-import { setSplitPending, takeSplitPending, peekSplitPending, updateSplitPendingPayload } from '../_lib/splitChat.js';
+import { setSplitPending, peekSplitPending, updateSplitPendingPayload, deleteSplitPending } from '../_lib/splitChat.js';
 
 const HELP =
   'Oi, eu sou a <b>Carolina</b> 👋 — a assistente da <b>CaRe Wallet</b>.\n\n' +
@@ -242,11 +242,19 @@ function renderDespesaCard(ctx: SplitGroupContext, p: DespesaPendingPayload, pen
   };
 }
 
+// callback_data do Telegram tem limite de 64 bytes — dois uuid (pendingId +
+// memberId) juntos passam disso. Em vez do id, usa a POSIÇÃO do membro numa
+// ordem determinística (por id, não a ordem "natural" da query, que não tem
+// garantia de ser estável) — recalculada igual dos dois lados.
+function sortedMembros(ctx: SplitGroupContext): SplitGroupContext['membros'] {
+  return [...ctx.membros].sort((a, b) => a.id.localeCompare(b.id));
+}
+
 /** Um botão por membro (✅/⬜) — tocar alterna, "Pronto" volta pro card de confirmação. */
 function renderParticipantEditor(ctx: SplitGroupContext, p: DespesaPendingPayload, pendingId: string): { text: string; buttons: InlineButton[][] } {
-  const buttons: InlineButton[][] = ctx.membros.map((m) => [{
+  const buttons: InlineButton[][] = sortedMembros(ctx).map((m, i) => [{
     text: `${p.participantIds.includes(m.id) ? '✅' : '⬜'} ${m.nome}`,
-    callback_data: `togglep:${pendingId}:${m.id}`,
+    callback_data: `togglep:${pendingId}:${i}`,
   }]);
   buttons.push([{ text: 'Pronto', callback_data: `doneeditsplit:${pendingId}` }]);
   return { text: `Quem participa de <b>${escapeHtml(p.description)}</b> — ${formatBRL(p.amountCents)}?`, buttons };
@@ -403,53 +411,57 @@ async function onGroupCallback(cq: TgCallbackQuery): Promise<void> {
   const msgId = cq.message?.message_id;
   const data = cq.data ?? '';
   if (!chatId) { await answerCallback(cq.id); return; }
-  const [action, pendingId, memberId] = data.split(':');
+  const [action, pendingId, extra] = data.split(':');
   const isEditAction = (EDIT_ACTIONS as readonly string[]).includes(action);
   if (!pendingId || (!isEditAction && action !== 'oksplit' && action !== 'nosplit')) { await answerCallback(cq.id); return; }
 
-  // Editar participantes só espia/atualiza o payload — não consome a
-  // pendência, porque os botões continuam usando o MESMO pendingId.
-  if (isEditAction) {
-    const pending = await peekSplitPending(pendingId);
-    if (!pending) { await answerCallback(cq.id, 'Esse pedido expirou.'); return; }
-    if (pending.telegramUserId !== cq.from.id) {
-      await answerCallback(cq.id, 'Isso não é seu — só quem lançou pode confirmar.');
-      return;
-    }
-    if (pending.kind !== 'despesa') { await answerCallback(cq.id); return; }
-
-    const p = pending.payload as unknown as DespesaPendingPayload;
-    const { ctx } = await buildSplitGroupContext(pending.groupId);
-
-    if (action === 'togglep' && memberId) {
-      const set = new Set(p.participantIds);
-      if (set.has(memberId)) { if (set.size > 1) set.delete(memberId); } else { set.add(memberId); }
-      p.participantIds = [...set];
-      await updateSplitPendingPayload(pendingId, p as unknown as Record<string, unknown>);
-    }
-
-    const view = action === 'doneeditsplit'
-      ? renderDespesaCard(ctx, p, pendingId)
-      : renderParticipantEditor(ctx, p, pendingId);
-    if (msgId) await editMessageText(chatId, msgId, view.text, view.buttons).catch(() => undefined);
-    await answerCallback(cq.id);
-    return;
-  }
-
-  const pending = await takeSplitPending(pendingId);
+  // SEMPRE espia primeiro (nunca consome antes de saber quem está clicando)
+  // — antes disso, qualquer pessoa clicando errado apagava a pendência de
+  // verdade (takeSplitPending já deletava antes do "isso não é seu"), e
+  // quem lançou não conseguia mais confirmar depois.
+  const pending = await peekSplitPending(pendingId);
   if (!pending) { await answerCallback(cq.id, 'Esse pedido expirou.'); return; }
   if (pending.telegramUserId !== cq.from.id) {
     await answerCallback(cq.id, 'Isso não é seu — só quem lançou pode confirmar.');
     return;
   }
 
+  // Editar participantes só atualiza o payload — não apaga a pendência,
+  // porque os botões da mensagem continuam usando o MESMO pendingId.
+  if (isEditAction) {
+    if (pending.kind !== 'despesa') { await answerCallback(cq.id); return; }
+
+    const p = pending.payload as unknown as DespesaPendingPayload;
+    const { ctx } = await buildSplitGroupContext(pending.groupId);
+
+    if (action === 'togglep' && extra) {
+      const idx = Number(extra);
+      const member = sortedMembros(ctx)[idx];
+      if (member) {
+        const set = new Set(p.participantIds);
+        if (set.has(member.id)) { if (set.size > 1) set.delete(member.id); } else { set.add(member.id); }
+        p.participantIds = [...set];
+        await updateSplitPendingPayload(pendingId, p as unknown as Record<string, unknown>);
+      }
+    }
+
+    const view = action === 'doneeditsplit'
+      ? renderDespesaCard(ctx, p, pendingId)
+      : renderParticipantEditor(ctx, p, pendingId);
+    if (msgId) await editMessageText(chatId, msgId, view.text, view.buttons).catch((e) => console.error('[tg webhook] editMessageText', e));
+    await answerCallback(cq.id);
+    return;
+  }
+
   if (action === 'nosplit') {
+    await deleteSplitPending(pendingId);
     if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
     await answerCallback(cq.id, 'Cancelado');
     return;
   }
 
   try {
+    await deleteSplitPending(pendingId);
     // "quem criou" pro app é sempre uma conta de verdade (profiles.id), nunca
     // um split_members.id — resolve pelo Telegram, null se a pessoa nunca
     // conectou o Telegram pessoal dela a nenhuma carteira.

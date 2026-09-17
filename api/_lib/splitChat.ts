@@ -53,3 +53,9 @@ export async function updateSplitPendingPayload(id: string, payload: Record<stri
   const { error } = await db.from('split_pending').update({ payload }).eq('id', id);
   if (error) throw error;
 }
+
+/** Apaga sem devolver nada — usar depois de já ter conferido dono via peekSplitPending. */
+export async function deleteSplitPending(id: string): Promise<void> {
+  const db = admin();
+  await db.from('split_pending').delete().eq('id', id);
+}
