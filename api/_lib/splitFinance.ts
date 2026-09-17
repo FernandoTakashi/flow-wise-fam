@@ -95,8 +95,10 @@ export async function createSplitGroup(name: string, createdBy: string): Promise
     .insert({ name: name.trim() || 'Novo grupo', created_by: createdBy }).select('id').single();
   if (error) throw error;
   const groupId = data.id as string;
-  // quem cria já entra como o primeiro membro
-  await db.from('split_members').insert({ group_id: groupId, user_id: createdBy, display_name: 'Você' });
+  // quem cria já entra como o primeiro membro — nome de verdade, não "Você"
+  // (esse texto é fixo pro criador e aparece igual pra todo mundo do grupo)
+  const { data: profile } = await db.from('profiles').select('name').eq('id', createdBy).maybeSingle();
+  await db.from('split_members').insert({ group_id: groupId, user_id: createdBy, display_name: profile?.name || 'Integrante' });
   return groupId;
 }
 

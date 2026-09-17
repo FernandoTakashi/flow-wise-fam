@@ -505,4 +505,14 @@ begin
 end;
 $$;
 
+-- 20260917000003 — corrige nome do criador do grupo do Dividir: entrava
+-- fixo como 'Você', que aparecia igual pra todo mundo do grupo (não só pra
+-- quem criou). Preenche com o nome real do perfil.
+update public.split_members sm
+set display_name = p.name
+from public.profiles p
+where sm.user_id = p.id
+  and sm.display_name = 'Você'
+  and coalesce(p.name, '') <> '';
+
 commit;
