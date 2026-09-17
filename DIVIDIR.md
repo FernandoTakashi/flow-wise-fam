@@ -39,9 +39,16 @@ Depois, versione: `npx supabase migration repair --status applied 20260917000001
 3. A partir daí, é só mandar o que cada um gastou — `"paguei o jantar, 180"` —
    que ela divide igual entre quem já apareceu no grupo, mostra o resumo e
    pede confirmação.
-4. `"já paguei a Ana os 40"` registra um acerto, não uma despesa nova.
-5. `"como ficou a divisão?"` responde com o saldo simplificado.
-6. A maioria das mensagens do grupo (conversa normal) é **ignorada
+4. Ou manda a **foto de uma nota fiscal/comprovante** que ela lê o valor e o
+   estabelecimento sozinha — o gasto é sempre de quem mandou a foto.
+5. Em qualquer despesa (texto ou foto), o card de confirmação tem um botão
+   **"✏️ Editar participantes"** — abre uma lista com um ✅/⬜ por pessoa,
+   toca pra tirar/incluir alguém, "Pronto" volta pro card com o valor já
+   recalculado. Sem isso, dava só pra excluir alguém escrevendo na hora
+   ("menos o Bruno") — agora tem um jeito visual também.
+6. `"já paguei a Ana os 40"` registra um acerto, não uma despesa nova.
+7. `"como ficou a divisão?"` responde com o saldo simplificado.
+8. A maioria das mensagens do grupo (conversa normal) é **ignorada
    silenciosamente** — a Carolina só fala quando é sobre despesa/acerto/saldo,
    ou se alguém pedir ajuda diretamente.
 
@@ -79,7 +86,6 @@ Detalhe completo de cada camada: seção 06 do dossiê linkado acima.
 - Grupo criado por `/iniciar` sem ninguém com Telegram conectado à carteira
   fica sem "dono" pro app (arquivar/renomear pelo app não funciona até
   alguém reivindicar) — dividir despesa e ver saldo funciona normalmente.
-- Sem leitura de foto de comprovante no modo grupo (só no chat privado).
 - Casamento de identidade entre canais só funciona num sentido: quem entra
   pelo **site primeiro** e depois vai pro Telegram pelo convite individual
   (ver acima) não vira membro duplicado. Quem entra pelo **Telegram primeiro**

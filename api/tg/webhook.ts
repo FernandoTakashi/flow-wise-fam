@@ -3,7 +3,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { env } from '../_lib/env.js';
 import {
-  sendMessage, answerCallback, clearButtons, downloadPhoto,
+  sendMessage, answerCallback, clearButtons, editMessageText, downloadPhoto,
   type TgUpdate, type TgMessage, type TgCallbackQuery, type TgChatMemberUpdate, type InlineButton,
 } from '../_lib/telegram.js';
 import { findLink, redeemToken, setPending, takePending, type ChatLink } from '../_lib/chat.js';
@@ -12,15 +12,15 @@ import {
   payInvoice, createRecurrence, lastTransaction, deleteEntry,
 } from '../_lib/finance.js';
 import { buildWalletContext } from '../_lib/context.js';
-import { interpret, interpretImage, interpretSplit, type BotEntry } from '../_lib/brain.js';
+import { interpret, interpretImage, interpretSplit, interpretSplitImage, type BotEntry, type BotSplitAction } from '../_lib/brain.js';
 import { spDateISO, formatBRL, toCents, isoParts, dayOfMonthISO } from '../_lib/shared.js';
-import { buildSplitGroupContext } from '../_lib/splitContext.js';
+import { buildSplitGroupContext, type SplitGroupContext } from '../_lib/splitContext.js';
 import {
   findSplitGroupIdByTelegramChat, createSplitGroupFromTelegram, connectTelegramChat,
   findOrCreateTelegramMember, createSplitExpense, createSplitPayment, getSplitInvitePreview,
   resolveUserIdForTelegram, resolveSplitTelegramInvite, linkTelegramToUser,
 } from '../_lib/splitFinance.js';
-import { setSplitPending, takeSplitPending } from '../_lib/splitChat.js';
+import { setSplitPending, takeSplitPending, peekSplitPending, updateSplitPendingPayload } from '../_lib/splitChat.js';
 
 const HELP =
   'Oi, eu sou a <b>Carolina</b> 👋 — a assistente da <b>CaRe Wallet</b>.\n\n' +
@@ -52,8 +52,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (update?.message?.text) {
       if (update.message.chat.type === 'private') await onMessage(update.message);
       else await onGroupMessage(update.message);
-    } else if (update?.message?.photo?.length && update.message.chat.type === 'private') {
-      await onPhoto(update.message);
+    } else if (update?.message?.photo?.length) {
+      if (update.message.chat.type === 'private') await onPhoto(update.message);
+      else await onGroupPhoto(update.message);
     } else if (update?.callback_query) {
       const chatType = update.callback_query.message?.chat.type;
       if (!chatType || chatType === 'private') await onCallback(update.callback_query);
@@ -223,6 +224,47 @@ async function onPhoto(msg: TgMessage) {
 // não fica repetindo "não estou conectado" a cada mensagem de um grupo
 // qualquer em que ela foi adicionada por engano.
 // ---------------------------------------------------------------------------
+interface DespesaPendingPayload {
+  description: string; amountCents: number; dateISO: string; paidBy: string; participantIds: string[];
+}
+
+/** Card de confirmação de despesa — reaproveitado por texto, foto e pelo "voltar" do editor de participantes. */
+function renderDespesaCard(ctx: SplitGroupContext, p: DespesaPendingPayload, pendingId: string): { text: string; buttons: InlineButton[][] } {
+  const payerName = ctx.membros.find((m) => m.id === p.paidBy)?.nome ?? '—';
+  const names = p.participantIds.map((id) => ctx.membros.find((m) => m.id === id)?.nome).filter(Boolean).join(', ') || '—';
+  return {
+    text: `💸 <b>${escapeHtml(p.description)}</b> — <b>${formatBRL(p.amountCents)}</b>\n` +
+      `Pago por <b>${escapeHtml(payerName)}</b>, dividido entre: ${escapeHtml(names)}.`,
+    buttons: [
+      [{ text: '✅ Confirmar', callback_data: `oksplit:${pendingId}` }, { text: '✖️ Cancelar', callback_data: `nosplit:${pendingId}` }],
+      [{ text: '✏️ Editar participantes', callback_data: `editsplit:${pendingId}` }],
+    ],
+  };
+}
+
+/** Um botão por membro (✅/⬜) — tocar alterna, "Pronto" volta pro card de confirmação. */
+function renderParticipantEditor(ctx: SplitGroupContext, p: DespesaPendingPayload, pendingId: string): { text: string; buttons: InlineButton[][] } {
+  const buttons: InlineButton[][] = ctx.membros.map((m) => [{
+    text: `${p.participantIds.includes(m.id) ? '✅' : '⬜'} ${m.nome}`,
+    callback_data: `togglep:${pendingId}:${m.id}`,
+  }]);
+  buttons.push([{ text: 'Pronto', callback_data: `doneeditsplit:${pendingId}` }]);
+  return { text: `Quem participa de <b>${escapeHtml(p.description)}</b> — ${formatBRL(p.amountCents)}?`, buttons };
+}
+
+async function sendDespesaConfirm(
+  chatId: number, groupId: string, fromId: number, ctx: SplitGroupContext, payerMemberId: string, action: Extract<BotSplitAction, { intent: 'despesa' }>,
+): Promise<void> {
+  const participantIds = action.participantIds ?? ctx.membros.map((m) => m.id);
+  const payload: DespesaPendingPayload = {
+    description: action.description, amountCents: action.amountCents, dateISO: action.dateISO,
+    paidBy: payerMemberId, participantIds,
+  };
+  const pendingId = await setSplitPending(groupId, fromId, 'despesa', payload as unknown as Record<string, unknown>);
+  const { text, buttons } = renderDespesaCard(ctx, payload, pendingId);
+  await sendMessage(chatId, text, buttons);
+}
+
 async function onGroupMessage(msg: TgMessage): Promise<void> {
   const chatId = msg.chat.id;
   const fromId = msg.from?.id;
@@ -244,22 +286,7 @@ async function onGroupMessage(msg: TgMessage): Promise<void> {
   if (action.intent === 'ignorar') return;
   if (action.intent === 'reply') { await sendMessage(chatId, escapeHtml(action.text)); return; }
 
-  if (action.intent === 'despesa') {
-    const participantIds = action.participantIds ?? ctx.membros.map((m) => m.id);
-    const pendingId = await setSplitPending(groupId, fromId, 'despesa', {
-      description: action.description, amountCents: action.amountCents, dateISO: action.dateISO,
-      paidBy: member.id, participantIds,
-    });
-    const names = participantIds.map((id) => ctx.membros.find((m) => m.id === id)?.nome).filter(Boolean).join(', ');
-    await sendMessage(chatId,
-      `💸 <b>${escapeHtml(action.description)}</b> — <b>${formatBRL(action.amountCents)}</b>\n` +
-      `Pago por <b>${escapeHtml(member.display_name)}</b>, dividido entre: ${escapeHtml(names)}.`,
-      [[
-        { text: '✅ Confirmar', callback_data: `oksplit:${pendingId}` },
-        { text: '✖️ Cancelar', callback_data: `nosplit:${pendingId}` },
-      ]]);
-    return;
-  }
+  if (action.intent === 'despesa') { await sendDespesaConfirm(chatId, groupId, fromId, ctx, member.id, action); return; }
 
   if (action.intent === 'acerto') {
     const toMember = ctx.membros.find((m) => m.id === action.toMemberId);
@@ -273,6 +300,32 @@ async function onGroupMessage(msg: TgMessage): Promise<void> {
         { text: '✖️ Cancelar', callback_data: `nosplit:${pendingId}` },
       ]]);
     return;
+  }
+}
+
+/** Foto de nota fiscal/comprovante mandada num grupo já conectado ao Dividir. */
+async function onGroupPhoto(msg: TgMessage): Promise<void> {
+  const chatId = msg.chat.id;
+  const fromId = msg.from?.id;
+  if (!fromId) return;
+  const groupId = await findSplitGroupIdByTelegramChat(String(chatId));
+  if (!groupId) return; // grupo não conectado — foto solta não vira nada, sem spam de aviso
+
+  const photo = msg.photo?.at(-1);
+  if (!photo) return;
+
+  try {
+    const senderName = msg.from?.first_name?.trim() || msg.from?.username || 'Alguém';
+    const member = await findOrCreateTelegramMember(groupId, fromId, senderName);
+    const { ctx } = await buildSplitGroupContext(groupId);
+    const { base64, mediaType } = await downloadPhoto(photo.file_id);
+    const action = await interpretSplitImage(base64, mediaType, ctx, member.display_name, msg.caption);
+
+    if (action.intent === 'reply') { await sendMessage(chatId, escapeHtml(action.text)); return; }
+    if (action.intent === 'despesa') { await sendDespesaConfirm(chatId, groupId, fromId, ctx, member.id, action); return; }
+  } catch (e) {
+    console.error('[tg webhook] onGroupPhoto', e);
+    await sendMessage(chatId, '❌ Não consegui processar essa foto. Tenta de novo ou manda o valor em texto.');
   }
 }
 
@@ -343,13 +396,45 @@ async function onChatMember(update: TgChatMemberUpdate): Promise<void> {
  * completamente separado do fluxo de callback da carteira (onCallback).
  * Só quem gerou a pendência pode confirmar o próprio botão.
  */
+const EDIT_ACTIONS = ['editsplit', 'togglep', 'doneeditsplit'] as const;
+
 async function onGroupCallback(cq: TgCallbackQuery): Promise<void> {
   const chatId = cq.message?.chat.id;
   const msgId = cq.message?.message_id;
   const data = cq.data ?? '';
   if (!chatId) { await answerCallback(cq.id); return; }
-  const [action, pendingId] = data.split(':');
-  if (!pendingId || (action !== 'oksplit' && action !== 'nosplit')) { await answerCallback(cq.id); return; }
+  const [action, pendingId, memberId] = data.split(':');
+  const isEditAction = (EDIT_ACTIONS as readonly string[]).includes(action);
+  if (!pendingId || (!isEditAction && action !== 'oksplit' && action !== 'nosplit')) { await answerCallback(cq.id); return; }
+
+  // Editar participantes só espia/atualiza o payload — não consome a
+  // pendência, porque os botões continuam usando o MESMO pendingId.
+  if (isEditAction) {
+    const pending = await peekSplitPending(pendingId);
+    if (!pending) { await answerCallback(cq.id, 'Esse pedido expirou.'); return; }
+    if (pending.telegramUserId !== cq.from.id) {
+      await answerCallback(cq.id, 'Isso não é seu — só quem lançou pode confirmar.');
+      return;
+    }
+    if (pending.kind !== 'despesa') { await answerCallback(cq.id); return; }
+
+    const p = pending.payload as unknown as DespesaPendingPayload;
+    const { ctx } = await buildSplitGroupContext(pending.groupId);
+
+    if (action === 'togglep' && memberId) {
+      const set = new Set(p.participantIds);
+      if (set.has(memberId)) { if (set.size > 1) set.delete(memberId); } else { set.add(memberId); }
+      p.participantIds = [...set];
+      await updateSplitPendingPayload(pendingId, p as unknown as Record<string, unknown>);
+    }
+
+    const view = action === 'doneeditsplit'
+      ? renderDespesaCard(ctx, p, pendingId)
+      : renderParticipantEditor(ctx, p, pendingId);
+    if (msgId) await editMessageText(chatId, msgId, view.text, view.buttons).catch(() => undefined);
+    await answerCallback(cq.id);
+    return;
+  }
 
   const pending = await takeSplitPending(pendingId);
   if (!pending) { await answerCallback(cq.id, 'Esse pedido expirou.'); return; }

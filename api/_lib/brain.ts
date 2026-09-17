@@ -394,6 +394,76 @@ export async function interpretSplit(text: string, ctx: SplitGroupContext, sende
   }
 }
 
+const SplitImageSchema = z.object({
+  found: z.boolean().describe('true se a imagem é uma nota fiscal/recibo/comprovante com valor legível'),
+  despesa: z.object({
+    description: z.string().describe('estabelecimento, curto (ex.: "restaurante", "mercado")'),
+    amount_cents: z.number().int(),
+    date: z.string().describe('yyyy-mm-dd — data do comprovante, se legível; senão hoje'),
+    participant_ids: z.array(z.string()).nullable()
+      .describe('ids EXATOS de membros participando, só se a legenda da foto excluiu alguém explicitamente; null = todo mundo do grupo hoje'),
+  }).nullable(),
+  reply: z.string().describe('se found=false, explica objetivamente o que não deu pra ler; senão vazio'),
+});
+
+/**
+ * Lê uma foto de nota fiscal/comprovante mandada num GRUPO do Dividir. Quem
+ * pagou é sempre quem mandou a foto (mesma regra do texto) — a legenda (se
+ * tiver) é o único jeito de excluir alguém da divisão, já que não tem como
+ * "conversar" sobre uma imagem.
+ */
+export async function interpretSplitImage(
+  imageBase64: string, mediaType: ImageMediaType, ctx: SplitGroupContext, senderName: string, caption?: string,
+): Promise<BotSplitAction> {
+  const key = env.anthropicKey();
+  if (!key) return { intent: 'reply', text: 'Configure ANTHROPIC_API_KEY pra eu ler foto de nota fiscal. Por enquanto, manda o valor em texto.' };
+
+  try {
+    const client = anthropic();
+    const response = await client.messages.parse({
+      model: 'claude-haiku-4-5',
+      max_tokens: 700,
+      system:
+        'Você é a Carolina, assistente de divisão de despesas em grupo (pt-BR), num grupo do Telegram chamado "' + ctx.grupo + '". ' +
+        `${senderName} mandou uma FOTO de nota fiscal/comprovante — o gasto é sempre dela/dele (quem manda a foto é quem pagou). ` +
+        'Extraia pro schema. Regras:\n' +
+        '- amount_cents = valor total da nota, em centavos.\n' +
+        '- description = nome do estabelecimento (não invente; use o que está escrito).\n' +
+        `- date: data do comprovante se legível (yyyy-mm-dd); senão hoje.\n` +
+        '- participant_ids: só preencha se a LEGENDA da foto excluir alguém explicitamente ("menos o Bruno", "só eu e a Ana"); senão null (todo mundo do grupo).\n' +
+        '- Se a imagem não for uma nota/comprovante legível, found=false e explique objetivamente por quê em `reply`.\n' +
+        `Membros do grupo (JSON): ${JSON.stringify(ctx.membros)}.`,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
+          { type: 'text', text: `ESTADO DO GRUPO:\n${JSON.stringify(ctx)}${caption ? `\n\nLEGENDA DA FOTO:\n${caption}` : ''}` },
+        ],
+      }],
+      output_config: { format: zodOutputFormat(SplitImageSchema) },
+    });
+
+    const p = response.parsed_output;
+    if (!p) return { intent: 'ignorar' };
+
+    if (p.found && p.despesa && p.despesa.amount_cents > 0) {
+      const ids = p.despesa.participant_ids?.filter((id) => ctx.membros.some((m) => m.id === id)) ?? null;
+      return {
+        intent: 'despesa',
+        description: p.despesa.description.trim().slice(0, 80) || 'Despesa',
+        amountCents: p.despesa.amount_cents,
+        dateISO: p.despesa.date && /^\d{4}-\d{2}-\d{2}$/.test(p.despesa.date) ? p.despesa.date : todayFallback(),
+        participantIds: ids && ids.length > 0 ? ids : null,
+      };
+    }
+
+    return { intent: 'reply', text: p.reply?.trim() || 'Não consegui ler essa nota. Manda o valor em texto ou uma foto mais nítida.' };
+  } catch (e) {
+    console.error('[brain] interpretSplitImage falhou:', (e as Error).message ?? e);
+    return { intent: 'reply', text: 'Não consegui ler essa foto agora. Manda o valor em texto, ou tenta de novo.' };
+  }
+}
+
 function todayFallback(): string {
   return new Date().toISOString().slice(0, 10);
 }

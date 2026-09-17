@@ -21,7 +21,6 @@ const Cards = lazy(() => import('@/pages/Cards'));
 const Investments = lazy(() => import('@/pages/Investments'));
 const Projection = lazy(() => import('@/pages/Projection'));
 const Reports = lazy(() => import('@/pages/Reports'));
-const Settlement = lazy(() => import('@/pages/Settlement'));
 const Settings = lazy(() => import('@/pages/Settings'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
 
@@ -134,7 +133,6 @@ const App = () => {
                   <Route path="/investimentos" element={<Investments />} />
                   <Route path="/projecao" element={<Projection />} />
                   <Route path="/relatorios" element={<Reports />} />
-                  <Route path="/acerto" element={<Settlement />} />
                   <Route path="/ajustes" element={<Settings />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>

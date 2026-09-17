@@ -75,6 +75,17 @@ export function clearButtons(chatId: number | string, messageId: number): Promis
   return call('editMessageReplyMarkup', { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } });
 }
 
+/** Troca texto + botões de uma mensagem já enviada (ex.: alternar entre o card de confirmação e o editor de participantes). */
+export function editMessageText(
+  chatId: number | string, messageId: number, text: string, buttons?: InlineButton[][],
+): Promise<unknown> {
+  return call('editMessageText', {
+    chat_id: chatId, message_id: messageId, text,
+    parse_mode: 'HTML', disable_web_page_preview: true,
+    ...(buttons ? { reply_markup: { inline_keyboard: buttons } } : {}),
+  });
+}
+
 export function setMyCommands(commands: { command: string; description: string }[]): Promise<unknown> {
   return call('setMyCommands', { commands });
 }

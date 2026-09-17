@@ -112,6 +112,13 @@ não corrige "de passagem" sem anotar o que era.
 - [ ] Entrar num grupo pelo site que NÃO tem Telegram conectado → vai direto pro grupo, sem oferecer nada de Telegram
 - [ ] Carolina sem permissão de admin no grupo do Telegram → botão "entrar no Telegram" não aparece (ou falha sem quebrar o resto do fluxo)
 - [ ] Mandar "paguei o jantar, 180" no grupo → resumo com Confirmar/Cancelar, divide igual entre quem já apareceu
+- [ ] Mandar foto de uma nota fiscal/comprovante no grupo → lê valor e estabelecimento, mesmo card de confirmação da despesa por texto
+- [ ] Foto ilegível/que não é nota fiscal → avisa objetivamente, não trava nem inventa valor
+- [ ] No card de confirmação (texto ou foto), tocar "✏️ Editar participantes" → lista com ✅/⬜ por membro
+- [ ] Tocar num membro pra tirar da lista → card recalcula quem participa; "Pronto" volta pro card de confirmação com o texto atualizado
+- [ ] Tentar tirar o último participante restante → não deixa esvaziar (sempre sobra pelo menos 1)
+- [ ] Outra pessoa (não quem lançou) tentando editar participantes ou confirmar → recusa ("isso não é seu")
+- [ ] "menos o Bruno" no texto já exclui direto, sem precisar abrir o editor depois
 - [ ] "já paguei a Ana os 40" → vira acerto, não despesa
 - [ ] "como ficou a divisão?" → responde com o saldo certo
 - [ ] Mensagem de conversa normal do grupo (não relacionada a dinheiro) → Carolina fica quieta, não responde nada

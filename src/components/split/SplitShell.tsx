@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Mascot } from '@/components/Mascot';
-import { LogOut } from 'lucide-react';
+import { ArrowLeft, LogOut } from 'lucide-react';
 
 export function SplitShell({ children, isGuest }: { children: ReactNode; isGuest?: boolean }) {
   return (
@@ -17,6 +17,12 @@ export function SplitShell({ children, isGuest }: { children: ReactNode; isGuest
           Split CaRe
         </Link>
         <div className="flex items-center gap-2">
+          {!isGuest && (
+            <Link to="/" aria-label="Voltar pro CaRe Wallet"
+              className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground sm:hidden">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          )}
           {!isGuest && (
             <Link to="/" className="hidden text-[13px] font-medium text-muted-foreground hover:text-foreground sm:inline">
               ← Voltar pro CaRe Wallet
