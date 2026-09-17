@@ -17,12 +17,12 @@ import { todayISO, formatDayMonth, isoParts, MONTHS_PT } from '@/lib/dates';
 import { cn, SHEET_DIALOG_CLASS } from '@/lib/utils';
 import { computeSplitBalances, simplifySplitDebts, equalSplitShares, exactSharesMatchTotal, type SplitSettlement } from '@/core/split';
 import {
-  fetchSplitGroup, createSplitInvite, removeSplitMember, renameSplitGroup, archiveSplitGroup,
+  fetchSplitGroup, createSplitInvite, removeSplitMember, renameSplitGroup, archiveSplitGroup, fetchTelegramInvite,
   createSplitExpense, updateSplitExpense, deleteSplitExpense, createSplitPayment, deleteSplitPayment,
   type ExpenseFormInput,
 } from '@/lib/splitApi';
 import type { SplitGroupDetail as SplitGroupDetailType, SplitExpense, SplitPayment, SplitMember } from '@/types/split';
-import { Plus, Link2, Trash2, Pencil, ArrowRightLeft, Receipt, Send, CheckCircle2, XCircle, RotateCcw } from 'lucide-react';
+import { Plus, Link2, Trash2, Pencil, ArrowRightLeft, Receipt, Send, CheckCircle2, XCircle, RotateCcw, Settings as SettingsIcon } from 'lucide-react';
 
 const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string | undefined;
 
@@ -44,9 +44,10 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [showTelegramSetup, setShowTelegramSetup] = useState(false);
   const [telegramToken, setTelegramToken] = useState<string | null>(null);
-  const [showEditGroup, setShowEditGroup] = useState(false);
+  const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [groupNameDraft, setGroupNameDraft] = useState('');
   const [savingGroup, setSavingGroup] = useState(false);
+  const [openingTelegram, setOpeningTelegram] = useState(false);
 
   const load = async () => {
     if (!groupId) return;
@@ -138,9 +139,9 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
     }
   };
 
-  const openEditGroup = () => {
+  const openGroupSettings = () => {
     setGroupNameDraft(data.group.name);
-    setShowEditGroup(true);
+    setShowGroupSettings(true);
   };
 
   const saveGroupName = async () => {
@@ -160,11 +161,22 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
     try {
       await archiveSplitGroup(data.group.id, !data.group.archived);
       await load();
-      setShowEditGroup(false);
+      setShowGroupSettings(false);
       toast({ title: data.group.archived ? 'Grupo reaberto' : 'Grupo encerrado' });
     } catch (err) {
       toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' });
     } finally { setSavingGroup(false); }
+  };
+
+  const enterTelegramGroup = async () => {
+    setOpeningTelegram(true);
+    try {
+      const link = await fetchTelegramInvite(data.group.id);
+      if (link) window.location.href = link;
+      else toast({ title: 'Não consegui gerar o link', description: 'Tenta de novo em alguns segundos.', variant: 'destructive' });
+    } catch (err) {
+      toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' });
+    } finally { setOpeningTelegram(false); }
   };
 
   const kickMember = async (memberId: string) => {
@@ -186,12 +198,10 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
             {data.group.archived && (
               <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">Encerrado</span>
             )}
-            {isOwner && (
-              <button type="button" onClick={openEditGroup} aria-label="Editar grupo"
-                className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground">
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-            )}
+            <button type="button" onClick={openGroupSettings} aria-label="Configurações do grupo"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground">
+              <SettingsIcon className="h-3.5 w-3.5" />
+            </button>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {activeMembers.map((m) => (
@@ -371,7 +381,7 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
         <DialogContent className={cn('sm:max-w-md', SHEET_DIALOG_CLASS)}>
           <DialogHeader><DialogTitle>Convidar pro grupo</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Quem abrir esse link entra como visitante (só digita um nome) ou já logado, se tiver conta.
+            Quem abrir esse link entra com a conta do CaRe Wallet (ou cria uma na hora).
             Cole esse mesmo link/token com <code className="rounded bg-muted px-1 py-0.5 text-[12px]">/conectar</code> num grupo do Telegram pra ligar o grupo lá também.
           </p>
           {inviteLink ? (
@@ -425,47 +435,63 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showEditGroup} onOpenChange={setShowEditGroup}>
+      <Dialog open={showGroupSettings} onOpenChange={setShowGroupSettings}>
         <DialogContent className={cn('sm:max-w-sm', SHEET_DIALOG_CLASS)}>
-          <DialogHeader><DialogTitle>Editar grupo</DialogTitle></DialogHeader>
-          <div className="space-y-1.5">
-            <Label>Nome do grupo</Label>
-            <Input value={groupNameDraft} onChange={(e) => setGroupNameDraft(e.target.value)}
-              className="h-11 text-[16px] sm:h-10 sm:text-sm" onKeyDown={(e) => e.key === 'Enter' && void saveGroupName()} />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditGroup(false)}>Cancelar</Button>
-            <Button onClick={saveGroupName} disabled={savingGroup || !groupNameDraft.trim()}>
-              {savingGroup ? 'Salvando…' : 'Salvar nome'}
-            </Button>
-          </DialogFooter>
+          <DialogHeader><DialogTitle>Configurações do grupo</DialogTitle></DialogHeader>
 
-          <div className="mt-1 border-t border-border pt-4">
-            {data.group.archived ? (
-              <>
-                <p className="text-[13px] text-muted-foreground">
-                  Esse grupo está encerrado — ninguém consegue lançar despesa ou acerto nele até reabrir.
-                </p>
-                <Button variant="outline" className="mt-3 w-full" disabled={savingGroup} onClick={() => void toggleArchived()}>
-                  <RotateCcw className="mr-2 h-4 w-4" /> Reabrir grupo
-                </Button>
-              </>
-            ) : (
-              <>
-                <p className="text-[13px] text-muted-foreground">
-                  Encerrar guarda o histórico (nada é apagado), mas ninguém mais consegue lançar despesa ou acerto — dá pra reabrir depois.
-                </p>
-                <ConfirmDialog title="Encerrar este grupo?"
-                  description="Ninguém vai conseguir lançar despesa ou acerto nele até reabrir. O histórico continua todo aqui."
-                  confirmLabel="Encerrar grupo" onConfirm={toggleArchived}
-                  trigger={
-                    <Button variant="outline" className="mt-3 w-full text-destructive hover:text-destructive" disabled={savingGroup}>
-                      <XCircle className="mr-2 h-4 w-4" /> Encerrar grupo
+          {data.group.telegramConnected && (
+            <div className={cn('space-y-2', isOwner && 'border-b border-border pb-4')}>
+              <p className="text-[13px] text-muted-foreground">
+                Esse grupo também conversa por um grupo do Telegram — entrando lá, dá pra lançar despesa e ver o
+                saldo só de mensagem.
+              </p>
+              <Button variant="outline" className="w-full" disabled={openingTelegram} onClick={() => void enterTelegramGroup()}>
+                <Send className="mr-2 h-4 w-4" /> {openingTelegram ? 'Gerando link…' : 'Entrar no grupo do Telegram'}
+              </Button>
+            </div>
+          )}
+
+          {isOwner && (
+            <>
+              <div className="space-y-1.5">
+                <Label>Nome do grupo</Label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input value={groupNameDraft} onChange={(e) => setGroupNameDraft(e.target.value)}
+                    className="h-11 text-[16px] sm:h-10 sm:text-sm" onKeyDown={(e) => e.key === 'Enter' && void saveGroupName()} />
+                  <Button onClick={saveGroupName} disabled={savingGroup || !groupNameDraft.trim() || groupNameDraft.trim() === data.group.name}>
+                    {savingGroup ? 'Salvando…' : 'Salvar'}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-4">
+                {data.group.archived ? (
+                  <>
+                    <p className="text-[13px] text-muted-foreground">
+                      Esse grupo está encerrado — ninguém consegue lançar despesa ou acerto nele até reabrir.
+                    </p>
+                    <Button variant="outline" className="mt-3 w-full" disabled={savingGroup} onClick={() => void toggleArchived()}>
+                      <RotateCcw className="mr-2 h-4 w-4" /> Reabrir grupo
                     </Button>
-                  } />
-              </>
-            )}
-          </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[13px] text-muted-foreground">
+                      Encerrar guarda o histórico (nada é apagado), mas ninguém mais consegue lançar despesa ou acerto — dá pra reabrir depois.
+                    </p>
+                    <ConfirmDialog title="Encerrar este grupo?"
+                      description="Ninguém vai conseguir lançar despesa ou acerto nele até reabrir. O histórico continua todo aqui."
+                      confirmLabel="Encerrar grupo" onConfirm={toggleArchived}
+                      trigger={
+                        <Button variant="outline" className="mt-3 w-full text-destructive hover:text-destructive" disabled={savingGroup}>
+                          <XCircle className="mr-2 h-4 w-4" /> Encerrar grupo
+                        </Button>
+                      } />
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </SplitShell>
