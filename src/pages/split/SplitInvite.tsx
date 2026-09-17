@@ -4,7 +4,8 @@ import type { Session } from '@supabase/supabase-js';
 import { SplitShell } from '@/components/split/SplitShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { fetchInvitePreview, fetchSplitGroup, redeemSplitInvite } from '@/lib/splitApi';
+import { fetchInvitePreview, fetchSplitGroup, redeemSplitInvite, fetchTelegramInvite } from '@/lib/splitApi';
+import { Send } from 'lucide-react';
 
 export default function SplitInvite({ session }: { session: Session | null }) {
   const { inviteId } = useParams();
@@ -13,9 +14,16 @@ export default function SplitInvite({ session }: { session: Session | null }) {
   const [checkingMembership, setCheckingMembership] = useState(true);
   const [busy, setBusy] = useState(false);
 
+  // Depois de entrar pelo site: null = grupo sem Telegram conectado (vai
+  // direto pro grupo); string = link individual pra oferecer entrar lá
+  // também; undefined = ainda não entrou / ainda checando.
+  const [joinedGroupId, setJoinedGroupId] = useState<string | null>(null);
+  const [telegramInvite, setTelegramInvite] = useState<string | null | undefined>(undefined);
+
   // Se a sessão atual já é membro desse grupo, pula a tela de entrada —
   // sem isso, reabrir o mesmo link sempre pedia pra "entrar" de novo, mesmo
-  // já estando dentro.
+  // já estando dentro. (Só na primeira entrada oferecemos o Telegram, não
+  // toda vez que reabre o link.)
   useEffect(() => {
     if (!inviteId) return;
     let cancelled = false;
@@ -41,7 +49,10 @@ export default function SplitInvite({ session }: { session: Session | null }) {
     setBusy(true);
     try {
       const groupId = await redeemSplitInvite(inviteId);
-      window.location.href = `/dividir/${groupId}`;
+      setJoinedGroupId(groupId);
+      const link = await fetchTelegramInvite(groupId).catch(() => null);
+      if (link) setTelegramInvite(link);
+      else window.location.href = `/dividir/${groupId}`;
     } catch (err) {
       toast({ title: 'Não consegui entrar no grupo', description: (err as Error).message, variant: 'destructive' });
       setBusy(false);
@@ -64,6 +75,31 @@ export default function SplitInvite({ session }: { session: Session | null }) {
       <SplitShell isGuest>
         <div className="mx-auto max-w-sm rounded-[16px] border border-dashed p-8 text-center text-sm text-muted-foreground">
           Esse link de convite não é válido ou foi desativado.
+        </div>
+      </SplitShell>
+    );
+  }
+
+  // Acabou de entrar pelo site e o grupo também conversa por um grupo do
+  // Telegram — pergunta antes de sair do app, não redireciona sem avisar.
+  if (joinedGroupId && telegramInvite) {
+    return (
+      <SplitShell isGuest={!isRealUser}>
+        <div className="mx-auto max-w-sm rounded-[18px] border border-border bg-card p-6 text-center">
+          <p className="text-[13px] font-semibold text-emerald-600">Você entrou no grupo ✓</p>
+          <h1 className="mt-1 font-display text-[22px] font-bold text-balance">{preview.groupName}</h1>
+          <p className="mt-4 text-sm text-muted-foreground">
+            Esse grupo também tem uma conversa no Telegram — entrando lá, dá pra lançar despesa e ver o saldo
+            só de mensagem, sem abrir o app.
+          </p>
+          <div className="mt-5 flex flex-col gap-2">
+            <Button size="lg" className="h-12 w-full text-[15px]" onClick={() => { window.location.href = telegramInvite; }}>
+              <Send className="mr-2 h-4 w-4" /> Entrar no grupo do Telegram
+            </Button>
+            <Button variant="outline" size="lg" className="h-11 w-full text-[14.5px]" onClick={() => { window.location.href = `/dividir/${joinedGroupId}`; }}>
+              Agora não, ver o grupo
+            </Button>
+          </div>
         </div>
       </SplitShell>
     );

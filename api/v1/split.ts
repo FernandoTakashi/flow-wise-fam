@@ -13,8 +13,10 @@ import {
   createSplitExpense, updateSplitExpense, deleteSplitExpense,
   createSplitPayment, deleteSplitPayment,
   createSplitInvite, getSplitInvitePreview, redeemSplitInviteAsUser,
+  findTelegramChatIdForGroup, saveSplitTelegramInvite,
   type SplitGroupBundle,
 } from '../_lib/splitFinance.js';
+import { createChatInviteLink } from '../_lib/telegram.js';
 import { admin } from '../_lib/supabaseAdmin.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,6 +92,7 @@ async function handleWrite(req: VercelRequest, res: VercelResponse) {
       case 'expense': await handleExpense(req, res, user.id, body); return;
       case 'payment': await handlePayment(req, res, user.id, body); return;
       case 'invite': await handleInvite(req, res, user.id, body); return;
+      case 'telegramInvite': await handleTelegramInvite(req, res, user.id, body); return;
       default: res.status(400).json({ error: 'invalid_resource' });
     }
   } catch (e) {
@@ -265,4 +268,30 @@ async function handleInvite(req: VercelRequest, res: VercelResponse, userId: str
   }
 
   res.status(400).json({ error: 'invalid_action' });
+}
+
+// --- telegramInvite --------------------------------------------------
+// Convite individual do Telegram pra quem já é membro do grupo pelo site —
+// null quando o grupo não tem chat do Telegram conectado (frontend só
+// esconde o botão nesse caso).
+async function handleTelegramInvite(req: VercelRequest, res: VercelResponse, userId: string, body: Body) {
+  if (req.method !== 'POST') { res.status(405).json({ error: 'method_not_allowed' }); return; }
+  const groupId: string | undefined = body.groupId;
+  if (!groupId) { res.status(400).json({ error: 'missing_group' }); return; }
+  const bundle = await loadAndAuthorize(res, groupId, userId);
+  if (!bundle) return;
+
+  const member = bundle.members.find((m) => m.user_id === userId);
+  if (!member) { res.status(403).json({ error: 'not_a_member' }); return; }
+
+  const chatId = await findTelegramChatIdForGroup(groupId);
+  if (!chatId) { res.status(200).json({ inviteLink: null }); return; }
+
+  try {
+    const { invite_link: inviteLink } = await createChatInviteLink(chatId, member.display_name);
+    await saveSplitTelegramInvite(groupId, member.id, userId, inviteLink);
+    res.status(200).json({ inviteLink });
+  } catch (e) {
+    res.status(500).json({ error: 'telegram_error', detail: (e as Error).message });
+  }
 }

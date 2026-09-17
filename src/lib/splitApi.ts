@@ -114,3 +114,11 @@ export async function redeemSplitInvite(inviteId: string, displayName?: string):
   });
   return r.groupId;
 }
+
+/** null quando o grupo não tem chat do Telegram conectado. */
+export async function fetchTelegramInvite(groupId: string): Promise<string | null> {
+  const r = await apiFetch<{ inviteLink: string | null }>('/split', {
+    method: 'POST', body: JSON.stringify({ resource: 'telegramInvite', groupId }),
+  });
+  return r.inviteLink;
+}

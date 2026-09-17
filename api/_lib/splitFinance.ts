@@ -270,7 +270,7 @@ export async function getSplitInvitePreview(inviteId: string): Promise<{ groupId
   return { groupId: invite.group_id as string, groupName: group.name as string };
 }
 
-/** Alguém (conta de verdade ou visitante anônimo) entra no grupo pelo link. Idempotente. */
+/** Alguém com conta entra no grupo pelo link. Idempotente. */
 export async function redeemSplitInviteAsUser(inviteId: string, userId: string, displayName: string): Promise<string> {
   const preview = await getSplitInvitePreview(inviteId);
   if (!preview) throw new Error('Convite inválido ou revogado.');
@@ -300,6 +300,66 @@ export async function findSplitGroupIdByTelegramChat(chatExternalId: string): Pr
   const { data } = await db.from('split_chat_links').select('group_id')
     .eq('provider', 'telegram').eq('external_id', chatExternalId).maybeSingle();
   return (data?.group_id as string) ?? null;
+}
+
+/** id do chat do Telegram conectado a este grupo (se algum), pra gerar convite individual. */
+export async function findTelegramChatIdForGroup(groupId: string): Promise<string | null> {
+  const db = admin();
+  const { data } = await db.from('split_chat_links').select('external_id')
+    .eq('group_id', groupId).eq('provider', 'telegram').maybeSingle();
+  return (data?.external_id as string) ?? null;
+}
+
+/** Guarda "esse link individual do Telegram é dessa pessoa", gerado depois que ela já entrou pelo site. */
+export async function saveSplitTelegramInvite(
+  groupId: string, memberId: string, userId: string, inviteLink: string,
+): Promise<void> {
+  const db = admin();
+  const { error } = await db.from('split_telegram_invites')
+    .insert({ group_id: groupId, member_id: memberId, user_id: userId, invite_link: inviteLink });
+  if (error) throw error;
+}
+
+/**
+ * Quando alguém entra no grupo do Telegram usando um desses links individuais,
+ * o webhook usa isso pra saber de quem é sem perguntar nada — e liga o
+ * Telegram dela na conta (chat_links), a mesma tabela do "conectar telegram
+ * pessoal". Não mexe em split_members: esse membro já existe desde o join
+ * pelo site.
+ */
+export async function resolveSplitTelegramInvite(
+  inviteLink: string,
+): Promise<{ groupId: string; memberId: string; userId: string } | null> {
+  const db = admin();
+  const { data } = await db.from('split_telegram_invites')
+    .select('group_id, member_id, user_id, used_at').eq('invite_link', inviteLink).maybeSingle();
+  if (!data) return null;
+  if (!data.used_at) {
+    await db.from('split_telegram_invites').update({ used_at: new Date().toISOString() }).eq('invite_link', inviteLink);
+  }
+  return { groupId: data.group_id as string, memberId: data.member_id as string, userId: data.user_id as string };
+}
+
+/**
+ * Liga um Telegram pessoal a uma conta — idempotente, mesma tabela do
+ * "conectar telegram" da carteira (chat_links.wallet_id é obrigatório por
+ * causa daquele uso original; aqui só usamos pra achar quem é no Dividir,
+ * mas a coluna ainda pede um valor). Sem carteira pra achar (não deveria
+ * acontecer com conta de verdade), não quebra — só não liga.
+ */
+export async function linkTelegramToUser(telegramUserId: number, userId: string): Promise<void> {
+  const db = admin();
+  const { data: existing } = await db.from('chat_links').select('id')
+    .eq('provider', 'telegram').eq('external_id', String(telegramUserId)).maybeSingle();
+  if (existing) return;
+  const { data: membership } = await db.from('wallet_members').select('wallet_id').eq('user_id', userId).limit(1).maybeSingle();
+  if (!membership) return;
+  const { error } = await db.from('chat_links')
+    .upsert(
+      { provider: 'telegram', external_id: String(telegramUserId), user_id: userId, wallet_id: membership.wallet_id },
+      { onConflict: 'provider,external_id' },
+    );
+  if (error) throw error;
 }
 
 /** Se essa pessoa já conectou o Telegram pessoal dela na carteira, acha o user_id dela. */

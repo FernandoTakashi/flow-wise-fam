@@ -515,4 +515,19 @@ where sm.user_id = p.id
   and sm.display_name = 'Você'
   and coalesce(p.name, '') <> '';
 
+-- 20260917000004 — convite individual do Telegram gerado a partir do app:
+-- guarda "esse link do Telegram é dessa pessoa" pra ligar a conta sem
+-- criar um split_members duplicado quando ela entra no grupo do Telegram.
+create table public.split_telegram_invites (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references public.split_groups(id) on delete cascade,
+  member_id uuid not null references public.split_members(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  invite_link text not null unique,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index split_telegram_invites_link_idx on public.split_telegram_invites (invite_link);
+alter table public.split_telegram_invites enable row level security;
+
 commit;

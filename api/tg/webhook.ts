@@ -4,7 +4,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { env } from '../_lib/env.js';
 import {
   sendMessage, answerCallback, clearButtons, downloadPhoto,
-  type TgUpdate, type TgMessage, type TgCallbackQuery, type InlineButton,
+  type TgUpdate, type TgMessage, type TgCallbackQuery, type TgChatMemberUpdate, type InlineButton,
 } from '../_lib/telegram.js';
 import { findLink, redeemToken, setPending, takePending, type ChatLink } from '../_lib/chat.js';
 import {
@@ -18,7 +18,7 @@ import { buildSplitGroupContext } from '../_lib/splitContext.js';
 import {
   findSplitGroupIdByTelegramChat, createSplitGroupFromTelegram, connectTelegramChat,
   findOrCreateTelegramMember, createSplitExpense, createSplitPayment, getSplitInvitePreview,
-  resolveUserIdForTelegram,
+  resolveUserIdForTelegram, resolveSplitTelegramInvite, linkTelegramToUser,
 } from '../_lib/splitFinance.js';
 import { setSplitPending, takeSplitPending } from '../_lib/splitChat.js';
 
@@ -58,6 +58,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const chatType = update.callback_query.message?.chat.type;
       if (!chatType || chatType === 'private') await onCallback(update.callback_query);
       else await onGroupCallback(update.callback_query);
+    } else if (update?.chat_member) {
+      await onChatMember(update.chat_member);
     }
   } catch (e) {
     console.error('[tg webhook]', e);
@@ -311,6 +313,28 @@ async function handleConectar(msg: TgMessage): Promise<void> {
       'É só mandar o que cada um gastou que eu divido igual entre quem aparecer aqui.');
   } catch (e) {
     await sendMessage(chatId, `❌ ${escapeHtml((e as Error).message)}`);
+  }
+}
+
+/**
+ * Alguém entrou (ou saiu/mudou de status) num chat onde a Carolina está.
+ * Só nos importa quando é uma entrada via link individual gerado pelo app
+ * (ver POST /v1/split resource=telegramInvite) — aí já sabemos quem é sem
+ * perguntar nada, e só ligamos o Telegram da pessoa na conta dela
+ * (chat_links). Não mexe em split_members: esse membro já existe desde que
+ * ela entrou no grupo pelo site.
+ */
+async function onChatMember(update: TgChatMemberUpdate): Promise<void> {
+  if (update.chat.type === 'private') return; // convite individual é sempre pra um grupo
+  if (update.new_chat_member.status !== 'member') return;
+  const inviteLink = update.invite_link?.invite_link;
+  if (!inviteLink) return;
+  try {
+    const resolved = await resolveSplitTelegramInvite(inviteLink);
+    if (!resolved) return; // link do Telegram que não veio da gente (convite normal do grupo etc.)
+    await linkTelegramToUser(update.new_chat_member.user.id, resolved.userId);
+  } catch (e) {
+    console.error('[tg webhook] onChatMember', e);
   }
 }
 

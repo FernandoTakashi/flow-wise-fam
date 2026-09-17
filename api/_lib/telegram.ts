@@ -13,6 +13,12 @@ export interface TgUpdate {
   update_id: number;
   message?: TgMessage;
   callback_query?: TgCallbackQuery;
+  chat_member?: TgChatMemberUpdate;
+}
+export interface TgChatMemberUpdate {
+  chat: { id: number; type: string; title?: string };
+  new_chat_member: { status: string; user: { id: number; first_name?: string; username?: string } };
+  invite_link?: { invite_link: string };
 }
 export interface TgPhotoSize {
   file_id: string;
@@ -77,7 +83,21 @@ export function setWebhook(url: string, secret?: string): Promise<unknown> {
   return call('setWebhook', {
     url,
     ...(secret ? { secret_token: secret } : {}),
-    allowed_updates: ['message', 'callback_query'],
+    allowed_updates: ['message', 'callback_query', 'chat_member'],
+  });
+}
+
+/**
+ * Convite individual (uma pessoa só) pro grupo do Telegram — a Carolina
+ * precisa ser admin do grupo com permissão de convidar. Quando alguém entra
+ * usando esse link, o Telegram avisa no update `chat_member` qual link foi
+ * usado, e isso é o que deixa a gente saber quem é sem precisar perguntar.
+ */
+export function createChatInviteLink(chatId: number | string, name?: string): Promise<{ invite_link: string }> {
+  return call<{ invite_link: string }>('createChatInviteLink', {
+    chat_id: chatId,
+    member_limit: 1,
+    ...(name ? { name: name.slice(0, 32) } : {}),
   });
 }
 
