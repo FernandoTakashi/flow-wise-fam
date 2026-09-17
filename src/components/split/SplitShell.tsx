@@ -10,7 +10,7 @@ import { LogOut } from 'lucide-react';
 export function SplitShell({ children, isGuest }: { children: ReactNode; isGuest?: boolean }) {
   return (
     <div className="min-h-screen bg-background">
-      <header className="flex items-center justify-between border-b border-border px-4 py-3 sm:px-6">
+      <header className="flex items-center justify-between border-b border-border px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6">
         <Link to="/dividir" className="flex items-center gap-2 font-display text-[17px] font-bold text-foreground">
           <span aria-hidden>🤝</span> Dividir
         </Link>
@@ -27,7 +27,7 @@ export function SplitShell({ children, isGuest }: { children: ReactNode; isGuest
           )}
         </div>
       </header>
-      <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">{children}</main>
+      <main className="mx-auto w-full max-w-3xl px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-6 sm:px-6">{children}</main>
     </div>
   );
 }

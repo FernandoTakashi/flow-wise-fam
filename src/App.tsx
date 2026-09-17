@@ -11,6 +11,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Layout } from '@/components/Layout';
 import AuthPage from '@/pages/Auth';
 import ResetPassword from '@/pages/ResetPassword';
+import { takePendingInvite } from '@/lib/pendingInvite';
 
 const SplitApp = lazy(() => import('@/pages/split/SplitApp'));
 const Dashboard = lazy(() => import('@/pages/Dashboard'));
@@ -57,6 +58,16 @@ const App = () => {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Voltou de "Criar conta"/"Entrar" que abriu a partir de um convite do
+  // Dividir (via ?mode=register, ver Auth.tsx) — assim que a sessão de
+  // verdade aparece (login direto, ou depois de confirmar e-mail), volta
+  // pro convite que a pessoa queria abrir, em vez de cair no Dashboard.
+  useEffect(() => {
+    if (!session || session.user.is_anonymous) return;
+    const inviteId = takePendingInvite();
+    if (inviteId) window.location.href = `/dividir/convite/${inviteId}`;
+  }, [session]);
 
   if (checking) return <FullScreenLoader label="Carregando…" />;
 

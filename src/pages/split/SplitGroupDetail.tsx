@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useToast } from '@/hooks/use-toast';
 import { formatBRL } from '@/lib/money';
 import { todayISO, formatDayMonth } from '@/lib/dates';
+import { cn, SHEET_DIALOG_CLASS } from '@/lib/utils';
 import { computeSplitBalances, simplifySplitDebts, equalSplitShares, exactSharesMatchTotal } from '@/core/split';
 import {
   fetchSplitGroup, createSplitInvite, addSplitMember, removeSplitMember,
@@ -128,33 +129,35 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
               <Badge key={m.id} variant="secondary" className="font-normal">
                 {m.displayName}
                 {isOwner && m.userId !== session.user.id && (
-                  <button type="button" className="ml-1.5 text-muted-foreground hover:text-destructive"
+                  <button type="button" className="-mr-1 ml-1 inline-flex h-5 w-5 items-center justify-center text-muted-foreground hover:text-destructive"
                     onClick={() => void kickMember(m.id)} aria-label={`Remover ${m.displayName}`}>×</button>
                 )}
               </Badge>
             ))}
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={openInvite}><Link2 className="mr-1.5 h-3.5 w-3.5" /> Convidar</Button>
+        <Button variant="outline" size="sm" className="h-9 shrink-0" onClick={openInvite}><Link2 className="mr-1.5 h-3.5 w-3.5" /> Convidar</Button>
       </div>
 
       <div className="mb-4 flex items-center gap-2 rounded-[12px] border border-border bg-card p-2">
         <Input value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)}
-          placeholder="Adicionar alguém pelo nome (sem precisar de conta)" className="h-9 border-0 shadow-none focus-visible:ring-0"
+          placeholder="Adicionar alguém pelo nome" className="h-10 border-0 text-[16px] shadow-none focus-visible:ring-0 sm:h-9 sm:text-sm"
           onKeyDown={(e) => e.key === 'Enter' && void addMember()} />
-        <Button size="sm" variant="ghost" disabled={addingMember || !newMemberName.trim()} onClick={() => void addMember()}>
+        <Button size="sm" variant="ghost" className="h-10 w-10 shrink-0 p-0 sm:h-9 sm:w-9" disabled={addingMember || !newMemberName.trim()} onClick={() => void addMember()}>
           <UserPlus className="h-4 w-4" />
         </Button>
       </div>
 
-      <div className="mb-4 flex gap-2">
-        <Button variant={tab === 'despesas' ? 'default' : 'outline'} size="sm" onClick={() => setTab('despesas')}>Despesas</Button>
-        <Button variant={tab === 'saldo' ? 'default' : 'outline'} size="sm" onClick={() => setTab('saldo')}>Saldo</Button>
-        <div className="ml-auto flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => setShowPayment(true)}>
-            <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" /> Registrar acerto
+      <div className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-2">
+          <Button variant={tab === 'despesas' ? 'default' : 'outline'} size="sm" className="flex-1 sm:flex-none" onClick={() => setTab('despesas')}>Despesas</Button>
+          <Button variant={tab === 'saldo' ? 'default' : 'outline'} size="sm" className="flex-1 sm:flex-none" onClick={() => setTab('saldo')}>Saldo</Button>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" className="flex-1 sm:flex-none" onClick={() => setShowPayment(true)}>
+            <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" /> Acerto
           </Button>
-          <Button size="sm" onClick={() => { setEditingExpense(null); setShowExpense(true); }}>
+          <Button size="sm" className="flex-1 sm:flex-none" onClick={() => { setEditingExpense(null); setShowExpense(true); }}>
             <Plus className="mr-1.5 h-3.5 w-3.5" /> Nova despesa
           </Button>
         </div>
@@ -181,12 +184,12 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
                     <span className="font-bold tabular-nums">{formatBRL(e.amountCents)}</span>
                     {canEdit && (
                       <>
-                        <button type="button" className="rounded p-1 text-muted-foreground hover:text-foreground"
-                          onClick={() => { setEditingExpense(e); setShowExpense(true); }}>
+                        <button type="button" className="-m-1.5 rounded p-2.5 text-muted-foreground hover:text-foreground"
+                          onClick={() => { setEditingExpense(e); setShowExpense(true); }} aria-label="Editar despesa">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <ConfirmDialog title="Excluir despesa?" confirmLabel="Excluir" onConfirm={() => removeExpense(e.id)}
-                          trigger={<button type="button" className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>} />
+                          trigger={<button type="button" className="-m-1.5 rounded p-2.5 text-muted-foreground hover:text-destructive" aria-label="Excluir despesa"><Trash2 className="h-3.5 w-3.5" /></button>} />
                       </>
                     )}
                   </div>
@@ -234,16 +237,16 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
       />
 
       <Dialog open={showInvite} onOpenChange={setShowInvite}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className={cn('sm:max-w-md', SHEET_DIALOG_CLASS)}>
           <DialogHeader><DialogTitle>Convidar pro grupo</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">
             Quem abrir esse link entra como visitante (só digita um nome) ou já logado, se tiver conta.
             Cole esse mesmo link/token com <code className="rounded bg-muted px-1 py-0.5 text-[12px]">/conectar</code> num grupo do Telegram pra ligar o grupo lá também.
           </p>
           {inviteLink ? (
-            <div className="flex gap-2">
-              <Input readOnly value={inviteLink} onFocus={(e) => e.currentTarget.select()} className="font-mono text-[12.5px]" />
-              <Button onClick={() => { void navigator.clipboard?.writeText(inviteLink); toast({ title: 'Link copiado' }); }}>Copiar</Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input readOnly value={inviteLink} onFocus={(e) => e.currentTarget.select()} className="h-11 font-mono text-[13px] sm:h-10 sm:text-[12.5px]" />
+              <Button size="lg" className="h-11 sm:h-10" onClick={() => { void navigator.clipboard?.writeText(inviteLink); toast({ title: 'Link copiado' }); }}>Copiar</Button>
             </div>
           ) : (
             <div className="h-10 animate-pulse rounded-md bg-muted" />
@@ -303,12 +306,13 @@ function ExpenseDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className={cn('sm:max-w-lg', SHEET_DIALOG_CLASS)}>
+        <div className="mx-auto mb-1 h-[5px] w-11 shrink-0 rounded-full bg-[#DDD1C9] sm:hidden" />
         <DialogHeader><DialogTitle>{editing ? 'Editar despesa' : 'Nova despesa'}</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>Descrição</Label>
-            <Input autoFocus value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex: Jantar, Uber, Airbnb" />
+            <Input autoFocus value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex: Jantar, Uber, Airbnb" className="h-11 text-[16px] sm:h-10 sm:text-sm" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -317,13 +321,13 @@ function ExpenseDialog({
             </div>
             <div className="space-y-1.5">
               <Label>Data</Label>
-              <Input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} />
+              <Input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} className="h-11 text-[16px] sm:h-10 sm:text-sm" />
             </div>
           </div>
           <div className="space-y-1.5">
             <Label>Quem pagou</Label>
             <Select value={paidBy} onValueChange={setPaidBy}>
-              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectTrigger className="h-11 sm:h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
               <SelectContent>{members.map((m) => <SelectItem key={m.id} value={m.id}>{m.displayName}</SelectItem>)}</SelectContent>
             </Select>
           </div>
@@ -333,7 +337,7 @@ function ExpenseDialog({
             <div className="flex flex-wrap gap-2">
               {members.map((m) => (
                 <label key={m.id}
-                  className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[13px] has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/10">
+                  className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[13px] has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/10">
                   <Checkbox checked={participantIds.includes(m.id)} onCheckedChange={() => toggleParticipant(m.id)} />
                   {m.displayName}
                 </label>
@@ -401,28 +405,29 @@ function PaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className={cn('sm:max-w-sm', SHEET_DIALOG_CLASS)}>
+        <div className="mx-auto mb-1 h-[5px] w-11 shrink-0 rounded-full bg-[#DDD1C9] sm:hidden" />
         <DialogHeader><DialogTitle>Registrar acerto</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Quem pagou</Label>
               <Select value={fromMember} onValueChange={setFromMember}>
-                <SelectTrigger><SelectValue placeholder="De" /></SelectTrigger>
+                <SelectTrigger className="h-11 sm:h-10"><SelectValue placeholder="De" /></SelectTrigger>
                 <SelectContent>{members.map((m) => <SelectItem key={m.id} value={m.id}>{m.displayName}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Pra quem</Label>
               <Select value={toMember} onValueChange={setToMember}>
-                <SelectTrigger><SelectValue placeholder="Pra" /></SelectTrigger>
+                <SelectTrigger className="h-11 sm:h-10"><SelectValue placeholder="Pra" /></SelectTrigger>
                 <SelectContent>{members.map((m) => <SelectItem key={m.id} value={m.id}>{m.displayName}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Valor</Label><MoneyInput valueCents={amountCents} onChangeCents={setAmountCents} /></div>
-            <div className="space-y-1.5"><Label>Data</Label><Input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Data</Label><Input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} className="h-11 text-[16px] sm:h-10 sm:text-sm" /></div>
           </div>
         </div>
         <DialogFooter>

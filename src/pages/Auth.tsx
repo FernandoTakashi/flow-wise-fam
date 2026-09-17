@@ -23,7 +23,13 @@ function GoogleG({ className }: { className?: string }) {
 }
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  // chega em ?mode=register vindo do "Criar conta" da tela de convite do
+  // Dividir — depois do cadastro, DividirRedirect (App.tsx) leva de volta
+  // pro convite que a pessoa estava tentando abrir.
+  const [mode, setMode] = useState<'login' | 'register'>(
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'register'
+      ? 'register' : 'login',
+  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
