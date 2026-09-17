@@ -45,6 +45,20 @@ Depois, versione: `npx supabase migration repair --status applied 20260917000001
    silenciosamente** — a Carolina só fala quando é sobre despesa/acerto/saldo,
    ou se alguém pedir ajuda diretamente.
 
+### Entrando pelo site e indo pro Telegram sem virar dois membros
+
+Quem entra num grupo pelo site, se esse grupo já tem um chat do Telegram
+conectado, recebe a opção de entrar lá também — com um **convite individual**
+(`createChatInviteLink`, `member_limit: 1`), não o link genérico do grupo.
+Quando a pessoa entra usando esse link, o Telegram avisa qual link foi usado
+(update `chat_member`) e a Carolina liga o Telegram dela à conta na hora
+(`chat_links`, a mesma tabela do "conectar Telegram pessoal" em Ajustes) —
+sem criar um `split_members` novo, o que já existe desde o join pelo site.
+
+**Pré-requisito:** a Carolina precisa ser **admin** do grupo do Telegram com
+permissão de convidar/gerenciar links de convite — sem isso `createChatInviteLink`
+falha e a opção de Telegram simplesmente não aparece (não quebra o resto).
+
 ## Isolamento (por que isso é seguro)
 
 - Roteamento por `chat.type` decide TUDO antes de tocar em qualquer tabela —
@@ -66,7 +80,9 @@ Detalhe completo de cada camada: seção 06 do dossiê linkado acima.
   fica sem "dono" pro app (arquivar/renomear pelo app não funciona até
   alguém reivindicar) — dividir despesa e ver saldo funciona normalmente.
 - Sem leitura de foto de comprovante no modo grupo (só no chat privado).
-- Sem casamento automático de identidade entre canais (alguém que participa
-  pelo Telegram *e* pelo app com a mesma pessoa vira dois membros, a menos
-  que já tenha conectado o Telegram pessoal à carteira — juntar os dois
-  manualmente é feature futura).
+- Casamento de identidade entre canais só funciona num sentido: quem entra
+  pelo **site primeiro** e depois vai pro Telegram pelo convite individual
+  (ver acima) não vira membro duplicado. Quem entra pelo **Telegram primeiro**
+  (ex: `/iniciar` ou mandando mensagem direto no grupo) sem nunca ter
+  conectado o Telegram pessoal à carteira ainda vira um membro separado do
+  que ela tem pelo app — juntar os dois manualmente é feature futura.

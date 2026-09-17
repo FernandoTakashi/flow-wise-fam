@@ -106,6 +106,11 @@ não corrige "de passagem" sem anotar o que era.
 - [ ] `/iniciar` num grupo do Telegram novo → cria o grupo, primeiro membro registrado
 - [ ] `/iniciar` de novo no mesmo grupo → avisa que já está conectado, não duplica
 - [ ] `/conectar <token>` liga um grupo do Telegram a um grupo criado pelo app
+- [ ] Entrar num grupo pelo site que TEM Telegram conectado → oferece "entrar no grupo do Telegram" (link individual), com opção de "agora não"
+- [ ] Entrar no Telegram usando esse link individual → Carolina liga o Telegram à conta sozinha (checar em Ajustes › Integrações, ou tentar `/conectar` de novo — já devia aparecer conectado)
+- [ ] Depois disso, mandar mensagem nesse grupo do Telegram → reconhecida como a MESMA pessoa do site, não vira membro duplicado
+- [ ] Entrar num grupo pelo site que NÃO tem Telegram conectado → vai direto pro grupo, sem oferecer nada de Telegram
+- [ ] Carolina sem permissão de admin no grupo do Telegram → botão "entrar no Telegram" não aparece (ou falha sem quebrar o resto do fluxo)
 - [ ] Mandar "paguei o jantar, 180" no grupo → resumo com Confirmar/Cancelar, divide igual entre quem já apareceu
 - [ ] "já paguei a Ana os 40" → vira acerto, não despesa
 - [ ] "como ficou a divisão?" → responde com o saldo certo
