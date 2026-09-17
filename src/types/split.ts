@@ -50,7 +50,7 @@ export interface SplitPayment {
 }
 
 export interface SplitGroupDetail {
-  group: { id: string; name: string; archived: boolean; createdBy: string | null };
+  group: { id: string; name: string; archived: boolean; createdBy: string | null; telegramConnected: boolean };
   members: SplitMember[];
   expenses: SplitExpense[];
   shares: SplitShare[];

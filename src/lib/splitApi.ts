@@ -30,9 +30,13 @@ export async function fetchSplitGroup(id: string): Promise<SplitGroupDetail> {
   const r = await apiFetch<{
     group: { id: string; name: string; archived: boolean; created_by: string | null };
     members: unknown[]; expenses: unknown[]; shares: unknown[]; payments: unknown[];
+    telegramConnected: boolean;
   }>(`/split?scope=group&id=${encodeURIComponent(id)}`);
   return {
-    group: { id: r.group.id, name: r.group.name, archived: r.group.archived, createdBy: r.group.created_by },
+    group: {
+      id: r.group.id, name: r.group.name, archived: r.group.archived, createdBy: r.group.created_by,
+      telegramConnected: r.telegramConnected,
+    },
     members: r.members.map(mapMember),
     expenses: r.expenses.map(mapExpense),
     shares: r.shares.map(mapShare),

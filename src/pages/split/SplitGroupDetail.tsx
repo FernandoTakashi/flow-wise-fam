@@ -22,7 +22,9 @@ import {
   type ExpenseFormInput,
 } from '@/lib/splitApi';
 import type { SplitGroupDetail as SplitGroupDetailType, SplitExpense, SplitPayment, SplitMember } from '@/types/split';
-import { Plus, Link2, Trash2, Pencil, ArrowRightLeft, Receipt } from 'lucide-react';
+import { Plus, Link2, Trash2, Pencil, ArrowRightLeft, Receipt, Send, CheckCircle2 } from 'lucide-react';
+
+const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string | undefined;
 
 type ActivityItem =
   | { kind: 'expense'; date: string; createdAt: string; expense: SplitExpense }
@@ -40,6 +42,8 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
   const [showPayment, setShowPayment] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [showTelegramSetup, setShowTelegramSetup] = useState(false);
+  const [telegramToken, setTelegramToken] = useState<string | null>(null);
 
   const load = async () => {
     if (!groupId) return;
@@ -120,6 +124,17 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
     }
   };
 
+  const openTelegramSetup = async () => {
+    setShowTelegramSetup(true);
+    if (telegramToken) return;
+    try {
+      const id = await createSplitInvite(data.group.id);
+      setTelegramToken(id);
+    } catch (err) {
+      toast({ title: 'Erro ao gerar o token', description: (err as Error).message, variant: 'destructive' });
+    }
+  };
+
   const kickMember = async (memberId: string) => {
     try { await removeSplitMember(data.group.id, memberId); await load(); }
     catch (err) { toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' }); }
@@ -147,7 +162,20 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
             ))}
           </div>
         </div>
-        <Button variant="outline" size="sm" className="h-9 shrink-0" onClick={openInvite}><Link2 className="mr-1.5 h-3.5 w-3.5" /> Convidar</Button>
+        <div className="flex shrink-0 gap-2">
+          {isOwner && (
+            data.group.telegramConnected ? (
+              <span className="flex h-9 items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 text-[12.5px] font-semibold text-emerald-600">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Telegram conectado
+              </span>
+            ) : (
+              <Button variant="outline" size="sm" className="h-9" onClick={() => void openTelegramSetup()}>
+                <Send className="mr-1.5 h-3.5 w-3.5" /> Conectar Telegram
+              </Button>
+            )
+          )}
+          <Button variant="outline" size="sm" className="h-9" onClick={openInvite}><Link2 className="mr-1.5 h-3.5 w-3.5" /> Convidar</Button>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
@@ -307,6 +335,46 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
           ) : (
             <div className="h-10 animate-pulse rounded-md bg-muted" />
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showTelegramSetup} onOpenChange={setShowTelegramSetup}>
+        <DialogContent className={cn('sm:max-w-md', SHEET_DIALOG_CLASS)}>
+          <DialogHeader><DialogTitle>Conectar ao Telegram</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Assim, quem entrar nesse grupo pelo site também pode ser levado direto pro grupo do Telegram,
+            já reconhecido — sem precisar digitar nada lá.
+          </p>
+          <ol className="space-y-3.5">
+            {[
+              'Abra o Telegram e crie um grupo novo (ícone de lápis ou "+" → "Novo grupo").',
+              <>Adicione {TELEGRAM_BOT_USERNAME ? <strong>@{TELEGRAM_BOT_USERNAME}</strong> : 'a Carolina'} como membro desse grupo.</>,
+              <>Torne a Carolina <strong>administradora</strong> do grupo, com a permissão de <strong>"Convidar usuários via link"</strong> ativada — sem isso, o passo de conectar automaticamente com o Telegram não funciona.</>,
+              <>Dentro do grupo, mande esta mensagem (copie o token abaixo):</>,
+            ].map((text, i) => (
+              <li key={i} className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[12px] font-bold text-primary">{i + 1}</span>
+                <span className="pt-0.5 text-[13.5px] leading-snug">{text}</span>
+              </li>
+            ))}
+          </ol>
+
+          {telegramToken ? (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input readOnly value={`/conectar ${telegramToken}`} onFocus={(e) => e.currentTarget.select()}
+                className="h-11 font-mono text-[13px] sm:h-10 sm:text-[12.5px]" />
+              <Button size="lg" className="h-11 sm:h-10"
+                onClick={() => { void navigator.clipboard?.writeText(`/conectar ${telegramToken}`); toast({ title: 'Comando copiado' }); }}>
+                Copiar
+              </Button>
+            </div>
+          ) : (
+            <div className="h-10 animate-pulse rounded-md bg-muted" />
+          )}
+
+          <p className="text-[12.5px] text-muted-foreground">
+            Depois de mandar o comando, a Carolina confirma no próprio grupo que ficou conectado.
+          </p>
         </DialogContent>
       </Dialog>
     </SplitShell>

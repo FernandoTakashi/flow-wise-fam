@@ -25,6 +25,7 @@ export interface SplitGroupBundle {
   expenses: SplitExpenseRow[];
   shares: SplitShareRow[];
   payments: SplitPaymentRow[];
+  telegramConnected: boolean;
 }
 
 export async function loadSplitGroup(groupId: string): Promise<SplitGroupBundle | null> {
@@ -33,10 +34,11 @@ export async function loadSplitGroup(groupId: string): Promise<SplitGroupBundle 
   if (gErr) throw gErr;
   if (!group) return null;
 
-  const [mems, exps, pays] = await Promise.all([
+  const [mems, exps, pays, chat] = await Promise.all([
     db.from('split_members').select('*').eq('group_id', groupId),
     db.from('split_expenses').select('*').eq('group_id', groupId).order('date', { ascending: false }),
     db.from('split_payments').select('*').eq('group_id', groupId).order('date', { ascending: false }),
+    db.from('split_chat_links').select('id').eq('group_id', groupId).eq('provider', 'telegram').maybeSingle(),
   ]);
   if (mems.error) throw mems.error;
   if (exps.error) throw exps.error;
@@ -56,6 +58,7 @@ export async function loadSplitGroup(groupId: string): Promise<SplitGroupBundle 
     expenses: (exps.data ?? []) as SplitExpenseRow[],
     shares,
     payments: (pays.data ?? []) as SplitPaymentRow[],
+    telegramConnected: !!chat.data,
   };
 }
 
