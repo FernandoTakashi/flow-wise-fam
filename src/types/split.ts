@@ -27,6 +27,7 @@ export interface SplitExpense {
   paidBy: string;
   date: string;
   createdBy: string | null;
+  createdAt: string;
 }
 
 export interface SplitShare {
@@ -45,6 +46,7 @@ export interface SplitPayment {
   date: string;
   note: string | null;
   createdBy: string | null;
+  createdAt: string;
 }
 
 export interface SplitGroupDetail {

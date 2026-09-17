@@ -13,22 +13,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { formatBRL } from '@/lib/money';
-import { todayISO, formatDayMonth } from '@/lib/dates';
+import { todayISO, formatDayMonth, isoParts, MONTHS_PT } from '@/lib/dates';
 import { cn, SHEET_DIALOG_CLASS } from '@/lib/utils';
 import { computeSplitBalances, simplifySplitDebts, equalSplitShares, exactSharesMatchTotal } from '@/core/split';
 import {
   fetchSplitGroup, createSplitInvite, addSplitMember, removeSplitMember,
-  createSplitExpense, updateSplitExpense, deleteSplitExpense, createSplitPayment,
+  createSplitExpense, updateSplitExpense, deleteSplitExpense, createSplitPayment, deleteSplitPayment,
   type ExpenseFormInput,
 } from '@/lib/splitApi';
-import type { SplitGroupDetail as SplitGroupDetailType, SplitExpense, SplitMember } from '@/types/split';
-import { Plus, UserPlus, Link2, Trash2, Pencil, ArrowRightLeft, Users } from 'lucide-react';
+import type { SplitGroupDetail as SplitGroupDetailType, SplitExpense, SplitPayment, SplitMember } from '@/types/split';
+import { Plus, UserPlus, Link2, Trash2, Pencil, ArrowRightLeft, Receipt } from 'lucide-react';
+
+type ActivityItem =
+  | { kind: 'expense'; date: string; createdAt: string; expense: SplitExpense }
+  | { kind: 'payment'; date: string; createdAt: string; payment: SplitPayment };
 
 export default function SplitGroupDetail({ session }: { session: Session | null }) {
   const { groupId } = useParams();
   const { toast } = useToast();
   const [data, setData] = useState<SplitGroupDetailType | null>(null);
-  const [tab, setTab] = useState<'despesas' | 'saldo'>('despesas');
+  const [tab, setTab] = useState<'atividade' | 'saldo'>('atividade');
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [showExpense, setShowExpense] = useState(false);
@@ -49,6 +53,27 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
 
   const activeMembers = useMemo(() => (data ? data.members.filter((m) => !m.leftAt) : []), [data]);
   const memberName = (id: string) => data?.members.find((m) => m.id === id)?.displayName ?? '—';
+  const myMemberId = useMemo(
+    () => (data && session ? data.members.find((m) => m.userId === session.user.id)?.id ?? null : null),
+    [data, session],
+  );
+
+  // feed único (despesas + acertos), mais recente primeiro, agrupado por mês
+  const activity = useMemo<ActivityItem[]>(() => {
+    if (!data) return [];
+    const items: ActivityItem[] = [
+      ...data.expenses.map((expense) => ({ kind: 'expense' as const, date: expense.date, createdAt: expense.createdAt, expense })),
+      ...data.payments.map((payment) => ({ kind: 'payment' as const, date: payment.date, createdAt: payment.createdAt, payment })),
+    ];
+    items.sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+    return items;
+  }, [data]);
+
+  const removePayment = async (id: string) => {
+    if (!data) return;
+    try { await deleteSplitPayment(data.group.id, id); await load(); }
+    catch (err) { toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' }); }
+  };
 
   const balances = useMemo(() => {
     if (!data) return [];
@@ -150,7 +175,7 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
 
       <div className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex gap-2">
-          <Button variant={tab === 'despesas' ? 'default' : 'outline'} size="sm" className="flex-1 sm:flex-none" onClick={() => setTab('despesas')}>Despesas</Button>
+          <Button variant={tab === 'atividade' ? 'default' : 'outline'} size="sm" className="flex-1 sm:flex-none" onClick={() => setTab('atividade')}>Atividade</Button>
           <Button variant={tab === 'saldo' ? 'default' : 'outline'} size="sm" className="flex-1 sm:flex-none" onClick={() => setTab('saldo')}>Saldo</Button>
         </div>
         <div className="flex gap-2">
@@ -163,39 +188,91 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
         </div>
       </div>
 
-      {tab === 'despesas' ? (
-        data.expenses.length === 0 ? (
+      {tab === 'atividade' ? (
+        activity.length === 0 ? (
           <div className="rounded-[16px] border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Nenhuma despesa lançada ainda.
+            Nenhuma despesa ou acerto lançado ainda.
           </div>
         ) : (
-          <div className="space-y-2">
-            {data.expenses.map((e) => {
-              const canEdit = e.createdBy === session.user.id || isOwner;
-              return (
-                <div key={e.id} className="flex items-center justify-between gap-3 rounded-[14px] border border-border bg-card p-3.5">
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold">{e.description}</div>
-                    <div className="text-[12.5px] text-muted-foreground">
-                      {formatDayMonth(e.date)} · pago por {memberName(e.paidBy)}
+          <div className="space-y-5">
+            {activity.reduce<{ monthKey: string; label: string; rows: JSX.Element[] }[]>((sections, item) => {
+              const { y, m } = isoParts(item.date);
+              const monthKey = `${y}-${m}`;
+              let section = sections[sections.length - 1];
+              if (!section || section.monthKey !== monthKey) {
+                section = { monthKey, label: `${MONTHS_PT[m]} de ${y}`, rows: [] };
+                sections.push(section);
+              }
+
+              if (item.kind === 'expense') {
+                const e = item.expense;
+                const canEdit = e.createdBy === session.user.id || isOwner;
+                const myShare = myMemberId ? data.shares.find((s) => s.expenseId === e.id && s.memberId === myMemberId)?.shareCents ?? 0 : 0;
+                const iPaid = myMemberId && e.paidBy === myMemberId ? e.amountCents : 0;
+                const net = iPaid - myShare;
+                section.rows.push(
+                  <div key={e.id} className="flex items-center gap-3 border-b border-[#F4EDE7] px-1 py-3 last:border-0">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Receipt className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold">{e.description}</div>
+                      <div className="text-[12.5px] text-muted-foreground">
+                        {formatDayMonth(e.date)} · {e.paidBy === myMemberId ? 'você pagou' : `${memberName(e.paidBy)} pagou`} {formatBRL(e.amountCents)}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="font-bold tabular-nums">{formatBRL(e.amountCents)}</span>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {net !== 0 && (
+                        <div className="text-right text-[12px] leading-tight">
+                          <div className={net > 0 ? 'text-emerald-600' : 'text-red-600'}>{net > 0 ? 'você recebe' : 'você deve'}</div>
+                          <div className={cn('font-bold tabular-nums', net > 0 ? 'text-emerald-600' : 'text-red-600')}>{formatBRL(Math.abs(net))}</div>
+                        </div>
+                      )}
+                      {canEdit && (
+                        <>
+                          <button type="button" className="-m-1.5 rounded p-2.5 text-muted-foreground hover:text-foreground"
+                            onClick={() => { setEditingExpense(e); setShowExpense(true); }} aria-label="Editar despesa">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <ConfirmDialog title="Excluir despesa?" confirmLabel="Excluir" onConfirm={() => removeExpense(e.id)}
+                            trigger={<button type="button" className="-m-1.5 rounded p-2.5 text-muted-foreground hover:text-destructive" aria-label="Excluir despesa"><Trash2 className="h-3.5 w-3.5" /></button>} />
+                        </>
+                      )}
+                    </div>
+                  </div>,
+                );
+              } else {
+                const p = item.payment;
+                const canEdit = p.createdBy === session.user.id || isOwner;
+                const fromLabel = p.fromMember === myMemberId ? 'Você' : memberName(p.fromMember);
+                const toLabel = p.toMember === myMemberId ? 'você' : memberName(p.toMember);
+                section.rows.push(
+                  <div key={p.id} className="flex items-center gap-3 border-b border-[#F4EDE7] px-1 py-3 last:border-0">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+                      <ArrowRightLeft className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13.5px]">
+                        <strong>{fromLabel}</strong> pagou <strong>{toLabel}</strong> {formatBRL(p.amountCents)}.
+                      </div>
+                      <div className="text-[12.5px] text-muted-foreground">{formatDayMonth(p.date)}</div>
+                    </div>
                     {canEdit && (
-                      <>
-                        <button type="button" className="-m-1.5 rounded p-2.5 text-muted-foreground hover:text-foreground"
-                          onClick={() => { setEditingExpense(e); setShowExpense(true); }} aria-label="Editar despesa">
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <ConfirmDialog title="Excluir despesa?" confirmLabel="Excluir" onConfirm={() => removeExpense(e.id)}
-                          trigger={<button type="button" className="-m-1.5 rounded p-2.5 text-muted-foreground hover:text-destructive" aria-label="Excluir despesa"><Trash2 className="h-3.5 w-3.5" /></button>} />
-                      </>
+                      <ConfirmDialog title="Excluir acerto?" confirmLabel="Excluir" onConfirm={() => removePayment(p.id)}
+                        trigger={<button type="button" className="-m-1.5 shrink-0 rounded p-2.5 text-muted-foreground hover:text-destructive" aria-label="Excluir acerto"><Trash2 className="h-3.5 w-3.5" /></button>} />
                     )}
-                  </div>
+                  </div>,
+                );
+              }
+              return sections;
+            }, []).map((section) => (
+              <div key={section.monthKey}>
+                <div className="mb-1.5 px-1 text-[12.5px] font-bold uppercase tracking-wide text-muted-foreground">
+                  {section.label}
                 </div>
-              );
-            })}
+                <div className="rounded-[14px] border border-border bg-card px-2.5">{section.rows}</div>
+              </div>
+            ))}
           </div>
         )
       ) : (

@@ -10,14 +10,14 @@ const mapMember = (r: any) => ({
 });
 const mapExpense = (r: any) => ({
   id: r.id, groupId: r.group_id, description: r.description, amountCents: Number(r.amount_cents),
-  paidBy: r.paid_by, date: r.date, createdBy: r.created_by,
+  paidBy: r.paid_by, date: r.date, createdBy: r.created_by, createdAt: r.created_at,
 });
 const mapShare = (r: any) => ({
   id: r.id, expenseId: r.expense_id, memberId: r.member_id, shareCents: Number(r.share_cents),
 });
 const mapPayment = (r: any) => ({
   id: r.id, groupId: r.group_id, fromMember: r.from_member, toMember: r.to_member,
-  amountCents: Number(r.amount_cents), date: r.date, note: r.note, createdBy: r.created_by,
+  amountCents: Number(r.amount_cents), date: r.date, note: r.note, createdBy: r.created_by, createdAt: r.created_at,
 });
 /* eslint-enable @typescript-eslint/no-explicit-any */
 

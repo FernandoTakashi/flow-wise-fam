@@ -16,7 +16,7 @@ export interface SplitExpenseRow {
 export interface SplitShareRow { id: string; expense_id: string; member_id: string; share_cents: number }
 export interface SplitPaymentRow {
   id: string; group_id: string; from_member: string; to_member: string;
-  amount_cents: number; date: string; note: string | null; created_by: string | null;
+  amount_cents: number; date: string; note: string | null; created_by: string | null; created_at: string;
 }
 
 export interface SplitGroupBundle {
