@@ -12,8 +12,15 @@ import {
   payInvoice, createRecurrence, lastTransaction, deleteEntry,
 } from '../_lib/finance.js';
 import { buildWalletContext } from '../_lib/context.js';
-import { interpret, interpretImage, type BotEntry } from '../_lib/brain.js';
+import { interpret, interpretImage, interpretSplit, type BotEntry } from '../_lib/brain.js';
 import { spDateISO, formatBRL, toCents, isoParts, dayOfMonthISO } from '../_lib/shared.js';
+import { buildSplitGroupContext } from '../_lib/splitContext.js';
+import {
+  findSplitGroupIdByTelegramChat, createSplitGroupFromTelegram, connectTelegramChat,
+  findOrCreateTelegramMember, createSplitExpense, createSplitPayment, getSplitInvitePreview,
+  resolveUserIdForTelegram,
+} from '../_lib/splitFinance.js';
+import { setSplitPending, takeSplitPending } from '../_lib/splitChat.js';
 
 const HELP =
   'Oi, eu sou a <b>Carolina</b> 👋 — a assistente da <b>CaRe Wallet</b>.\n\n' +
@@ -39,9 +46,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const update = req.body as TgUpdate;
-    if (update?.message?.text) await onMessage(update.message);
-    else if (update?.message?.photo?.length) await onPhoto(update.message);
-    else if (update?.callback_query) await onCallback(update.callback_query);
+    // Roteamento por tipo de chat ACONTECE PRIMEIRO, antes de tocar em
+    // qualquer tabela — chat privado nunca entra no caminho de código do
+    // grupo, e vice-versa. Ver docs/QA_CHECKLIST.md e o dossiê do Dividir.
+    if (update?.message?.text) {
+      if (update.message.chat.type === 'private') await onMessage(update.message);
+      else await onGroupMessage(update.message);
+    } else if (update?.message?.photo?.length && update.message.chat.type === 'private') {
+      await onPhoto(update.message);
+    } else if (update?.callback_query) {
+      const chatType = update.callback_query.message?.chat.type;
+      if (!chatType || chatType === 'private') await onCallback(update.callback_query);
+      else await onGroupCallback(update.callback_query);
+    }
   } catch (e) {
     console.error('[tg webhook]', e);
   }
@@ -194,6 +211,168 @@ async function onPhoto(msg: TgMessage) {
   } catch (e) {
     console.error('[tg webhook] onPhoto', e);
     await sendMessage(chatId, '❌ Não consegui processar essa foto. Tenta de novo ou manda o valor em texto.');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// "Dividir" — grupo do Telegram. Isolado de propósito: nunca chama findLink,
+// buildWalletContext, interpret() ou qualquer função de finance.ts. Se o
+// grupo não está conectado a nenhum split_group, a Carolina fica quieta —
+// não fica repetindo "não estou conectado" a cada mensagem de um grupo
+// qualquer em que ela foi adicionada por engano.
+// ---------------------------------------------------------------------------
+async function onGroupMessage(msg: TgMessage): Promise<void> {
+  const chatId = msg.chat.id;
+  const fromId = msg.from?.id;
+  const text = (msg.text ?? '').trim();
+  if (!fromId || !text) return;
+
+  if (text.startsWith('/iniciar')) { await handleIniciar(msg); return; }
+  if (text.startsWith('/conectar')) { await handleConectar(msg); return; }
+  if (text.startsWith('/')) return; // outros comandos não existem no modo grupo — ignora
+
+  const groupId = await findSplitGroupIdByTelegramChat(String(chatId));
+  if (!groupId) return;
+
+  const senderName = msg.from?.first_name?.trim() || msg.from?.username || 'Alguém';
+  const member = await findOrCreateTelegramMember(groupId, fromId, senderName);
+  const { ctx } = await buildSplitGroupContext(groupId);
+  const action = await interpretSplit(text, ctx, member.display_name);
+
+  if (action.intent === 'ignorar') return;
+  if (action.intent === 'reply') { await sendMessage(chatId, escapeHtml(action.text)); return; }
+
+  if (action.intent === 'despesa') {
+    const participantIds = action.participantIds ?? ctx.membros.map((m) => m.id);
+    const pendingId = await setSplitPending(groupId, fromId, 'despesa', {
+      description: action.description, amountCents: action.amountCents, dateISO: action.dateISO,
+      paidBy: member.id, participantIds,
+    });
+    const names = participantIds.map((id) => ctx.membros.find((m) => m.id === id)?.nome).filter(Boolean).join(', ');
+    await sendMessage(chatId,
+      `💸 <b>${escapeHtml(action.description)}</b> — <b>${formatBRL(action.amountCents)}</b>\n` +
+      `Pago por <b>${escapeHtml(member.display_name)}</b>, dividido entre: ${escapeHtml(names)}.`,
+      [[
+        { text: '✅ Confirmar', callback_data: `oksplit:${pendingId}` },
+        { text: '✖️ Cancelar', callback_data: `nosplit:${pendingId}` },
+      ]]);
+    return;
+  }
+
+  if (action.intent === 'acerto') {
+    const toMember = ctx.membros.find((m) => m.id === action.toMemberId);
+    const pendingId = await setSplitPending(groupId, fromId, 'acerto', {
+      fromMember: member.id, toMember: action.toMemberId, amountCents: action.amountCents, dateISO: action.dateISO,
+    });
+    await sendMessage(chatId,
+      `🤝 <b>${escapeHtml(member.display_name)}</b> pagou <b>${formatBRL(action.amountCents)}</b> pra <b>${escapeHtml(toMember?.nome ?? '—')}</b>. Confirma?`,
+      [[
+        { text: '✅ Confirmar', callback_data: `oksplit:${pendingId}` },
+        { text: '✖️ Cancelar', callback_data: `nosplit:${pendingId}` },
+      ]]);
+    return;
+  }
+}
+
+/** /iniciar — cria um split_group novo direto do grupo do Telegram, sem passar pelo app. */
+async function handleIniciar(msg: TgMessage): Promise<void> {
+  const chatId = msg.chat.id;
+  const fromId = msg.from?.id;
+  if (!fromId) return;
+  const already = await findSplitGroupIdByTelegramChat(String(chatId));
+  if (already) { await sendMessage(chatId, 'Esse grupo já está conectado ao Dividir — pode mandar os gastos direto.'); return; }
+
+  try {
+    const senderName = msg.from?.first_name?.trim() || msg.from?.username || 'Alguém';
+    const { member } = await createSplitGroupFromTelegram(
+      String(chatId), msg.chat.title ?? 'Grupo do Telegram', fromId, senderName,
+    );
+    await sendMessage(chatId,
+      `🤝 Grupo <b>${escapeHtml(msg.chat.title ?? 'sem nome')}</b> conectado ao Dividir!\n\n` +
+      `A partir de agora, é só mandar o que cada um gastou — ex.: <i>"paguei o jantar, 180"</i> — que eu divido igual entre quem já apareceu aqui.\n` +
+      `${escapeHtml(member.display_name)} já é o primeiro membro.`);
+  } catch (e) {
+    await sendMessage(chatId, `❌ Não consegui criar o grupo: ${escapeHtml((e as Error).message)}`);
+  }
+}
+
+/** /conectar <token> — liga este grupo do Telegram a um split_group já criado no app. */
+async function handleConectar(msg: TgMessage): Promise<void> {
+  const chatId = msg.chat.id;
+  const token = msg.text?.slice('/conectar'.length).trim();
+  if (!token) { await sendMessage(chatId, 'Usa assim: <code>/conectar &lt;token do convite&gt;</code> (gerado no app, botão Convidar).'); return; }
+
+  try {
+    const preview = await getSplitInvitePreview(token);
+    if (!preview) { await sendMessage(chatId, '❌ Esse convite não é válido ou já foi desativado.'); return; }
+    await connectTelegramChat(token, String(chatId));
+    await sendMessage(chatId,
+      `🤝 Este grupo agora está conectado ao Dividir → <b>${escapeHtml(preview.groupName)}</b>.\n` +
+      'É só mandar o que cada um gastou que eu divido igual entre quem aparecer aqui.');
+  } catch (e) {
+    await sendMessage(chatId, `❌ ${escapeHtml((e as Error).message)}`);
+  }
+}
+
+/**
+ * Botões de confirmação do modo grupo. NUNCA chama findLink/chat_pending —
+ * completamente separado do fluxo de callback da carteira (onCallback).
+ * Só quem gerou a pendência pode confirmar o próprio botão.
+ */
+async function onGroupCallback(cq: TgCallbackQuery): Promise<void> {
+  const chatId = cq.message?.chat.id;
+  const msgId = cq.message?.message_id;
+  const data = cq.data ?? '';
+  if (!chatId) { await answerCallback(cq.id); return; }
+  const [action, pendingId] = data.split(':');
+  if (!pendingId || (action !== 'oksplit' && action !== 'nosplit')) { await answerCallback(cq.id); return; }
+
+  const pending = await takeSplitPending(pendingId);
+  if (!pending) { await answerCallback(cq.id, 'Esse pedido expirou.'); return; }
+  if (pending.telegramUserId !== cq.from.id) {
+    await answerCallback(cq.id, 'Isso não é seu — só quem lançou pode confirmar.');
+    return;
+  }
+
+  if (action === 'nosplit') {
+    if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
+    await answerCallback(cq.id, 'Cancelado');
+    return;
+  }
+
+  try {
+    // "quem criou" pro app é sempre uma conta de verdade (profiles.id), nunca
+    // um split_members.id — resolve pelo Telegram, null se a pessoa nunca
+    // conectou o Telegram pessoal dela a nenhuma carteira.
+    const createdBy = await resolveUserIdForTelegram(cq.from.id);
+
+    if (pending.kind === 'despesa') {
+      const p = pending.payload as {
+        description: string; amountCents: number; dateISO: string; paidBy: string; participantIds: string[];
+      };
+      await createSplitExpense(pending.groupId, {
+        description: p.description, amountCents: p.amountCents, paidBy: p.paidBy,
+        dateISO: p.dateISO, participantIds: p.participantIds,
+      }, createdBy);
+      if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
+      await answerCallback(cq.id, 'Lançado ✅');
+      await sendMessage(chatId, `✅ Despesa registrada: <b>${escapeHtml(p.description)}</b> — ${formatBRL(p.amountCents)}.`);
+      return;
+    }
+
+    if (pending.kind === 'acerto') {
+      const p = pending.payload as { fromMember: string; toMember: string; amountCents: number; dateISO: string };
+      await createSplitPayment(pending.groupId, p.fromMember, p.toMember, p.amountCents, p.dateISO, null, createdBy);
+      if (msgId) await clearButtons(chatId, msgId).catch(() => undefined);
+      await answerCallback(cq.id, 'Registrado ✅');
+      await sendMessage(chatId, `✅ Acerto registrado — ${formatBRL(p.amountCents)}.`);
+      return;
+    }
+
+    await answerCallback(cq.id);
+  } catch (e) {
+    await answerCallback(cq.id, 'Erro');
+    await sendMessage(chatId, `❌ ${escapeHtml((e as Error).message)}`);
   }
 }
 

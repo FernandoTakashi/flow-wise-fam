@@ -7,6 +7,7 @@ import * as z from 'zod/v4';
 import { env } from './env.js';
 import { toCents } from './shared.js';
 import type { WalletContext } from './context.js';
+import type { SplitGroupContext } from './splitContext.js';
 import type { ImageMediaType } from './telegram.js';
 
 function anthropic(): Anthropic {
@@ -291,4 +292,108 @@ export async function interpretImage(
     console.error('[brain] interpretImage falhou:', (e as Error).message ?? e);
     return { intent: 'reply', text: 'Não consegui ler essa foto agora. Manda o valor em texto, ou tenta de novo.' };
   }
+}
+
+// ---------------------------------------------------------------------------
+// "Dividir" (grupo do Telegram) — schema, prompt e tipo TOTALMENTE separados
+// do modo carteira. Isso não é só organização: o prompt abaixo nem sabe que
+// conta, categoria, fatura ou fixo existem — não tem como vazar o que não
+// está no vocabulário que o modelo recebe.
+// ---------------------------------------------------------------------------
+
+export type BotSplitAction =
+  | { intent: 'reply'; text: string }
+  | { intent: 'ignorar' }
+  | { intent: 'despesa'; description: string; amountCents: number; dateISO: string; participantIds: string[] | null }
+  | { intent: 'acerto'; toMemberId: string; amountCents: number; dateISO: string };
+
+const SplitSchema = z.object({
+  intent: z.enum(['despesa', 'acerto', 'consulta', 'ajuda', 'ignorar']),
+  reply: z.string().describe('Resposta pronta em pt-BR (consulta/ajuda). Curta, com os números do contexto. Vazio pros outros intents.'),
+  despesa: z.object({
+    description: z.string().describe('o que foi, curto (ex.: "jantar", "uber")'),
+    amount_cents: z.number().int(),
+    date: z.string().nullable().describe('yyyy-mm-dd, senão null (= hoje)'),
+    participant_ids: z.array(z.string()).nullable()
+      .describe('ids EXATOS de membros participando, só se a pessoa excluiu alguém explicitamente; null = todo mundo do grupo hoje'),
+  }).nullable(),
+  acerto: z.object({
+    to_member_id: z.string().describe('id EXATO de membros — pra quem o dinheiro foi'),
+    amount_cents: z.number().int(),
+    date: z.string().nullable(),
+  }).nullable(),
+});
+
+/**
+ * Interpreta uma mensagem de um GRUPO do Telegram ligado a um split_group.
+ * `senderName` é só o nome de quem mandou, pro prompt — quem pagou uma
+ * despesa é sempre quem mandou a mensagem (v1 não deixa reportar em nome de
+ * outra pessoa, evita confusão/spoofing de quem realmente gastou).
+ */
+export async function interpretSplit(text: string, ctx: SplitGroupContext, senderName: string): Promise<BotSplitAction> {
+  const key = env.anthropicKey();
+  if (!key) return { intent: 'ignorar' }; // sem IA, o modo grupo simplesmente não responde (não tem regex razoável aqui)
+
+  try {
+    const client = anthropic();
+    const response = await client.messages.parse({
+      model: 'claude-haiku-4-5',
+      max_tokens: 700,
+      system:
+        'Você é a Carolina, assistente de divisão de despesas em grupo (pt-BR), num grupo do Telegram chamado "' + ctx.grupo + '". ' +
+        'Isso é SÓ sobre dividir gasto em grupo — você não tem acesso a nenhuma carteira pessoal, conta bancária, fatura ou fixo de ninguém, ' +
+        'e se alguém perguntar sobre isso, use intent "consulta" e responda em `reply` que isso não existe aqui, ' +
+        'só as despesas deste grupo (pra ver a carteira pessoal, é no chat privado).\n' +
+        `Quem mandou esta mensagem: ${senderName}. Membros do grupo (JSON): ${JSON.stringify(ctx.membros)}. Hoje: usar a data de hoje quando não citada.\n` +
+        'Classifique a mensagem:\n' +
+        `- "despesa": ${senderName} está reportando um gasto que ELE fez (ex.: "paguei o jantar, 180", "gastei 40 no uber"). ` +
+        'Preencha `despesa`. participant_ids só se alguém foi excluído explicitamente ("menos o Bruno", "só eu e a Ana") — senão null (todo mundo).\n' +
+        `- "acerto": ${senderName} diz que PAGOU outra pessoa do grupo pra acertar uma dívida (ex.: "paguei os 40 pra Ana", "já acertei com o Bruno"). ` +
+        'Preencha `acerto` com o id EXATO de quem recebeu.\n' +
+        '- "consulta": pergunta sobre o saldo/quem deve quem/despesas do grupo. Responda em `reply` usando só os números do estado abaixo.\n' +
+        '- "ajuda": perguntou o que você faz aqui. Responda em `reply`.\n' +
+        '- "ignorar": QUALQUER outra coisa — conversa do grupo que não é sobre dividir despesa (a grande maioria das mensagens vai cair aqui). ' +
+        'Prefira "ignorar" quando tiver dúvida — é MUITO pior interromper uma conversa normal do que deixar passar uma pergunta.',
+      messages: [{ role: 'user', content: `ESTADO DO GRUPO:\n${JSON.stringify(ctx)}\n\nMENSAGEM:\n${text}` }],
+      output_config: { format: zodOutputFormat(SplitSchema) },
+    });
+
+    const p = response.parsed_output;
+    if (!p) return { intent: 'ignorar' };
+
+    if (p.intent === 'despesa' && p.despesa && p.despesa.amount_cents > 0) {
+      const ids = p.despesa.participant_ids?.filter((id) => ctx.membros.some((m) => m.id === id)) ?? null;
+      return {
+        intent: 'despesa',
+        description: p.despesa.description.trim().slice(0, 80) || 'Despesa',
+        amountCents: p.despesa.amount_cents,
+        dateISO: p.despesa.date && /^\d{4}-\d{2}-\d{2}$/.test(p.despesa.date) ? p.despesa.date : todayFallback(),
+        participantIds: ids && ids.length > 0 ? ids : null,
+      };
+    }
+
+    if (p.intent === 'acerto' && p.acerto?.to_member_id && p.acerto.amount_cents > 0) {
+      if (ctx.membros.some((m) => m.id === p.acerto!.to_member_id)) {
+        return {
+          intent: 'acerto',
+          toMemberId: p.acerto.to_member_id,
+          amountCents: p.acerto.amount_cents,
+          dateISO: p.acerto.date && /^\d{4}-\d{2}-\d{2}$/.test(p.acerto.date) ? p.acerto.date : todayFallback(),
+        };
+      }
+    }
+
+    if (p.intent === 'consulta' || p.intent === 'ajuda') {
+      return { intent: 'reply', text: p.reply?.trim() || 'Não achei essa informação no grupo.' };
+    }
+
+    return { intent: 'ignorar' };
+  } catch (e) {
+    console.error('[brain] interpretSplit falhou:', (e as Error).message ?? e);
+    return { intent: 'ignorar' }; // erro no modo grupo nunca deve virar spam de mensagem de erro pro grupo inteiro
+  }
+}
+
+function todayFallback(): string {
+  return new Date().toISOString().slice(0, 10);
 }

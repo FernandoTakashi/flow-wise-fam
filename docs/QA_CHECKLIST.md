@@ -90,6 +90,30 @@ não corrige "de passagem" sem anotar o que era.
 - [ ] Lembrete diário chega (ou simular via cron manualmente)
 - [ ] `/ajuda` lista as capacidades novas; menu de comandos do Telegram mostra `/ajuda`, `/desfazer`, `/id`
 
+## Dividir (despesa em grupo) — ver DIVIDIR.md
+
+- [ ] Criar grupo pelo app → aparece em "Meus grupos", você já é membro
+- [ ] Gerar convite → abrir o link em janela anônima → entrar como visitante só com nome → cai no grupo
+- [ ] Abrir o mesmo link já logado → oferece entrar com a conta, sem pedir nome
+- [ ] Visitante NÃO ganha uma "Minha Carteira" (checar em Ajustes/no banco — `wallets` não deve ter linha nova pro anônimo)
+- [ ] Nova despesa "todos" vs "selecionados" → saldo reflete só quem participou
+- [ ] Nova despesa "igual" vs "valor exato" (soma tem que bater, senão avisa)
+- [ ] Registrar acerto entre dois membros → saldo dos dois zera certo
+- [ ] Aba Saldo mostra a simplificação (menor nº de transferências), não uma lista de todo mundo com todo mundo
+- [ ] Remover um membro → despesas antigas dele continuam aparecendo; ele some das próximas
+- [ ] Tentar remover quem criou o grupo → recusa com mensagem clara
+- [ ] `/iniciar` num grupo do Telegram novo → cria o grupo, primeiro membro registrado
+- [ ] `/iniciar` de novo no mesmo grupo → avisa que já está conectado, não duplica
+- [ ] `/conectar <token>` liga um grupo do Telegram a um grupo criado pelo app
+- [ ] Mandar "paguei o jantar, 180" no grupo → resumo com Confirmar/Cancelar, divide igual entre quem já apareceu
+- [ ] "já paguei a Ana os 40" → vira acerto, não despesa
+- [ ] "como ficou a divisão?" → responde com o saldo certo
+- [ ] Mensagem de conversa normal do grupo (não relacionada a dinheiro) → Carolina fica quieta, não responde nada
+- [ ] Dois membros diferentes confirmando ao mesmo tempo no mesmo grupo → não se atropelam
+- [ ] Um membro tentar confirmar o botão de despesa de outro → recusa ("isso não é seu")
+- [ ] Perguntar sobre carteira pessoal dentro do grupo → Carolina diz que não tem acesso ali, nunca inventa número
+- [ ] Mesma pergunta de saldo no chat privado da carteira → funciona normal (confirma que os dois modos não vazam um pro outro)
+
 ## Mobile / PWA
 
 - [ ] "Adicionar à tela inicial" no Android e no iOS — ícone e nome corretos, abre em tela cheia

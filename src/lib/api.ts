@@ -29,3 +29,21 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   }
   return res.json() as Promise<T>;
 }
+
+/**
+ * Chamada SEM sessão — só pra endpoints públicos de verdade (hoje: a prévia
+ * de um convite do "Dividir", vista antes de a pessoa sequer ter uma
+ * sessão anônima). Nunca usar isso pra dado que devia exigir login.
+ */
+export async function apiFetchPublic<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(`/api/v1${path}`, {
+    ...init,
+    headers: { ...(init.body ? { 'content-type': 'application/json' } : {}), ...init.headers },
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try { const body = await res.json(); detail = body?.detail ?? body?.error ?? detail; } catch { /* ignora */ }
+    throw new ApiError(res.status, detail);
+  }
+  return res.json() as Promise<T>;
+}

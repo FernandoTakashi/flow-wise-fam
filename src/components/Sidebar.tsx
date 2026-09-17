@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Repeat, CreditCard, PiggyBank,
-  TrendingUp, BarChart3, Scale, Settings, Plus, LogOut,
+  TrendingUp, BarChart3, Scale, Settings, Plus, LogOut, Users2,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
@@ -42,6 +42,13 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { title: 'Relatórios', href: '/relatorios', icon: BarChart3 },
       { title: 'Acerto de contas', href: '/acerto', icon: Scale },
       { title: 'Ajustes', href: '/ajustes', icon: Settings },
+    ],
+  },
+  {
+    label: 'Dividir',
+    items: [
+      // rota própria, fora do Layout/FinanceProvider da carteira — ver src/pages/split/SplitApp.tsx
+      { title: 'Dividir contas', href: '/dividir', icon: Users2 },
     ],
   },
 ];

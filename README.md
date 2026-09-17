@@ -89,3 +89,9 @@ Alternativas: Netlify, Cloudflare Pages (mesmo build, adicionar rewrite `/* -> /
   [docs/QA_CHECKLIST.md](docs/QA_CHECKLIST.md).
 - **CI** (`.github/workflows/ci.yml`) roda typecheck/build/test/lint em
   todo push e PR.
+
+## Módulos adicionais
+
+- **Bot do Telegram** (Carolina) — [BOT_SETUP.md](BOT_SETUP.md).
+- **Dividir** — despesa em grupo, apartada da carteira, também pela Carolina
+  num grupo do Telegram: [DIVIDIR.md](DIVIDIR.md).

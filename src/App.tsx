@@ -1,5 +1,5 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
@@ -12,6 +12,7 @@ import { Layout } from '@/components/Layout';
 import AuthPage from '@/pages/Auth';
 import ResetPassword from '@/pages/ResetPassword';
 
+const SplitApp = lazy(() => import('@/pages/split/SplitApp'));
 const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const Transactions = lazy(() => import('@/pages/Transactions'));
 const Receitas = lazy(() => import('@/pages/Receitas'));
@@ -36,6 +37,7 @@ function FullScreenLoader({ label }: { label: string }) {
 }
 
 const App = () => {
+  const location = useLocation();
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
   // usuário chegou pelo link de "redefinir senha" — precisa definir a nova
@@ -57,6 +59,19 @@ const App = () => {
   }, []);
 
   if (checking) return <FullScreenLoader label="Carregando…" />;
+
+  // "Dividir" é apartado de propósito: fora do Layout/FinanceProvider da
+  // carteira, e acessível mesmo sem sessão (o convite cria uma na hora).
+  if (location.pathname.startsWith('/dividir')) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <Toaster />
+        <Suspense fallback={<FullScreenLoader label="Carregando…" />}>
+          <SplitApp session={session} />
+        </Suspense>
+      </QueryClientProvider>
+    );
+  }
 
   if (recovery) {
     return (

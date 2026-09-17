@@ -23,7 +23,7 @@ export interface TgPhotoSize {
 export interface TgMessage {
   message_id: number;
   from?: { id: number; first_name?: string; username?: string };
-  chat: { id: number; type: string };
+  chat: { id: number; type: string; title?: string };
   text?: string;
   photo?: TgPhotoSize[];
   caption?: string;
