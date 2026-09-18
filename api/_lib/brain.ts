@@ -113,10 +113,12 @@ export async function interpret(text: string, ctx: WalletContext): Promise<BotAc
         '- "consulta": pergunta sobre dinheiro (saldo, quanto gastei/recebi, o que falta pagar, fatura, últimos gastos). ' +
         'Responda em `reply`, curto e direto, usando SÓ os números do estado. Se o estado não tem a resposta, diga isso.\n' +
         '- "lancamento": a mensagem descreve um gasto ou recebimento com valor. Preencha `entry` (ids EXATOS das listas; ' +
-        'account_id/category_id = null se não citado; datas relativas viram yyyy-mm-dd com hoje = ' + ctx.hoje + ').\n' +
+        'account_id/category_id = null se não citado; datas relativas viram yyyy-mm-dd com hoje = ' + ctx.hoje + '). ' +
+        'Se kind="income", account_id NUNCA pode ser uma conta do tipo "card" — não existe receber na fatura de um cartão; ' +
+        'se a pessoa citou um cartão pra um recebimento, deixe account_id null.\n' +
         '- "pagar_fixo": a pessoa diz que pagou/recebeu uma conta fixa (ex.: "paguei o aluguel"). Preencha `pay` com o recurrence_id do fixo correspondente em fixosAPagar/fixosAReceber.\n' +
         '- "pagar_fatura": a pessoa diz que pagou a fatura de um cartão (ex.: "paguei a fatura do nubank"). Preencha `fatura` com o cartaoId (de `faturas`) e a conta de onde saiu o dinheiro (de `contasParaLancar`, tipo diferente de "card").\n' +
-        '- "criar_fixo": a pessoa quer CADASTRAR uma conta fixa nova, sem estar pagando agora (ex.: "cadastra academia 89,90 todo dia 10", "todo mês recebo 200 de aluguel no dia 5"). Preencha `fixo`. NÃO confundir com "lancamento" (que é um gasto avulso de agora) nem com "pagar_fixo" (que já existe e a pessoa está dando baixa).\n' +
+        '- "criar_fixo": a pessoa quer CADASTRAR uma conta fixa nova, sem estar pagando agora (ex.: "cadastra academia 89,90 todo dia 10", "todo mês recebo 200 de aluguel no dia 5"). Preencha `fixo` (mesma regra do lançamento: kind="income" nunca leva account_id de cartão). NÃO confundir com "lancamento" (que é um gasto avulso de agora) nem com "pagar_fixo" (que já existe e a pessoa está dando baixa).\n' +
         '- "desfazer": a pessoa quer desfazer/cancelar/apagar o último lançamento que ela fez (ex.: "desfaz", "cancela isso", "lancei errado, apaga"). Não precisa preencher nada extra — o último lançamento é resolvido fora daqui.\n' +
         '- "ajuda"/"desconhecido": responda em `reply` explicando o que sabe fazer.',
       messages: [{ role: 'user', content: `ESTADO:\n${JSON.stringify(ctx)}\n\nMENSAGEM:\n${text}` }],
@@ -127,7 +129,10 @@ export async function interpret(text: string, ctx: WalletContext): Promise<BotAc
     if (!p) throw new Error('sem parsed_output');
 
     if (p.intent === 'lancamento' && p.entry && p.entry.amount_cents > 0) {
-      const acc = p.entry.account_id && ctx.contasParaLancar.some((a) => a.id === p.entry!.account_id) ? p.entry.account_id : null;
+      // receita nunca numa conta tipo "card" — mesmo que o modelo erre isso
+      // apesar da instrução acima, não deixa passar pro schema.
+      const accMatch = p.entry.account_id ? ctx.contasParaLancar.find((a) => a.id === p.entry!.account_id) : null;
+      const acc = accMatch && !(p.entry.kind === 'income' && accMatch.tipo === 'card') ? accMatch.id : null;
       const cat = p.entry.category_id && ctx.categorias.some((c) => c.id === p.entry!.category_id) ? p.entry.category_id : null;
       return {
         intent: 'lancamento',
@@ -171,7 +176,9 @@ export async function interpret(text: string, ctx: WalletContext): Promise<BotAc
     }
 
     if (p.intent === 'criar_fixo' && p.fixo && p.fixo.amount_cents > 0) {
-      const acc = p.fixo.account_id && ctx.contasParaLancar.some((a) => a.id === p.fixo!.account_id) ? p.fixo.account_id : null;
+      // mesma regra do lançamento avulso: fixo de receita nunca no cartão
+      const fixoAccMatch = p.fixo.account_id ? ctx.contasParaLancar.find((a) => a.id === p.fixo!.account_id) : null;
+      const acc = fixoAccMatch && !(p.fixo.kind === 'income' && fixoAccMatch.tipo === 'card') ? fixoAccMatch.id : null;
       const cat = p.fixo.category_id && ctx.categorias.some((c) => c.id === p.fixo!.category_id) ? p.fixo.category_id : null;
       return {
         intent: 'criar_fixo',
@@ -269,7 +276,8 @@ export async function interpretImage(
     if (!p) throw new Error('sem parsed_output');
 
     if (p.found && p.entry && p.entry.amount_cents > 0) {
-      const acc = p.entry.account_id && ctx.contasParaLancar.some((a) => a.id === p.entry!.account_id) ? p.entry.account_id : null;
+      const imgAccMatch = p.entry.account_id ? ctx.contasParaLancar.find((a) => a.id === p.entry!.account_id) : null;
+      const acc = imgAccMatch && !(p.entry.kind === 'income' && imgAccMatch.tipo === 'card') ? imgAccMatch.id : null;
       const cat = p.entry.category_id && ctx.categorias.some((c) => c.id === p.entry!.category_id) ? p.entry.category_id : null;
       return {
         intent: 'lancamento',

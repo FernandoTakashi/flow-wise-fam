@@ -506,8 +506,13 @@ async function onGroupCallback(cq: TgCallbackQuery): Promise<void> {
 async function promptLancamento(link: ChatLink, chatId: number, e: BotEntry): Promise<void> {
   const bundle = await loadWalletBundle(link.wallet_id);
   const pendingId = await setPending(link.id, 'new_tx', { entry: e });
-  // mostra a MESMA conta que o insertEntry vai usar (conta citada, senão a 1ª de dinheiro)
-  const chosenAcc = (e.accountId && bundle.accounts.find((a) => a.id === e.accountId))
+  // mostra a MESMA conta que o insertEntry vai usar (conta citada, senão a 1ª
+  // de dinheiro) — receita nunca fica no cartão, mesmo que tenha vindo com um
+  // accountId de cartão (a IA às vezes chuta errado); nesse caso trata como
+  // "não identifiquei" pra avisar e deixar a pessoa corrigir.
+  const requestedAcc = e.accountId ? bundle.accounts.find((a) => a.id === e.accountId) : null;
+  const accountIdInvalid = e.kind === 'income' && requestedAcc?.kind === 'card';
+  const chosenAcc = (requestedAcc && !accountIdInvalid ? requestedAcc : null)
     || bundle.accounts.find((a) => a.kind !== 'card' && !a.archived);
   const accName = chosenAcc?.name ?? 'conta principal';
   const catName = e.categoryId ? bundle.categories.find((c) => c.id === e.categoryId)?.name : null;
@@ -517,7 +522,7 @@ async function promptLancamento(link: ChatLink, chatId: number, e: BotEntry): Pr
     e.shared ? 'em conjunto' : null,
   ].filter(Boolean).join(' · ');
 
-  const missingAcc = !e.accountId;
+  const missingAcc = !e.accountId || accountIdInvalid;
   const missingCat = !e.categoryId;
   const warn = missingAcc ? `\n⚠️ Não identifiquei a conta — usei <b>${escapeHtml(accName)}</b>.` : '';
 
@@ -552,7 +557,8 @@ async function promptComplementPicker(link: ChatLink, chatId: number, entry: Bot
   const bundle = await loadWalletBundle(link.wallet_id);
 
   if (!entry.accountId) {
-    const accounts = bundle.accounts.filter((a) => !a.archived);
+    // receita não pode ir pro cartão (não existe "receber na fatura")
+    const accounts = bundle.accounts.filter((a) => !a.archived && (entry.kind !== 'income' || a.kind !== 'card'));
     if (accounts.length > 0) {
       await sendMessage(chatId, '🏦 Qual conta? (ou responda com o nome)',
         pairUp(accounts.map((a) => ({ text: a.name, callback_data: `accsel:${a.id}` }))));
@@ -629,7 +635,7 @@ async function onCallback(cq: TgCallbackQuery) {
         await answerCallback(cq.id, 'Lançado ✅');
         await sendMessage(chatId,
           `✅ Lançado: <b>${escapeHtml(entry.description)}</b> — ${formatBRL(entry.amountCents)} · ${escapeHtml(r.accountName)}` +
-          (r.parts > 1 ? ` em ${r.parts}×` : '') + (r.onCard ? ' (na fatura)' : ''));
+          (r.parts > 1 ? ` em ${r.parts}×` : '') + (r.onCard && entry.kind !== 'income' ? ' (na fatura)' : ''));
         return;
       }
 

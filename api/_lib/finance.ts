@@ -112,8 +112,12 @@ export async function insertEntry(
 ): Promise<{ accountName: string; onCard: boolean; parts: number }> {
   const db = admin();
   const spending = bundle.accounts.filter((a) => a.kind !== 'card' && !a.archived);
-  const account =
+  let account =
     (entry.accountId && bundle.accounts.find((a) => a.id === entry.accountId)) || spending[0];
+  // receita nunca cai na fatura de um cartão — não faz sentido "receber" ali,
+  // e criaria uma invoice pra um recebimento (bug real: já aconteceu via
+  // picker do bot, que oferecia cartão como opção pra receita).
+  if (entry.kind === 'income' && account?.kind === 'card') account = spending[0] ?? account;
   if (!account) throw new Error('Nenhuma conta disponível nesta carteira.');
 
   const onCard = account.kind === 'card';
@@ -162,7 +166,9 @@ export async function markOccurrence(
   // conta: override do diálogo de pagamento > conta da recorrência > 1ª conta de dinheiro
   const spending = bundle.accounts.filter((a) => a.kind !== 'card' && !a.archived);
   const overrideAcc = accountIdOverride ? bundle.accounts.find((a) => a.id === accountIdOverride) : null;
-  const account = overrideAcc || (rec.account_id && bundle.accounts.find((a) => a.id === rec.account_id)) || spending[0];
+  let account = overrideAcc || (rec.account_id && bundle.accounts.find((a) => a.id === rec.account_id)) || spending[0];
+  // receita fixa (ex.: salário) nunca cai na fatura de um cartão
+  if (rec.kind === 'income' && account?.kind === 'card') account = spending[0] ?? account;
   if (!account) throw new Error('Escolha uma forma de pagamento para esta recorrência.');
   const onCard = account.kind === 'card';
 
@@ -277,6 +283,9 @@ export async function updateEntry(bundle: WalletBundle, walletId: string, id: st
   if (patch.accountId !== undefined) row.account_id = patch.accountId;
 
   const acc = bundle.accounts.find((a) => a.id === nextAccountId);
+  if (current.kind === 'income' && acc?.kind === 'card') {
+    throw new Error('Receita não pode ser lançada numa conta de cartão.');
+  }
   if (patch.dateISO !== undefined || patch.accountId !== undefined) {
     row.card_invoice_id = acc?.kind === 'card' ? await ensureInvoice(walletId, acc, nextDate) : null;
   }
