@@ -530,4 +530,29 @@ create table public.split_telegram_invites (
 create index split_telegram_invites_link_idx on public.split_telegram_invites (invite_link);
 alter table public.split_telegram_invites enable row level security;
 
+-- 20260918000001 — mudar o nome em Ajustes agora reflete no Split CaRe:
+-- split_members.display_name é uma foto tirada na entrada no grupo, sem
+-- isso nunca acompanhava mudança de nome pra quem já estava dentro.
+create or replace function public.sync_profile_name_to_split_members()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.name is distinct from old.name then
+    update public.split_members
+    set display_name = new.name
+    where user_id = new.id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_profile_name_change on public.profiles;
+create trigger on_profile_name_change
+  after update of name on public.profiles
+  for each row
+  execute function public.sync_profile_name_to_split_members();
+
 commit;
