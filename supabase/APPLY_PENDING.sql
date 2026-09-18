@@ -555,4 +555,13 @@ create trigger on_profile_name_change
   for each row
   execute function public.sync_profile_name_to_split_members();
 
+-- 20260918000002 — backfill de uma vez só: alinha o que já estava
+-- desatualizado (nome mudou em Ajustes antes do gatilho acima existir).
+update public.split_members sm
+set display_name = p.name
+from public.profiles p
+where sm.user_id = p.id
+  and sm.display_name is distinct from p.name
+  and coalesce(p.name, '') <> '';
+
 commit;
