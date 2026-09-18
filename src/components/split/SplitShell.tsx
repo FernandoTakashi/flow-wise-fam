@@ -8,6 +8,15 @@ import { Button } from '@/components/ui/button';
 import { Mascot } from '@/components/Mascot';
 import { ArrowLeft, LogOut } from 'lucide-react';
 
+// App.tsx sempre renderiza o Dividir pra qualquer rota /dividir/*, mesmo sem
+// sessão (o convite precisa disso) — então só dar signOut() não basta: sem
+// navegar pra fora daqui, a pessoa fica presa nesse shell sem sessão em vez
+// de cair na tela de login.
+async function signOut(): Promise<void> {
+  await supabase.auth.signOut();
+  window.location.href = '/';
+}
+
 export function SplitShell({ children, isGuest }: { children: ReactNode; isGuest?: boolean }) {
   return (
     <div className="min-h-screen bg-background">
@@ -29,7 +38,7 @@ export function SplitShell({ children, isGuest }: { children: ReactNode; isGuest
             </Link>
           )}
           {!isGuest && (
-            <Button variant="ghost" size="sm" onClick={() => void supabase.auth.signOut()}>
+            <Button variant="ghost" size="sm" onClick={() => void signOut()}>
               <LogOut className="mr-1.5 h-4 w-4" /> Sair
             </Button>
           )}
