@@ -22,7 +22,7 @@ import {
   type ExpenseFormInput,
 } from '@/lib/splitApi';
 import type { SplitGroupDetail as SplitGroupDetailType, SplitExpense, SplitPayment, SplitMember } from '@/types/split';
-import { Plus, Link2, Trash2, Pencil, ArrowRightLeft, Receipt, Send, CheckCircle2, XCircle, RotateCcw, Settings as SettingsIcon } from 'lucide-react';
+import { Plus, Link2, Trash2, Pencil, ArrowRightLeft, Receipt, Send, CheckCircle2, XCircle, RotateCcw, Settings as SettingsIcon, ChevronRight } from 'lucide-react';
 
 const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string | undefined;
 
@@ -48,6 +48,7 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
   const [groupNameDraft, setGroupNameDraft] = useState('');
   const [savingGroup, setSavingGroup] = useState(false);
   const [openingTelegram, setOpeningTelegram] = useState(false);
+  const [viewExpense, setViewExpense] = useState<SplitExpense | null>(null);
 
   const load = async () => {
     if (!groupId) return;
@@ -273,7 +274,9 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
                 const iPaid = myMemberId && e.paidBy === myMemberId ? e.amountCents : 0;
                 const net = iPaid - myShare;
                 section.rows.push(
-                  <div key={e.id} className="flex items-center gap-3 border-b border-[#F4EDE7] px-1 py-3 last:border-0">
+                  <div key={e.id} role="button" tabIndex={0} onClick={() => setViewExpense(e)}
+                    onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setViewExpense(e); } }}
+                    className="flex cursor-pointer items-center gap-3 border-b border-[#F4EDE7] px-1 py-3 last:border-0 hover:bg-muted/40">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                       <Receipt className="h-4 w-4" />
                     </span>
@@ -293,13 +296,16 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
                       {canEdit && (
                         <>
                           <button type="button" className="-m-1.5 rounded p-2.5 text-muted-foreground hover:text-foreground"
-                            onClick={() => { setEditingExpense(e); setShowExpense(true); }} aria-label="Editar despesa">
+                            onClick={(ev) => { ev.stopPropagation(); setEditingExpense(e); setShowExpense(true); }} aria-label="Editar despesa">
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
-                          <ConfirmDialog title="Excluir despesa?" confirmLabel="Excluir" onConfirm={() => removeExpense(e.id)}
-                            trigger={<button type="button" className="-m-1.5 rounded p-2.5 text-muted-foreground hover:text-destructive" aria-label="Excluir despesa"><Trash2 className="h-3.5 w-3.5" /></button>} />
+                          <span onClick={(ev) => ev.stopPropagation()}>
+                            <ConfirmDialog title="Excluir despesa?" confirmLabel="Excluir" onConfirm={() => removeExpense(e.id)}
+                              trigger={<button type="button" className="-m-1.5 rounded p-2.5 text-muted-foreground hover:text-destructive" aria-label="Excluir despesa"><Trash2 className="h-3.5 w-3.5" /></button>} />
+                          </span>
                         </>
                       )}
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
                     </div>
                   </div>,
                 );
@@ -366,6 +372,42 @@ export default function SplitGroupDetail({ session }: { session: Session | null 
           onSaved={async () => { setShowExpense(false); await load(); }}
         />
       )}
+
+      <Dialog open={!!viewExpense} onOpenChange={(o) => !o && setViewExpense(null)}>
+        <DialogContent className={cn('sm:max-w-sm', SHEET_DIALOG_CLASS)}>
+          <DialogHeader><DialogTitle>{viewExpense?.description}</DialogTitle></DialogHeader>
+          {viewExpense && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between rounded-[12px] border border-border bg-card p-3.5">
+                <div>
+                  <div className="text-[13px] text-muted-foreground">
+                    Pago por <strong className="text-foreground">{memberName(viewExpense.paidBy)}</strong>
+                  </div>
+                  <div className="text-[12.5px] text-muted-foreground">{formatDayMonth(viewExpense.date)}</div>
+                </div>
+                <div className="text-[20px] font-bold tabular-nums">{formatBRL(viewExpense.amountCents)}</div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>
+                  Dividido entre {data.shares.filter((s) => s.expenseId === viewExpense.id).length} pessoa
+                  {data.shares.filter((s) => s.expenseId === viewExpense.id).length === 1 ? '' : 's'}
+                </Label>
+                <div className="space-y-1.5">
+                  {data.shares.filter((s) => s.expenseId === viewExpense.id).map((s) => (
+                    <div key={s.id} className="flex items-center justify-between rounded-[10px] bg-muted/40 px-3 py-2.5 text-[13.5px]">
+                      <span className={s.memberId === myMemberId ? 'font-semibold' : undefined}>
+                        {s.memberId === myMemberId ? 'Você' : memberName(s.memberId)}
+                      </span>
+                      <span className="font-semibold tabular-nums">{formatBRL(s.shareCents)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <PaymentDialog
         open={showPayment}
