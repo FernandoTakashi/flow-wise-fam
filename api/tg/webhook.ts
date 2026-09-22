@@ -21,6 +21,7 @@ import {
   resolveUserIdForTelegram, resolveSplitTelegramInvite, linkTelegramToUser,
 } from '../_lib/splitFinance.js';
 import { setSplitPending, peekSplitPending, updateSplitPendingPayload, deleteSplitPending } from '../_lib/splitChat.js';
+import { rateLimited, clientIp } from '../_lib/rateLimit.js';
 
 const HELP =
   'Oi, eu sou a <b>Carolina</b> 👋 — a assistente da <b>CaRe Wallet</b>.\n\n' +
@@ -42,6 +43,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const secret = env.telegramWebhookSecret();
   if (secret && req.headers['x-telegram-bot-api-secret-token'] !== secret) {
     res.status(401).send('bad secret'); return;
+  }
+
+  // já protegido pelo secret acima — isso aqui é defesa extra (secret
+  // vazado, ou o próprio Telegram reagindo mal) pra nunca esgotar
+  // Anthropic/DB por causa de um único cliente. Responde 200 mesmo
+  // quando limita: 429 faria o Telegram insistir em re-tentar.
+  if (rateLimited(`tgwebhook:${clientIp(req)}`, 120, 60_000)) {
+    res.status(200).json({ ok: true }); return;
   }
 
   try {

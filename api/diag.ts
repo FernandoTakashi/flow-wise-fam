@@ -24,7 +24,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     SUPABASE_SERVICE_ROLE_KEY_len: (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').length,
     ANTHROPIC_API_KEY_set: !!process.env.ANTHROPIC_API_KEY,
     TELEGRAM_BOT_TOKEN_set: !!process.env.TELEGRAM_BOT_TOKEN,
-    TELEGRAM_WEBHOOK_SECRET_clean: env.telegramWebhookSecret() ?? null,
+    TELEGRAM_WEBHOOK_SECRET_set: !!env.telegramWebhookSecret(),
+    TELEGRAM_WEBHOOK_SECRET_len: (env.telegramWebhookSecret() ?? '').length,
     PUBLIC_APP_URL: process.env.PUBLIC_APP_URL ?? null,
   };
 

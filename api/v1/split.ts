@@ -18,6 +18,7 @@ import {
 } from '../_lib/splitFinance.js';
 import { createChatInviteLink } from '../_lib/telegram.js';
 import { admin } from '../_lib/supabaseAdmin.js';
+import { rateLimited, clientIp } from '../_lib/rateLimit.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Body = Record<string, any> & { resource?: string; action?: string; groupId?: string };
@@ -34,6 +35,11 @@ async function handleGet(req: VercelRequest, res: VercelResponse) {
 
   if (scope === 'invite') {
     if (!id) { res.status(400).json({ error: 'missing_id' }); return; }
+    // único endpoint público (sem login) deste arquivo — mais exposto a
+    // enumeração de id de convite; limite por IP, best-effort.
+    if (rateLimited(`invite:${clientIp(req)}`, 20, 60_000)) {
+      res.status(429).json({ error: 'rate_limited' }); return;
+    }
     try {
       const preview = await getSplitInvitePreview(id);
       if (!preview) { res.status(404).json({ error: 'invite_not_found' }); return; }
