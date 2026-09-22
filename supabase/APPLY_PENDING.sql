@@ -564,4 +564,11 @@ where sm.user_id = p.id
   and sm.display_name is distinct from p.name
   and coalesce(p.name, '') <> '';
 
+-- 20260922000001 — gap de segurança: split_pending nunca teve RLS
+-- habilitado (ficou de fora da migração original do Dividir). Sem RLS, as
+-- permissões padrão de tabela valem direto, diferente de split_invites/
+-- split_chat_links/split_telegram_invites (que também não têm policy, mas
+-- têm RLS habilitado, e aí o Postgres nega tudo por padrão).
+alter table public.split_pending enable row level security;
+
 commit;

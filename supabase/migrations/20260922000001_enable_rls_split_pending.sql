@@ -1,0 +1,12 @@
+-- Gap de segurança real: split_pending nunca teve RLS habilitado (ficou de
+-- fora da lista de "alter table ... enable row level security" da migração
+-- original do Dividir). Sem RLS, as permissões padrão de tabela do Supabase
+-- valem direto — anon/authenticated podem ter GRANT de SELECT/INSERT/UPDATE/
+-- DELETE nessa tabela mesmo sem nenhuma policy, ao contrário de
+-- split_invites/split_chat_links/split_telegram_invites (que também não têm
+-- policy, mas têm RLS habilitado — aí o padrão do Postgres é negar tudo).
+-- split_pending guarda payload de despesa/acerto pendente de confirmação
+-- (valores, descrição, quem participa) por grupo — não devia ser legível
+-- nem gravável por ninguém além do backend (service role, que ignora RLS).
+alter table public.split_pending enable row level security;
+-- sem nenhuma policy de propósito: só o service role (backend) mexe aqui.
