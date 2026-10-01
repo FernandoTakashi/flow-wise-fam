@@ -63,6 +63,9 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
+  const [filterAccountId, setFilterAccountId] = useState('');
+  const [filterCategoryId, setFilterCategoryId] = useState('');
+  const [filterMemberId, setFilterMemberId] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [showTransfer, setShowTransfer] = useState(false);
@@ -97,12 +100,17 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return kindTx;
-    return kindTx.filter((t) =>
-      (t.description ?? '').toLowerCase().includes(q)
-      || accountName(t.accountId).toLowerCase().includes(q)
-      || categoryName(t.categoryId).toLowerCase().includes(q));
-  }, [kindTx, search, accountName, categoryName]);
+    return kindTx.filter((t) => {
+      if (filterAccountId && t.accountId !== filterAccountId) return false;
+      if (filterCategoryId && t.categoryId !== filterCategoryId) return false;
+      if (filterMemberId && t.memberId !== filterMemberId) return false;
+      if (!q) return true;
+      return (t.description ?? '').toLowerCase().includes(q)
+        || accountName(t.accountId).toLowerCase().includes(q)
+        || categoryName(t.categoryId).toLowerCase().includes(q)
+        || formatBRL(t.amountCents).toLowerCase().includes(q);
+    });
+  }, [kindTx, search, filterAccountId, filterCategoryId, filterMemberId, accountName, categoryName]);
 
   const totals = useMemo(() => {
     let income = 0; let expense = 0;
@@ -227,6 +235,10 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
   };
 
   const newLabel = isIncome ? 'Nova receita' : 'Novo lançamento';
+  const filterCategories = activeCategories.filter((c) => c.kind === kind);
+  const filterAccounts = [...spendingAccounts, ...cards];
+  const hasActiveFilter = !!search || !!filterAccountId || !!filterCategoryId || !!filterMemberId;
+  const clearFilters = () => { setSearch(''); setFilterAccountId(''); setFilterCategoryId(''); setFilterMemberId(''); };
 
   return (
     <div className="space-y-4">
@@ -265,7 +277,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por descrição, conta ou categoria"
+            placeholder="Buscar por descrição, conta, categoria ou valor"
             className="h-10 w-full rounded-[11px] border border-border bg-card pl-10 pr-3 text-[13.5px] text-foreground outline-none placeholder:text-[#A9968C] focus:border-primary"
           />
         </div>
@@ -275,10 +287,40 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
         <Button onClick={openNew} disabled={locked} className="shrink-0"><Plus className="mr-2 h-4 w-4" /> {newLabel}</Button>
       </div>
 
+      {/* filtros */}
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <Select value={filterAccountId || 'all'} onValueChange={(v) => setFilterAccountId(v === 'all' ? '' : v)}>
+          <SelectTrigger className="h-9 text-[12.5px]"><SelectValue placeholder="Conta" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as contas</SelectItem>
+            {filterAccounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterCategoryId || 'all'} onValueChange={(v) => setFilterCategoryId(v === 'all' ? '' : v)}>
+          <SelectTrigger className="h-9 text-[12.5px]"><SelectValue placeholder="Categoria" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as categorias</SelectItem>
+            {filterCategories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterMemberId || 'all'} onValueChange={(v) => setFilterMemberId(v === 'all' ? '' : v)}>
+          <SelectTrigger className="h-9 text-[12.5px]"><SelectValue placeholder="Responsável" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os responsáveis</SelectItem>
+            {members.map((m) => <SelectItem key={m.userId} value={m.userId}>{m.profile?.name ?? '—'}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {hasActiveFilter && (
+          <Button variant="ghost" onClick={clearFilters} className="h-9 justify-self-start px-2 text-[12.5px] text-muted-foreground">
+            Limpar filtros
+          </Button>
+        )}
+      </div>
+
       {rows.length === 0 ? (
         <EmptyState icon={<ArrowLeftRight className="h-10 w-10" />}
-          title={search ? 'Nada encontrado' : isIncome ? 'Nenhuma entrada neste mês' : 'Nenhuma saída neste mês'}
-          hint={search ? 'Tente outro termo.' : isIncome ? 'Registre salário, freelas, reembolsos…' : 'Registre compras, contas, pagamentos…'} />
+          title={hasActiveFilter ? 'Nada encontrado' : isIncome ? 'Nenhuma entrada neste mês' : 'Nenhuma saída neste mês'}
+          hint={hasActiveFilter ? 'Tente outro termo ou limpe os filtros.' : isIncome ? 'Registre salário, freelas, reembolsos…' : 'Registre compras, contas, pagamentos…'} />
       ) : (
         <>
           {/* tabela desktop */}

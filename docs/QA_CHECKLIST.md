@@ -30,6 +30,9 @@ não corrige "de passagem" sem anotar o que era.
 - [ ] Editar um lançamento existente (valor, conta, categoria, data)
 - [ ] Excluir um lançamento
 - [ ] Descrição aparece como primeiro campo do formulário e primeira coluna da lista
+- [ ] Dois lançamentos na mesma data → aparecem na ordem em que foram lançados, não embaralhados
+- [ ] Filtrar por conta/categoria/responsável (sozinhos e combinados) → lista bate, "Limpar filtros" volta tudo
+- [ ] Buscar por um valor (ex: "150") → encontra lançamentos com esse valor
 - [ ] Tentar lançar acima do saldo/limite → banco recusa com mensagem amigável
 - [ ] Marcar "gasto em conjunto" → aparece certo no resumo por membro
 - [ ] Botão "Lançar" da tab bar mobile abre o formulário toda vez, mesmo repetindo
