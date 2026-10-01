@@ -15,7 +15,7 @@ import { formatBRL, splitInstallments } from '@/lib/money';
 import { formatDayMonth, isoParts, MONTHS_PT, resolveInvoiceRef } from '@/lib/dates';
 import { cn, SHEET_DIALOG_CLASS } from '@/lib/utils';
 import type { Transaction } from '@/types';
-import { Plus, Pencil, Trash2, ArrowLeftRight, Users, AlertTriangle, Lock, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, ArrowLeftRight, ArrowRightLeft, Users, AlertTriangle, Lock, Search } from 'lucide-react';
 
 type Kind = 'income' | 'expense';
 
@@ -50,7 +50,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
   const {
     loading, selectedMonth, today, transactions, accounts, spendingAccounts, cards, activeCategories,
     members, userId, accountName, categoryName, memberName, isPeriodLocked, wouldOverdraw, wouldExceedLimit,
-    addTransaction, updateTransaction, deleteTransaction,
+    addTransaction, updateTransaction, deleteTransaction, createTransfer,
   } = useFinance();
   const { toast } = useToast();
   const { month, year } = selectedMonth;
@@ -65,23 +65,33 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
   const [search, setSearch] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
 
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [transferForm, setTransferForm] = useState(() => ({
+    fromAccountId: '', toAccountId: '', amountCents: 0, dateISO: today, description: '', memberId: '',
+  }));
+  const [transferBusy, setTransferBusy] = useState(false);
+
   const monthTx = useMemo(
     () => transactions.filter((t) => t.refMonth === month + 1 && t.refYear === year)
       .sort((a, b) => (a.date < b.date ? 1 : -1)),
     [transactions, month, year],
   );
-  // pagamento de fatura gera uma transferência = duas transações ligadas (saída da
-  // conta de origem + entrada no cartão). Mostra só a perna de saída, senão o mesmo
-  // pagamento aparece duas vezes na lista (saldo nunca duplicou, só a exibição).
-  const kindTx = useMemo(() => {
-    const cardIds = new Set(cards.map((c) => c.id));
-    return monthTx.filter((t) => {
-      if (isIncome) return t.kind === 'income';
-      if (t.kind === 'income') return false;
-      if (t.kind === 'transfer' && cardIds.has(t.accountId)) return false;
-      return true;
-    });
-  }, [monthTx, isIncome, cards]);
+  // transferência (pagamento de fatura ou entre contas) gera duas transações
+  // ligadas (origem débito + destino crédito). Mostra só a perna de origem,
+  // senão o mesmo movimento aparece duas vezes na lista (saldo nunca duplicou,
+  // só a exibição).
+  const kindTx = useMemo(() => monthTx.filter((t) => {
+    if (isIncome) return t.kind === 'income';
+    if (t.kind === 'income') return false;
+    if (t.kind === 'transfer' && t.transferCredit) return false;
+    return true;
+  }), [monthTx, isIncome]);
+  // a perna exibida (origem) de uma transferência nunca tem cardInvoiceId — só a
+  // perna de destino tem (quando é pagamento de fatura, no cartão). Olha a perna
+  // ligada pra saber se é fatura ou uma transferência genérica entre contas.
+  const transferPeer = (t: Transaction) => transactions.find((p) => p.id === t.transferPeerId);
+  const isInvoicePayment = (t: Transaction) => !!transferPeer(t)?.cardInvoiceId;
+
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return kindTx;
@@ -181,6 +191,38 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
     } finally { setBusy(false); }
   };
 
+  const openTransfer = () => {
+    setTransferForm({
+      fromAccountId: spendingAccounts[0]?.id ?? '', toAccountId: spendingAccounts[1]?.id ?? '',
+      amountCents: 0, dateISO: today, description: '', memberId: userId ?? '',
+    });
+    setShowTransfer(true);
+  };
+  const resetTransfer = () => setShowTransfer(false);
+  const transferOverdrawWarn = transferForm.fromAccountId && transferForm.amountCents > 0
+    && wouldOverdraw(transferForm.fromAccountId, transferForm.amountCents);
+
+  const submitTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferForm.fromAccountId || !transferForm.toAccountId || transferForm.amountCents <= 0) {
+      toast({ title: 'Preencha as contas e o valor', variant: 'destructive' }); return;
+    }
+    if (transferForm.fromAccountId === transferForm.toAccountId) {
+      toast({ title: 'Escolha duas contas diferentes', variant: 'destructive' }); return;
+    }
+    setTransferBusy(true);
+    try {
+      await createTransfer(
+        transferForm.fromAccountId, transferForm.toAccountId, transferForm.amountCents, transferForm.dateISO,
+        transferForm.memberId || null, transferForm.description,
+      );
+      toast({ title: 'Transferência registrada' });
+      resetTransfer();
+    } catch (err) {
+      toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' });
+    } finally { setTransferBusy(false); }
+  };
+
   const newLabel = isIncome ? 'Nova receita' : 'Novo lançamento';
 
   return (
@@ -224,6 +266,9 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
             className="h-10 w-full rounded-[11px] border border-border bg-card pl-10 pr-3 text-[13.5px] text-foreground outline-none placeholder:text-[#A9968C] focus:border-primary"
           />
         </div>
+        <Button variant="outline" onClick={openTransfer} disabled={locked || spendingAccounts.length < 2} className="shrink-0">
+          <ArrowRightLeft className="mr-2 h-4 w-4" /> Transferir
+        </Button>
         <Button onClick={openNew} disabled={locked} className="shrink-0"><Plus className="mr-2 h-4 w-4" /> {newLabel}</Button>
       </div>
 
@@ -258,7 +303,9 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                     )}
                   </span>
                   <span className="text-[13px] tabular-nums text-[#5C4C45]">{formatDayMonth(t.date)}</span>
-                  <span className="truncate text-[12.5px] text-[#5C4C45]">{accountName(t.accountId)}</span>
+                  <span className="truncate text-[12.5px] text-[#5C4C45]">
+                    {accountName(t.accountId)}{t.kind === 'transfer' && ` → ${accountName(transferPeer(t)?.accountId)}`}
+                  </span>
                   <span className="truncate text-[12.5px] text-[#5C4C45]">{t.categoryId ? categoryName(t.categoryId) : '—'}</span>
                   <span className="truncate text-[12.5px] text-[#5C4C45]">
                     {t.shared ? 'Em conjunto' : t.memberId ? memberName(t.memberId).split(' ')[0] : '—'}
@@ -272,8 +319,8 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                     )}
                     {!locked && (
                       <ConfirmDialog
-                        title={t.kind === 'transfer' ? 'Estornar pagamento de fatura?' : 'Excluir lançamento?'}
-                        description={t.kind === 'transfer' ? 'A fatura volta a ficar em aberto.' : 'Essa ação não pode ser desfeita.'}
+                        title={t.kind !== 'transfer' ? 'Excluir lançamento?' : isInvoicePayment(t) ? 'Estornar pagamento de fatura?' : 'Desfazer transferência?'}
+                        description={t.kind !== 'transfer' ? 'Essa ação não pode ser desfeita.' : isInvoicePayment(t) ? 'A fatura volta a ficar em aberto.' : 'O valor volta pra conta de origem.'}
                         confirmLabel={t.kind === 'transfer' ? 'Estornar' : 'Excluir'}
                         onConfirm={() => deleteTransaction(t.id)}
                         trigger={<button type="button" className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>}
@@ -305,7 +352,8 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                     <span className={cn('shrink-0 text-[14px] font-bold tabular-nums', valClass)}>{sign}{formatBRL(t.amountCents)}</span>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11.5px] text-[#7E6E66]">
-                    <span>{formatDayMonth(t.date)}</span><span>·</span><span>{accountName(t.accountId)}</span>
+                    <span>{formatDayMonth(t.date)}</span><span>·</span>
+                    <span>{accountName(t.accountId)}{t.kind === 'transfer' && ` → ${accountName(transferPeer(t)?.accountId)}`}</span>
                     {t.categoryId && <><span>·</span><span>{categoryName(t.categoryId)}</span></>}
                     {t.shared
                       ? <><span>·</span><span>em conjunto</span></>
@@ -321,8 +369,8 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                         </Button>
                       )}
                       <ConfirmDialog
-                        title={t.kind === 'transfer' ? 'Estornar pagamento de fatura?' : 'Excluir lançamento?'}
-                        description={t.kind === 'transfer' ? 'A fatura volta a ficar em aberto.' : 'Essa ação não pode ser desfeita.'}
+                        title={t.kind !== 'transfer' ? 'Excluir lançamento?' : isInvoicePayment(t) ? 'Estornar pagamento de fatura?' : 'Desfazer transferência?'}
+                        description={t.kind !== 'transfer' ? 'Essa ação não pode ser desfeita.' : isInvoicePayment(t) ? 'A fatura volta a ficar em aberto.' : 'O valor volta pra conta de origem.'}
                         confirmLabel={t.kind === 'transfer' ? 'Estornar' : 'Excluir'}
                         onConfirm={() => deleteTransaction(t.id)}
                         trigger={<Button variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>}
@@ -475,6 +523,74 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
               <Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>
               <Button type="submit" disabled={busy || !!overdrawWarn || !!limitWarn}>
                 {busy ? 'Salvando…' : editing ? 'Salvar' : 'Registrar'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* dialog transferência entre contas */}
+      <Dialog open={showTransfer} onOpenChange={(o) => (o ? setShowTransfer(true) : resetTransfer())}>
+        <DialogContent className={cn('sm:max-w-md', SHEET_DIALOG_CLASS)}>
+          <DialogHeader><DialogTitle>Transferir entre contas</DialogTitle></DialogHeader>
+          <form onSubmit={submitTransfer} className="space-y-4">
+            <p className="text-[12px] text-muted-foreground">
+              Move dinheiro de uma conta pra outra — não entra como receita nem despesa. Pra cartão, use "Pagar fatura" em Cartões.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>De</Label>
+                <Select value={transferForm.fromAccountId} onValueChange={(v) => setTransferForm((f) => ({ ...f, fromAccountId: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Origem" /></SelectTrigger>
+                  <SelectContent>{spendingAccounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Para</Label>
+                <Select value={transferForm.toAccountId} onValueChange={(v) => setTransferForm((f) => ({ ...f, toAccountId: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Destino" /></SelectTrigger>
+                  <SelectContent>
+                    {spendingAccounts.filter((a) => a.id !== transferForm.fromAccountId)
+                      .map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Valor</Label>
+                <MoneyInput valueCents={transferForm.amountCents}
+                  onChangeCents={(c) => setTransferForm((f) => ({ ...f, amountCents: c }))} autoFocus required />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Data</Label>
+                <Input type="date" value={transferForm.dateISO}
+                  onChange={(e) => setTransferForm((f) => ({ ...f, dateISO: e.target.value }))} required />
+              </div>
+            </div>
+            {transferOverdrawWarn && (
+              <p className="flex items-start gap-2 rounded-[12px] border border-[#E7B7A6] bg-[#FBE9E4] p-3 text-[12px] text-[#8A3B25]">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                Saldo insuficiente na conta de origem — ajuste o valor ou escolha outra conta.
+              </p>
+            )}
+            <div className="space-y-1.5">
+              <Label>Descrição</Label>
+              <Input value={transferForm.description}
+                onChange={(e) => setTransferForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="Opcional — ex: Reserva de emergência" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Quem fez</Label>
+              <Select value={transferForm.memberId} onValueChange={(v) => setTransferForm((f) => ({ ...f, memberId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
+                <SelectContent>{members.map((m) => <SelectItem key={m.userId} value={m.userId}>{m.profile?.name ?? '—'}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={resetTransfer}>Cancelar</Button>
+              <Button type="submit" disabled={transferBusy || !!transferOverdrawWarn}>
+                {transferBusy ? 'Transferindo…' : 'Transferir'}
               </Button>
             </DialogFooter>
           </form>

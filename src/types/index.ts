@@ -148,6 +148,8 @@ export interface Transaction {
   installmentNo?: number | null;
   installmentOf?: number | null;
   transferPeerId?: UUID | null;
+  /** só relevante p/ kind='transfer': true = perna de destino (credita o saldo), false = origem (debita). */
+  transferCredit?: boolean;
   note?: string | null;
   /** gasto feito em conjunto pelos membros — marcador para o resumo, não divide contas */
   shared: boolean;

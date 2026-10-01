@@ -33,6 +33,12 @@ não corrige "de passagem" sem anotar o que era.
 - [ ] Tentar lançar acima do saldo/limite → banco recusa com mensagem amigável
 - [ ] Marcar "gasto em conjunto" → aparece certo no resumo por membro
 - [ ] Botão "Lançar" da tab bar mobile abre o formulário toda vez, mesmo repetindo
+- [ ] "Transferir" entre duas contas de dinheiro → debita a origem, credita o destino, não aparece em Entradas/Saídas do mês nem no Resultado
+- [ ] Transferência aparece só uma vez na lista (perna de origem, com "Conta A → Conta B"), não duplicada
+- [ ] Transferir mais que o saldo disponível → recusa com mensagem amigável (banco e front)
+- [ ] Tentar transferir pra/de um cartão → recusa, orienta a usar "Pagar fatura"
+- [ ] Excluir ("Desfazer transferência") → remove as duas pernas, saldo das duas contas volta ao normal
+- [ ] Pagar fatura continua funcionando igual (saldo do cartão e da conta de origem corretos) depois da mudança de `transfer_credit`
 
 ## Fixos (recorrências)
 

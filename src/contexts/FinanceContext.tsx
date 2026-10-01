@@ -65,7 +65,8 @@ const mapTransaction = (r: any): Transaction => ({
   categoryId: r.category_id, memberId: r.member_id, cardInvoiceId: r.card_invoice_id, recurrenceId: r.recurrence_id,
   occMonth: r.occ_month ?? null, occYear: r.occ_year ?? null,
   installmentGroup: r.installment_group, installmentNo: r.installment_no, installmentOf: r.installment_of,
-  transferPeerId: r.transfer_peer_id, note: r.note, shared: !!r.shared, createdBy: r.created_by, source: r.source ?? 'app',
+  transferPeerId: r.transfer_peer_id, transferCredit: !!r.transfer_credit,
+  note: r.note, shared: !!r.shared, createdBy: r.created_by, source: r.source ?? 'app',
   splits: (r.transaction_splits ?? []).map((s: any) => ({
     id: s.id, transactionId: s.transaction_id, memberId: s.member_id, shareCents: Number(s.share_cents),
   })),
@@ -257,6 +258,8 @@ interface FinanceApi {
   updateTransaction(id: UUID, patch: Partial<NewTransaction>): Promise<void>;
   deleteTransaction(id: UUID): Promise<void>;
   setTransactionStatus(id: UUID, status: TxStatus): Promise<void>;
+  /** Move dinheiro entre duas contas (nenhuma pode ser cartão — pra cartão, use payCardInvoice). Não conta como receita/despesa. */
+  createTransfer(fromAccountId: UUID, toAccountId: UUID, amountCents: number, dateISO: string, memberId: UUID | null, description?: string): Promise<void>;
   /** `realAmountCents` = valor conferido (banco/fatura real), se diferente da soma dos lançamentos — cria um ajuste automático pela diferença. */
   payCardInvoice(cardId: UUID, month: number, year: number, fromAccountId: UUID, dateISO: string, memberId: UUID | null, realAmountCents?: number | null): Promise<void>;
   unpayCardInvoice(invoiceId: UUID): Promise<void>;
@@ -630,6 +633,26 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     await reload();
   };
 
+  const createTransfer: FinanceApi['createTransfer'] = async (fromAccountId, toAccountId, amountCents, dateISO, memberId, description) => {
+    const wid = requireWallet();
+    if (fromAccountId === toAccountId) throw new Error('Escolha duas contas diferentes.');
+    const from = accounts.find((a) => a.id === fromAccountId);
+    const to = accounts.find((a) => a.id === toAccountId);
+    if (from?.kind === 'card' || to?.kind === 'card') throw new Error('Pra cartão, use "Pagar fatura".');
+    if (from) {
+      const bal = accountBalance(from, transactions, today);
+      if (bal - amountCents < 0) throw new Error(`Saldo insuficiente em ${from.name} — disponível: ${formatBRL(bal)}.`);
+    }
+    await apiFetch('/actions', {
+      method: 'POST',
+      body: JSON.stringify({
+        resource: 'transfer', walletId: wid, action: 'create',
+        fromAccountId, toAccountId, amountCents, dateISO, memberId: memberId ?? null, description: description ?? null,
+      }),
+    });
+    await reload();
+  };
+
   const payCardInvoice: FinanceApi['payCardInvoice'] = async (cardId, month, year, fromAccountId, dateISO, memberId, realAmountCents) => {
     const wid = requireWallet();
     const card = accounts.find((a) => a.id === cardId);
@@ -864,7 +887,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     updateProfile, updateOnboarding, createWallet, renameWallet, deleteWallet, addMemberByEmail, removeMember,
     addAccount, updateAccount, deleteAccount,
     addCategory, updateCategory, deleteCategory, setCategoryBudget, clearCategoryBudget,
-    addTransaction, updateTransaction, deleteTransaction, setTransactionStatus,
+    addTransaction, updateTransaction, deleteTransaction, setTransactionStatus, createTransfer,
     payCardInvoice, unpayCardInvoice, setInvoiceStatus,
     addRecurrence, updateRecurrence, deleteRecurrence,
     markRecurrenceOccurrence, setRecurrenceOccurrenceAmount, unmarkRecurrenceOccurrence,

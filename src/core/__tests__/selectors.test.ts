@@ -62,11 +62,19 @@ describe('accountBalance', () => {
     expect(accountBalance(checking, [t], '2026-06-30', 'X')).toBe(50000);
   });
 
-  it('transferência: saída em conta de dinheiro, entrada em cartão', () => {
+  it('transferência: a direção vem de transferCredit, não do tipo da conta', () => {
     const card = acc({ id: 'k', kind: 'card' });
     const t = tx({ kind: 'transfer', amountCents: 8000 });
-    expect(accountBalance(checking, [{ ...t, accountId: 'c' }], '2026-06-30')).toBe(50000 - 8000);
-    expect(accountBalance(card, [{ ...t, accountId: 'k' }], '2026-06-30')).toBe(0 + 8000);
+    // pagamento de fatura: origem debita (transferCredit false/ausente), cartão credita
+    expect(accountBalance(checking, [{ ...t, accountId: 'c', transferCredit: false }], '2026-06-30')).toBe(50000 - 8000);
+    expect(accountBalance(card, [{ ...t, accountId: 'k', transferCredit: true }], '2026-06-30')).toBe(0 + 8000);
+  });
+
+  it('transferência genérica entre duas contas de dinheiro (nenhuma é cartão)', () => {
+    const savings = acc({ id: 's', kind: 'checking', openingBalanceCents: 0 });
+    const t = tx({ kind: 'transfer', amountCents: 15000 });
+    expect(accountBalance(checking, [{ ...t, accountId: 'c', transferCredit: false }], '2026-06-30')).toBe(50000 - 15000);
+    expect(accountBalance(savings, [{ ...t, accountId: 's', transferCredit: true }], '2026-06-30')).toBe(0 + 15000);
   });
 });
 

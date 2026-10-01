@@ -1,11 +1,11 @@
 // POST /api/v1/actions   body: { resource, walletId, action, ... }
-// resource: 'occurrence' | 'invoice' | 'period'
+// resource: 'occurrence' | 'invoice' | 'period' | 'transfer'
 //
 // Agrupa os endpoints "de verbo" (não são CRUD simples) num único arquivo —
 // o plano Hobby da Vercel limita a 12 Serverless Functions por deployment.
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
-  loadWalletBundle, markOccurrence, unmarkOccurrence, payInvoice, unpayInvoice,
+  loadWalletBundle, markOccurrence, unmarkOccurrence, payInvoice, unpayInvoice, createTransfer,
 } from '../_lib/finance.js';
 import { requireMember, requireUser } from './_util.js';
 
@@ -32,6 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'occurrence': await occurrence(req, res, walletId, user.id, body); return;
       case 'invoice': await invoice(req, res, db, walletId, user.id, body); return;
       case 'period': await period(req, res, db, walletId, user.id, body); return;
+      case 'transfer': await transfer(req, res, walletId, user.id, body); return;
       default: res.status(400).json({ error: 'invalid_resource' });
     }
   } catch (e) {
@@ -143,4 +144,17 @@ async function period(req: VercelRequest, res: VercelResponse, db: any, walletId
   }
 
   res.status(400).json({ error: 'invalid_action' });
+}
+
+// --- transfer (espelha createTransfer — transferência entre contas, não conta como receita/despesa) ---
+async function transfer(req: VercelRequest, res: VercelResponse, walletId: string, userId: string, body: Body) {
+  const { action, fromAccountId, toAccountId, amountCents, dateISO } = body;
+  if (action !== 'create') { res.status(400).json({ error: 'invalid_action' }); return; }
+  if (!fromAccountId || !toAccountId || !amountCents || amountCents <= 0 || !dateISO) {
+    res.status(400).json({ error: 'missing_fields' }); return;
+  }
+  await createTransfer(
+    walletId, fromAccountId, toAccountId, amountCents, dateISO, body.memberId ?? null, userId, body.description ?? null,
+  );
+  res.status(200).json({ ok: true });
 }

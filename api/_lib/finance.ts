@@ -371,7 +371,7 @@ export async function payInvoice(
   const { data: outTx, error: outErr } = await db.from('transactions').insert({
     wallet_id: walletId, account_id: fromAccountId, kind: 'transfer', amount_cents: totalToPay,
     date: dateISO, ref_month: pm + 1, ref_year: py, status: 'cleared', description: label,
-    member_id: memberId, created_by: createdBy,
+    member_id: memberId, created_by: createdBy, transfer_credit: false,
   }).select('id').single();
   if (outErr) throw outErr;
 
@@ -379,6 +379,7 @@ export async function payInvoice(
     wallet_id: walletId, account_id: cardId, kind: 'transfer', amount_cents: totalToPay,
     date: dateISO, ref_month: pm + 1, ref_year: py, status: 'cleared', description: label,
     member_id: memberId, transfer_peer_id: outTx.id, card_invoice_id: invoice.id, created_by: createdBy,
+    transfer_credit: true,
   }).select('id').single();
   if (inErr) throw inErr;
 
@@ -386,6 +387,47 @@ export async function payInvoice(
   const { error: statusErr } = await db.from('card_invoices')
     .update({ status: 'paid', paid_transaction_id: outTx.id }).eq('id', invoice.id);
   if (statusErr) throw statusErr;
+}
+
+/**
+ * Transferência genérica entre duas contas que não sejam cartão (pra cartão,
+ * use payInvoice — já resolve fatura/status). Não conta como receita nem
+ * despesa: as duas pernas são `kind: 'transfer'`, e `transfer_credit` marca
+ * qual delas credita o saldo (a outra debita).
+ */
+export async function createTransfer(
+  walletId: string, fromAccountId: string, toAccountId: string, amountCents: number,
+  dateISO: string, memberId: string | null, createdBy: string, description?: string | null,
+): Promise<void> {
+  if (fromAccountId === toAccountId) throw new Error('Escolha duas contas diferentes.');
+  const db = admin();
+  const { data: accs, error: accErr } = await db.from('accounts')
+    .select('id, kind, archived').eq('wallet_id', walletId).in('id', [fromAccountId, toAccountId]);
+  if (accErr) throw accErr;
+  const from = accs?.find((a) => a.id === fromAccountId);
+  const to = accs?.find((a) => a.id === toAccountId);
+  if (!from || !to) throw new Error('Conta inválida.');
+  if (from.kind === 'card' || to.kind === 'card') throw new Error('Pra cartão, use "Pagar fatura".');
+  if (from.archived || to.archived) throw new Error('Reative a conta arquivada antes de transferir.');
+
+  const { y, m } = isoParts(dateISO);
+  const label = (description ?? '').trim() || 'Transferência entre contas';
+
+  const { data: outTx, error: outErr } = await db.from('transactions').insert({
+    wallet_id: walletId, account_id: fromAccountId, kind: 'transfer', amount_cents: amountCents,
+    date: dateISO, ref_month: m + 1, ref_year: y, status: 'cleared', description: label,
+    member_id: memberId, created_by: createdBy, transfer_credit: false,
+  }).select('id').single();
+  if (outErr) throw outErr;
+
+  const { data: inTx, error: inErr } = await db.from('transactions').insert({
+    wallet_id: walletId, account_id: toAccountId, kind: 'transfer', amount_cents: amountCents,
+    date: dateISO, ref_month: m + 1, ref_year: y, status: 'cleared', description: label,
+    member_id: memberId, created_by: createdBy, transfer_peer_id: outTx.id, transfer_credit: true,
+  }).select('id').single();
+  if (inErr) throw inErr;
+
+  await db.from('transactions').update({ transfer_peer_id: inTx.id }).eq('id', outTx.id);
 }
 
 export interface RecurrenceInput {

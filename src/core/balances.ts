@@ -8,7 +8,9 @@ export function accountBalance(acc: Account, txs: Transaction[], uptoISO: string
     if (t.id === excludeId || t.accountId !== acc.id || t.status !== 'cleared' || t.date > uptoISO) continue;
     if (t.kind === 'income') total += t.amountCents;
     else if (t.kind === 'expense') total -= t.amountCents;
-    else total += acc.kind === 'card' ? t.amountCents : -t.amountCents;
+    // transfer: a direção vem do dado (transferCredit), não do tipo da conta —
+    // permite transferência genérica entre quaisquer duas contas, não só pra cartão.
+    else total += t.transferCredit ? t.amountCents : -t.amountCents;
   }
   return total;
 }
