@@ -70,10 +70,18 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
       .sort((a, b) => (a.date < b.date ? 1 : -1)),
     [transactions, month, year],
   );
-  const kindTx = useMemo(
-    () => monthTx.filter((t) => (isIncome ? t.kind === 'income' : t.kind !== 'income')),
-    [monthTx, isIncome],
-  );
+  // pagamento de fatura gera uma transferência = duas transações ligadas (saída da
+  // conta de origem + entrada no cartão). Mostra só a perna de saída, senão o mesmo
+  // pagamento aparece duas vezes na lista (saldo nunca duplicou, só a exibição).
+  const kindTx = useMemo(() => {
+    const cardIds = new Set(cards.map((c) => c.id));
+    return monthTx.filter((t) => {
+      if (isIncome) return t.kind === 'income';
+      if (t.kind === 'income') return false;
+      if (t.kind === 'transfer' && cardIds.has(t.accountId)) return false;
+      return true;
+    });
+  }, [monthTx, isIncome, cards]);
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return kindTx;
