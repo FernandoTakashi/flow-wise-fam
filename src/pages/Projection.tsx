@@ -70,13 +70,22 @@ export default function Projection() {
 
       const yieldAmount = invested > 0 ? Math.round(invested * monthlyRate) : 0;
 
-      const income = i === 0 ? cur.pendingIncomeCents : recIncome;
-      const expenses = i === 0
+      // delta de caixa: só o que AINDA falta acontecer (o que já caiu está em
+      // cashBalanceCents, a base de `cash`). Em meses futuros é o total mesmo,
+      // porque nada deles ainda aconteceu.
+      const incomeDelta = i === 0 ? cur.pendingIncomeCents : recIncome;
+      const expenseDelta = i === 0
         ? cur.pendingExpenseCents
         : recExpense + futureCard + avgVariable;
 
       invested += i > 0 ? yieldAmount : 0;
-      cash += income - expenses;
+      cash += incomeDelta - expenseDelta;
+
+      // exibição: total do mês (realizado + pendente), não só o que falta —
+      // senão a linha do mês corrente "zera" conforme as coisas vão sendo
+      // recebidas/pagas, mesmo que o mês inteiro tenha tido bastante movimento.
+      const income = i === 0 ? cur.incomeRealizedCents + cur.pendingIncomeCents : incomeDelta;
+      const expenses = i === 0 ? cur.expenseRealizedCents + cur.pendingExpenseCents : expenseDelta;
 
       rows.push({
         label: `${MONTHS_PT_SHORT[m]}/${String(y).slice(2)}`,
