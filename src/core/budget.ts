@@ -60,22 +60,34 @@ export function investedCents(d: FinanceData, month: number, year: number): numb
     .reduce((s, i) => s + i.amountCents, 0);
 }
 
+/** Soma das recorrências de saída ativas vinculadas à categoria — o valor contratado, não uma média de histórico. */
+function fixedCategoryCents(d: FinanceData, categoryId: UUID, month: number, year: number): number {
+  return recurrenceOccurrences(d, month, year)
+    .filter((o) => o.recurrence.kind === 'expense' && o.recurrence.categoryId === categoryId)
+    .reduce((s, o) => s + o.estimatedCents, 0);
+}
+
 function hasActiveExpenseRecurrence(d: FinanceData, categoryId: UUID, month: number, year: number): boolean {
   return recurrenceOccurrences(d, month, year)
     .some((o) => o.recurrence.kind === 'expense' && o.recurrence.categoryId === categoryId);
 }
 
+/**
+ * Média dos últimos 3 meses pra categorias sem recorrência. Divide sempre por
+ * AVG_MONTHS (não só pelos meses com lançamento) — um gasto esporádico/anual
+ * (ex.: seguro, IPVA) vira uma provisão mensal realista, em vez do valor
+ * cheio do único mês em que aconteceu.
+ */
 function avgSpentCents(d: FinanceData, categoryId: UUID, month: number, year: number): number {
-  let sum = 0; let count = 0;
+  let sum = 0;
   for (let k = 1; k <= AVG_MONTHS; k += 1) {
     const dt = new Date(year, month - k, 1);
-    const total = d.transactions
+    sum += d.transactions
       .filter((t) => t.kind === 'expense' && t.status === 'cleared' && t.categoryId === categoryId
         && t.refMonth === dt.getMonth() + 1 && t.refYear === dt.getFullYear())
       .reduce((s, t) => s + t.amountCents, 0);
-    if (total > 0) { sum += total; count += 1; }
   }
-  return count > 0 ? Math.round(sum / count) : 0;
+  return Math.round(sum / AVG_MONTHS);
 }
 
 function spentThisMonth(d: FinanceData, categoryId: UUID, month: number, year: number): number {
@@ -97,7 +109,7 @@ export function computeBudget(d: FinanceData, month: number, year: number): Budg
     const fixed = hasActiveExpenseRecurrence(d, c.id, month, year);
     const group: EffectiveBudgetGroup = fixed ? 'necessidade' : (c.budgetGroup ?? null);
     if (!fixed && group == null) unclassifiedCount += 1;
-    const suggestedCents = avgSpentCents(d, c.id, month, year);
+    const suggestedCents = fixed ? fixedCategoryCents(d, c.id, month, year) : avgSpentCents(d, c.id, month, year);
     const budgetCents = budgetByCategory.get(c.id) ?? suggestedCents;
     return {
       categoryId: c.id, name: c.name, group, fixed, budgetCents, suggestedCents,

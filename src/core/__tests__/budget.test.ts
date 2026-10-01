@@ -144,12 +144,41 @@ describe('computeBudget', () => {
         tx({ categoryId: 'combustivel', amountCents: 30000, refMonth: 4, refYear: 2026 }),
       ],
     });
-    const b = computeBudget(d, 5, 2026); // junho — média de abr/mai (março não tem lançamento)
-    expect(b.categories[0].suggestedCents).toBe(25000);
-    expect(b.categories[0].budgetCents).toBe(25000); // sem budget salvo, cai na sugestão
+    // junho — soma abr+mai+mar (mar sem lançamento) / 3, não só a média dos meses com lançamento
+    const b = computeBudget(d, 5, 2026);
+    expect(b.categories[0].suggestedCents).toBe(16667); // (20000+30000+0)/3
+    expect(b.categories[0].budgetCents).toBe(16667); // sem budget salvo, cai na sugestão
 
     const d2 = base({ ...d, categoryBudgets: [budget({ categoryId: 'combustivel', amountCents: 35000 })] });
     const b2 = computeBudget(d2, 5, 2026);
     expect(b2.categories[0].budgetCents).toBe(35000);
+  });
+
+  it('gasto esporádico (1 mês em 3) não vira sugestão do valor cheio — divide sempre por 3', () => {
+    const d = base({
+      categories: [cat({ id: 'seguro', budgetGroup: 'necessidade' })],
+      transactions: [
+        // seguro anual pago uma única vez nos últimos 3 meses
+        tx({ categoryId: 'seguro', amountCents: 300000, refMonth: 4, refYear: 2026 }),
+      ],
+    });
+    const b = computeBudget(d, 5, 2026); // junho
+    expect(b.categories[0].suggestedCents).toBe(100000); // 300000 / 3, não 300000 cheio
+  });
+
+  it('categoria fixa usa o valor da recorrência como sugestão, não a média do histórico real', () => {
+    const d = base({
+      categories: [cat({ id: 'internet', budgetGroup: null })],
+      recurrences: [
+        rec({ id: 'net', kind: 'expense', amountCents: 12000, categoryId: 'internet' }),
+      ],
+      transactions: [
+        // pagamento com multa/atraso num mês do histórico — não deve distorcer a sugestão
+        tx({ categoryId: 'internet', amountCents: 25000, refMonth: 5, refYear: 2026 }),
+      ],
+    });
+    const b = computeBudget(d, 5, 2026);
+    expect(b.categories[0].fixed).toBe(true);
+    expect(b.categories[0].suggestedCents).toBe(12000); // valor contratado, não a média com a multa
   });
 });
