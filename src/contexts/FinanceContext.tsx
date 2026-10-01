@@ -249,8 +249,6 @@ interface FinanceApi {
   payCardInvoice(cardId: UUID, month: number, year: number, fromAccountId: UUID, dateISO: string, memberId: UUID | null, realAmountCents?: number | null): Promise<void>;
   unpayCardInvoice(invoiceId: UUID): Promise<void>;
   setInvoiceStatus(invoiceId: UUID, status: Extract<InvoiceStatus, 'open' | 'closed'>): Promise<void>;
-  /** Manda a fatura (PDF ou foto) pra IA ler o valor total — pra conferir antes de pagar. */
-  readInvoiceFile(fileBase64: string, mediaType: string): Promise<{ amountCents: number | null; reply: string }>;
 
   addRecurrence(r: NewRecurrence): Promise<void>;
   updateRecurrence(id: UUID, patch: Partial<NewRecurrence> & { active?: boolean }): Promise<void>;
@@ -630,14 +628,6 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     await reload();
   };
 
-  const readInvoiceFile: FinanceApi['readInvoiceFile'] = async (fileBase64, mediaType) => {
-    const wid = requireWallet();
-    return apiFetch('/actions', {
-      method: 'POST',
-      body: JSON.stringify({ resource: 'invoice', walletId: wid, action: 'readFile', fileBase64, mediaType }),
-    });
-  };
-
   const unpayCardInvoice: FinanceApi['unpayCardInvoice'] = async (invoiceId) => {
     const wid = requireWallet();
     await apiFetch('/actions', { method: 'POST', body: JSON.stringify({ resource: 'invoice', walletId: wid, action: 'unpay', invoiceId }) });
@@ -843,7 +833,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     addAccount, updateAccount, deleteAccount,
     addCategory, updateCategory, deleteCategory,
     addTransaction, updateTransaction, deleteTransaction, setTransactionStatus,
-    payCardInvoice, unpayCardInvoice, setInvoiceStatus, readInvoiceFile,
+    payCardInvoice, unpayCardInvoice, setInvoiceStatus,
     addRecurrence, updateRecurrence, deleteRecurrence,
     markRecurrenceOccurrence, setRecurrenceOccurrenceAmount, unmarkRecurrenceOccurrence,
     addInvestment, updateInvestment, deleteInvestment,

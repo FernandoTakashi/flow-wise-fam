@@ -14,19 +14,10 @@ import { formatBRL } from '@/lib/money';
 import { formatDayMonth, MONTHS_PT } from '@/lib/dates';
 import { cn, SHEET_DIALOG_CLASS } from '@/lib/utils';
 import type { Account } from '@/types';
-import { CreditCard as CardIcon, Plus, Pencil, Trash2, Upload, Loader2 } from 'lucide-react';
+import { CreditCard as CardIcon, Plus, Pencil, Trash2 } from 'lucide-react';
 
 interface FormState { name: string; limitCents: number; closingDay: string; dueDay: string; }
 const emptyForm = (): FormState => ({ name: '', limitCents: 0, closingDay: '', dueDay: '' });
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 const ROW_LABEL: Record<string, string> = { variavel: 'Variável', fixo: 'Fixo', previsto: 'Previsto' };
 const PREVIEW_ROWS = 5;
@@ -35,7 +26,7 @@ export default function Cards() {
   const {
     loading, selectedMonth, today, cards, spendingAccounts, members, userId,
     invoiceView, cardCommittedCents, cardAvailableCents, isPeriodLocked,
-    addAccount, updateAccount, deleteAccount, payCardInvoice, unpayCardInvoice, setInvoiceStatus, readInvoiceFile,
+    addAccount, updateAccount, deleteAccount, payCardInvoice, unpayCardInvoice, setInvoiceStatus,
   } = useFinance();
   const { toast } = useToast();
   const { month, year } = selectedMonth;
@@ -51,8 +42,6 @@ export default function Cards() {
   const [payFrom, setPayFrom] = useState('');
   const [payer, setPayer] = useState(userId ?? '');
   const [realAmountCents, setRealAmountCents] = useState<number | null>(null);
-  const [checkingFile, setCheckingFile] = useState(false);
-  const [fileError, setFileError] = useState<string | null>(null);
 
   const globals = useMemo(() => {
     let limit = 0; let committed = 0; let posted = 0; let projected = 0;
@@ -100,21 +89,6 @@ export default function Cards() {
     } catch (err) {
       toast({ title: 'Erro', description: (err as Error).message, variant: 'destructive' });
     } finally { setBusy(false); }
-  };
-
-  const handleInvoiceFile = async (file: File) => {
-    setCheckingFile(true);
-    setFileError(null);
-    try {
-      const base64 = await fileToBase64(file);
-      const result = await readInvoiceFile(base64, file.type || 'application/pdf');
-      if (result.amountCents) setRealAmountCents(result.amountCents);
-      else setFileError(result.reply || 'Não consegui ler o valor nesse arquivo — digite manualmente abaixo.');
-    } catch (err) {
-      setFileError((err as Error).message);
-    } finally {
-      setCheckingFile(false);
-    }
   };
 
   const confirmPay = async () => {
@@ -268,7 +242,7 @@ export default function Cards() {
                       <Button className="h-[38px] flex-1" disabled={locked || view.postedCents <= 0}
                         onClick={() => {
                           setPayDialog({ card, total: view.postedCents }); setPayFrom(spendingAccounts[0]?.id ?? ''); setPayer(userId ?? '');
-                          setRealAmountCents(null); setFileError(null);
+                          setRealAmountCents(null);
                         }}>
                         Pagar fatura
                       </Button>
@@ -336,20 +310,8 @@ export default function Cards() {
             <div className="rounded-lg bg-muted/50 p-2 text-center text-sm">Lançado no app: <strong className="tabular-nums">{payDialog && formatBRL(payDialog.total)}</strong></div>
 
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <Label>Valor real da fatura</Label>
-                <label className={cn(
-                  'flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-input px-2.5 text-[12px] font-medium text-foreground hover:bg-muted',
-                  checkingFile && 'pointer-events-none opacity-60',
-                )}>
-                  {checkingFile ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                  Conferir arquivo
-                  <input type="file" accept="image/*,application/pdf" className="hidden" disabled={checkingFile}
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleInvoiceFile(f); e.target.value = ''; }} />
-                </label>
-              </div>
+              <Label>Valor real da fatura</Label>
               <MoneyInput valueCents={realAmountCents ?? payDialog?.total ?? 0} onChangeCents={setRealAmountCents} />
-              {fileError && <p className="text-[12px] text-destructive">{fileError}</p>}
               {payDialog && realAmountCents != null && realAmountCents !== payDialog.total && (
                 <p className={cn('text-[12px] font-medium', realAmountCents > payDialog.total ? 'text-red-600' : 'text-emerald-600')}>
                   Diferença de {formatBRL(Math.abs(realAmountCents - payDialog.total))} — vou lançar um "Ajuste de fatura" automático pra fechar certinho.

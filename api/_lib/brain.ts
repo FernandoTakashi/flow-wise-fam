@@ -302,58 +302,6 @@ export async function interpretImage(
   }
 }
 
-export type InvoiceFileMediaType = 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf';
-
-const InvoiceFileSchema = z.object({
-  found: z.boolean().describe('true se o arquivo é uma fatura de cartão com valor total legível'),
-  amount_cents: z.number().int().nullable().describe('valor TOTAL da fatura (o que precisa pagar), em centavos'),
-  reply: z.string().describe('se found=false, explica objetivamente o que não deu pra ler; se found=true, deixe vazio'),
-});
-
-/**
- * Lê um arquivo de fatura de cartão (PDF ou foto) mandado pelo app — pra
- * conferir contra a soma dos lançamentos antes de pagar. Função isolada do
- * resto do modo carteira: não recebe `ctx`, só extrai um número do arquivo.
- */
-export async function interpretInvoiceFile(
-  fileBase64: string, mediaType: InvoiceFileMediaType,
-): Promise<{ amountCents: number | null; reply: string }> {
-  const key = env.anthropicKey();
-  if (!key) return { amountCents: null, reply: 'Configure ANTHROPIC_API_KEY pra eu ler o arquivo da fatura.' };
-
-  try {
-    const client = anthropic();
-    const isPdf = mediaType === 'application/pdf';
-    const response = await client.messages.parse({
-      model: 'claude-haiku-4-5',
-      max_tokens: 500,
-      system:
-        'Você lê faturas de cartão de crédito (PDF ou foto) pra conferir o valor contra o que já foi lançado ' +
-        'num app financeiro. Extraia SÓ o valor TOTAL a pagar da fatura (geralmente destacado como "total da fatura", ' +
-        '"valor total" ou "pagamento mínimo" não conta — é o total, não o mínimo). ' +
-        'Se não der pra identificar um valor total de fatura claro no arquivo, found=false e explique objetivamente por quê em `reply`.',
-      messages: [{
-        role: 'user',
-        content: [
-          isPdf
-            ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fileBase64 } }
-            : { type: 'image', source: { type: 'base64', media_type: mediaType, data: fileBase64 } },
-          { type: 'text', text: 'Qual o valor TOTAL dessa fatura?' },
-        ],
-      }],
-      output_config: { format: zodOutputFormat(InvoiceFileSchema) },
-    });
-
-    const p = response.parsed_output;
-    if (!p) throw new Error('sem parsed_output');
-    if (p.found && p.amount_cents && p.amount_cents > 0) return { amountCents: p.amount_cents, reply: '' };
-    return { amountCents: null, reply: p.reply?.trim() || 'Não consegui identificar o valor total nesse arquivo.' };
-  } catch (e) {
-    console.error('[brain] interpretInvoiceFile falhou:', (e as Error).message ?? e);
-    return { amountCents: null, reply: 'Não consegui ler esse arquivo agora. Tenta de novo ou digita o valor manualmente.' };
-  }
-}
-
 // ---------------------------------------------------------------------------
 // "Dividir" (grupo do Telegram) — schema, prompt e tipo TOTALMENTE separados
 // do modo carteira. Isso não é só organização: o prompt abaixo nem sabe que
