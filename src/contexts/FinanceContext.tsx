@@ -245,9 +245,12 @@ interface FinanceApi {
   updateTransaction(id: UUID, patch: Partial<NewTransaction>): Promise<void>;
   deleteTransaction(id: UUID): Promise<void>;
   setTransactionStatus(id: UUID, status: TxStatus): Promise<void>;
-  payCardInvoice(cardId: UUID, month: number, year: number, fromAccountId: UUID, dateISO: string, memberId: UUID | null): Promise<void>;
+  /** `realAmountCents` = valor conferido (banco/fatura real), se diferente da soma dos lançamentos — cria um ajuste automático pela diferença. */
+  payCardInvoice(cardId: UUID, month: number, year: number, fromAccountId: UUID, dateISO: string, memberId: UUID | null, realAmountCents?: number | null): Promise<void>;
   unpayCardInvoice(invoiceId: UUID): Promise<void>;
   setInvoiceStatus(invoiceId: UUID, status: Extract<InvoiceStatus, 'open' | 'closed'>): Promise<void>;
+  /** Manda a fatura (PDF ou foto) pra IA ler o valor total — pra conferir antes de pagar. */
+  readInvoiceFile(fileBase64: string, mediaType: string): Promise<{ amountCents: number | null; reply: string }>;
 
   addRecurrence(r: NewRecurrence): Promise<void>;
   updateRecurrence(id: UUID, patch: Partial<NewRecurrence> & { active?: boolean }): Promise<void>;
@@ -600,7 +603,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     await reload();
   };
 
-  const payCardInvoice: FinanceApi['payCardInvoice'] = async (cardId, month, year, fromAccountId, dateISO, memberId) => {
+  const payCardInvoice: FinanceApi['payCardInvoice'] = async (cardId, month, year, fromAccountId, dateISO, memberId, realAmountCents) => {
     const wid = requireWallet();
     const card = accounts.find((a) => a.id === cardId);
     const fromAcc = accounts.find((a) => a.id === fromAccountId);
@@ -610,20 +613,29 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     if (view.status === 'paid') throw new Error('Fatura já está paga.');
     if (view.postedCents <= 0) throw new Error('Fatura sem lançamentos.');
 
+    const totalToPay = realAmountCents || view.postedCents;
     // mensagem amigável na hora; a trigger do banco é quem barra de verdade
     const fromBal = accountBalance(fromAcc, transactions, today);
-    if (fromBal < view.postedCents) {
-      throw new Error(`Saldo insuficiente em ${fromAcc.name} — disponível: ${formatBRL(fromBal)}, fatura: ${formatBRL(view.postedCents)}.`);
+    if (fromBal < totalToPay) {
+      throw new Error(`Saldo insuficiente em ${fromAcc.name} — disponível: ${formatBRL(fromBal)}, fatura: ${formatBRL(totalToPay)}.`);
     }
 
     await apiFetch('/actions', {
       method: 'POST',
       body: JSON.stringify({
         resource: 'invoice', walletId: wid, action: 'pay', cardId, cardName: card?.name ?? 'cartão',
-        fromAccountId, month, year, dateISO, memberId,
+        fromAccountId, month, year, dateISO, memberId, realAmountCents: realAmountCents ?? null,
       }),
     });
     await reload();
+  };
+
+  const readInvoiceFile: FinanceApi['readInvoiceFile'] = async (fileBase64, mediaType) => {
+    const wid = requireWallet();
+    return apiFetch('/actions', {
+      method: 'POST',
+      body: JSON.stringify({ resource: 'invoice', walletId: wid, action: 'readFile', fileBase64, mediaType }),
+    });
   };
 
   const unpayCardInvoice: FinanceApi['unpayCardInvoice'] = async (invoiceId) => {
@@ -831,7 +843,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     addAccount, updateAccount, deleteAccount,
     addCategory, updateCategory, deleteCategory,
     addTransaction, updateTransaction, deleteTransaction, setTransactionStatus,
-    payCardInvoice, unpayCardInvoice, setInvoiceStatus,
+    payCardInvoice, unpayCardInvoice, setInvoiceStatus, readInvoiceFile,
     addRecurrence, updateRecurrence, deleteRecurrence,
     markRecurrenceOccurrence, setRecurrenceOccurrenceAmount, unmarkRecurrenceOccurrence,
     addInvestment, updateInvestment, deleteInvestment,

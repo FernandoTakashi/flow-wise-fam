@@ -7,6 +7,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   loadWalletBundle, markOccurrence, unmarkOccurrence, payInvoice, unpayInvoice,
 } from '../_lib/finance.js';
+import { interpretInvoiceFile } from '../_lib/brain.js';
 import { requireMember, requireUser } from './_util.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -89,8 +90,19 @@ async function invoice(req: VercelRequest, res: VercelResponse, db: any, walletI
     if (!cardId || !fromAccountId || !dateISO || typeof body.month !== 'number' || typeof body.year !== 'number') {
       res.status(400).json({ error: 'missing_fields' }); return;
     }
-    await payInvoice(walletId, cardId, cardName ?? 'cartão', fromAccountId, body.month, body.year, dateISO, body.memberId ?? null, userId);
+    await payInvoice(
+      walletId, cardId, cardName ?? 'cartão', fromAccountId, body.month, body.year, dateISO,
+      body.memberId ?? null, userId, body.realAmountCents ?? null,
+    );
     res.status(200).json({ ok: true });
+    return;
+  }
+
+  if (action === 'readFile') {
+    const { fileBase64, mediaType } = body;
+    if (!fileBase64 || !mediaType) { res.status(400).json({ error: 'missing_fields' }); return; }
+    const result = await interpretInvoiceFile(fileBase64, mediaType);
+    res.status(200).json(result);
     return;
   }
 

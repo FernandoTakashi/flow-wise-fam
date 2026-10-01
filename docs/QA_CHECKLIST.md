@@ -49,6 +49,11 @@ não corrige "de passagem" sem anotar o que era.
 - [ ] Pagar fatura — gera a transferência e marca como paga
 - [ ] Estornar pagamento de fatura — volta a ficar em aberto
 - [ ] Fechar/reabrir fatura manualmente
+- [ ] "Conferir arquivo" com foto/PDF de fatura real → lê o valor e mostra a diferença (se houver) contra o lançado
+- [ ] Arquivo ilegível/que não é fatura → avisa objetivamente, não trava; dá pra digitar o valor manualmente no campo
+- [ ] Pagar com valor real diferente do lançado → cria um lançamento "Ajuste de fatura" (expense se maior, income se menor) e paga o valor real
+- [ ] Pagar sem mexer no valor (sem arquivo, sem editar o campo) → comportamento igual a antes, sem ajuste nenhum
+- [ ] Mesmo fluxo testado em Dashboard e em Cartões (os dois têm o diálogo de pagar fatura)
 
 ## Investimentos
 

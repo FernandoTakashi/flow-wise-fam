@@ -326,10 +326,17 @@ export async function deleteEntry(walletId: string, id: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Paga a fatura de um cartão: transferência da conta de origem pro cartão + fecha a fatura. */
+/**
+ * Paga a fatura de um cartão: transferência da conta de origem pro cartão + fecha a fatura.
+ * `realAmountCents` = valor de verdade da fatura (ex.: conferido com o banco), quando diferente
+ * da soma dos lançamentos — nesse caso cria um "Ajuste de fatura" pela diferença, ligado à mesma
+ * fatura, pra ela fechar exatamente nesse valor antes de transferir. Sem isso, "quanto foi gasto
+ * no cartão" e "quanto foi pago de verdade" ficariam divergentes pra sempre naquele mês.
+ */
 export async function payInvoice(
   walletId: string, cardId: string, cardName: string, fromAccountId: string,
   month: number, year: number, dateISO: string, memberId: string | null, createdBy: string,
+  realAmountCents?: number | null,
 ): Promise<void> {
   const db = admin();
   const refMonth = month + 1;
@@ -348,15 +355,28 @@ export async function payInvoice(
   const { y: py, m: pm } = isoParts(dateISO);
   const label = `Pagamento fatura ${cardName} ${String(refMonth).padStart(2, '0')}/${year}`;
 
+  let totalToPay = postedCents;
+  if (realAmountCents != null && realAmountCents > 0 && realAmountCents !== postedCents) {
+    const diff = realAmountCents - postedCents;
+    const { error: adjErr } = await db.from('transactions').insert({
+      wallet_id: walletId, account_id: cardId, kind: diff > 0 ? 'expense' : 'income',
+      amount_cents: Math.abs(diff), date: dateISO, ref_month: refMonth, ref_year: year, status: 'cleared',
+      description: 'Ajuste de fatura', member_id: memberId, created_by: createdBy,
+      card_invoice_id: invoice.id, source: 'app',
+    });
+    if (adjErr) throw adjErr;
+    totalToPay = realAmountCents;
+  }
+
   const { data: outTx, error: outErr } = await db.from('transactions').insert({
-    wallet_id: walletId, account_id: fromAccountId, kind: 'transfer', amount_cents: postedCents,
+    wallet_id: walletId, account_id: fromAccountId, kind: 'transfer', amount_cents: totalToPay,
     date: dateISO, ref_month: pm + 1, ref_year: py, status: 'cleared', description: label,
     member_id: memberId, created_by: createdBy,
   }).select('id').single();
   if (outErr) throw outErr;
 
   const { data: inTx, error: inErr } = await db.from('transactions').insert({
-    wallet_id: walletId, account_id: cardId, kind: 'transfer', amount_cents: postedCents,
+    wallet_id: walletId, account_id: cardId, kind: 'transfer', amount_cents: totalToPay,
     date: dateISO, ref_month: pm + 1, ref_year: py, status: 'cleared', description: label,
     member_id: memberId, transfer_peer_id: outTx.id, card_invoice_id: invoice.id, created_by: createdBy,
   }).select('id').single();
