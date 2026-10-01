@@ -28,7 +28,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         db.from('category_budgets').select('*').eq('wallet_id', walletId),
         db.from('recurrences').select('*').eq('wallet_id', walletId).order('day'),
         db.from('card_invoices').select('*').eq('wallet_id', walletId),
-        db.from('transactions').select('*, transaction_splits(*)').eq('wallet_id', walletId).order('date', { ascending: false }),
+        db.from('transactions').select('*, transaction_splits(*)').eq('wallet_id', walletId)
+          .order('date', { ascending: false }).order('created_at', { ascending: true }),
         db.from('investments').select('*').eq('wallet_id', walletId).order('date', { ascending: false }),
         db.from('wallet_settings').select('*').eq('wallet_id', walletId).maybeSingle(),
         db.from('period_locks').select('*').eq('wallet_id', walletId),

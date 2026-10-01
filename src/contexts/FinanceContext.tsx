@@ -99,7 +99,8 @@ async function fetchWalletSnapshotDirect(wid: string): Promise<SnapshotRows> {
     supabase.from('category_budgets').select('*').eq('wallet_id', wid),
     supabase.from('recurrences').select('*').eq('wallet_id', wid).order('day'),
     supabase.from('card_invoices').select('*').eq('wallet_id', wid),
-    supabase.from('transactions').select('*, transaction_splits(*)').eq('wallet_id', wid).order('date', { ascending: false }),
+    supabase.from('transactions').select('*, transaction_splits(*)').eq('wallet_id', wid)
+      .order('date', { ascending: false }).order('created_at', { ascending: true }),
     supabase.from('investments').select('*').eq('wallet_id', wid).order('date', { ascending: false }),
     supabase.from('wallet_settings').select('*').eq('wallet_id', wid).maybeSingle(),
     supabase.from('period_locks').select('*').eq('wallet_id', wid),

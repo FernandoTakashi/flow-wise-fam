@@ -310,7 +310,7 @@ export default function Reports() {
                   <th className="hidden p-3 md:table-cell">Categoria</th><th className="p-3 text-right">Valor</th></tr>
               </thead>
               <tbody className="divide-y">
-                {[...expenses].sort((a, b) => (a.date < b.date ? 1 : -1)).map((t) => (
+                {[...expenses].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).map((t) => (
                   <tr key={t.id} className="hover:bg-muted/20">
                     <td className="whitespace-nowrap p-3 text-muted-foreground">{formatFullDate(t.date)}</td>
                     <td className="p-3">{t.description || '—'}</td>

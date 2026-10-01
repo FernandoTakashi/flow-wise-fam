@@ -71,9 +71,12 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
   }));
   const [transferBusy, setTransferBusy] = useState(false);
 
+  // Empate na mesma data: mantém a ordem em que foram lançados (o back já manda
+  // nessa ordem — ver snapshot.ts), não reordena por outro critério. O comparador
+  // precisa devolver 0 no empate pro sort (estável) preservar essa ordem.
   const monthTx = useMemo(
     () => transactions.filter((t) => t.refMonth === month + 1 && t.refYear === year)
-      .sort((a, b) => (a.date < b.date ? 1 : -1)),
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
     [transactions, month, year],
   );
   // transferência (pagamento de fatura ou entre contas) gera duas transações
