@@ -130,7 +130,7 @@ export default function Dashboard() {
 
   const confirmFixo = async () => {
     if (busy) return;
-    if (!fixo || fixoAmount <= 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
+    if (!fixo || fixoAmount < 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
     setBusy(true);
     try {
       await markRecurrenceOccurrence(
@@ -380,15 +380,16 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Valor</Label>
-                {fixo?.recurrence.variableAmount
-                  ? <MoneyInput valueCents={fixoAmount} onChangeCents={setFixoAmount} autoFocus />
-                  : <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm font-bold tabular-nums">{formatBRL(fixoAmount)}</div>}
+                <MoneyInput valueCents={fixoAmount} onChangeCents={setFixoAmount} autoFocus />
               </div>
               <div className="space-y-2">
                 <Label>{fixo?.recurrence.kind === 'income' ? 'Data' : 'Data da baixa'}</Label>
                 <Input type="date" value={fixoDate} onChange={(e) => setFixoDate(e.target.value)} />
               </div>
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              Deixe R$0,00 se você já sabe que não vai {fixo?.recurrence.kind === 'income' ? 'receber' : 'pagar'} isso esse mês — resolve sem pesar na projeção dos próximos meses.
+            </p>
             {fixo?.onCard && (
               <p className="text-[11px] text-muted-foreground">A data da baixa decide em qual fatura o lançamento entra.</p>
             )}

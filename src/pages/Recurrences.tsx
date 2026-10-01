@@ -146,7 +146,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
     finally { setActing(false); }
   };
   const confirmInform = () => {
-    if (!inform || informAmount <= 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
+    if (!inform || informAmount < 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
     void runAction(async () => {
       await setRecurrenceOccurrenceAmount(inform.recurrence.id, month, year, informAmount);
       toast({ title: 'Valor do mês registrado', description: 'Entra na projeção, mas ainda não saiu do saldo.' });
@@ -158,7 +158,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
     void runAction(async () => { await unmarkRecurrenceOccurrence(inform.recurrence.id, month, year); setInform(null); });
   };
   const confirmMark = () => {
-    if (!mark || markAmount <= 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
+    if (!mark || markAmount < 0) { toast({ title: 'Valor inválido', variant: 'destructive' }); return; }
     void runAction(async () => {
       await markRecurrenceOccurrence(
         mark.recurrence.id, month, year, markAmount, markPayer || null,
@@ -316,9 +316,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Valor {tab === 'income' ? 'recebido' : 'pago'}</Label>
-                {mark?.recurrence.variableAmount
-                  ? <MoneyInput valueCents={markAmount} onChangeCents={setMarkAmount} autoFocus />
-                  : <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm font-semibold tabular-nums">{formatBRL(markAmount)}</div>}
+                <MoneyInput valueCents={markAmount} onChangeCents={setMarkAmount} autoFocus />
               </div>
               <div className="space-y-2">
                 <Label>{tab === 'income' ? 'Data do recebimento' : 'Data da baixa'}</Label>
@@ -326,7 +324,7 @@ export default function Recurrences({ kind, embedded = false }: { kind?: Categor
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              {mark?.recurrence.variableAmount && 'Ajuste o valor se a conta veio diferente do previsto. '}
+              Deixe R$0,00 se você já sabe que não vai {tab === 'income' ? 'receber' : 'pagar'} isso esse mês — resolve sem pesar na projeção dos próximos meses.{' '}
               {mark?.onCard && 'A data da baixa decide em qual fatura este lançamento entra.'}
             </p>
             {mark && !mark.onCard && (

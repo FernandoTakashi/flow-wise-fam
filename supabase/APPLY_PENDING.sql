@@ -596,4 +596,11 @@ drop policy if exists category_budgets_members on public.category_budgets;
 create policy category_budgets_members on public.category_budgets
   for all using (public.is_wallet_member(wallet_id)) with check (public.is_wallet_member(wallet_id));
 
+-- 20261001000001 — permite transações de R$0,00 (fixo não lançado que você já
+-- sabe que não vai pagar/receber esse mês — sem isso, a ocorrência fica
+-- pendente pra sempre e a projeção cumulativa carrega o erro pros próximos
+-- meses). A validação de "> 0 pra lançamento normal" continua só na aplicação.
+alter table public.transactions drop constraint if exists transactions_amount_cents_check;
+alter table public.transactions add constraint transactions_amount_cents_check check (amount_cents >= 0);
+
 commit;

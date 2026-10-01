@@ -56,8 +56,10 @@ async function occurrence(req: VercelRequest, res: VercelResponse, walletId: str
   const rec = bundle.recurrences.find((r) => r.id === recurrenceId);
   if (!rec) { res.status(404).json({ error: 'recurrence_not_found' }); return; }
 
+  // amountCents pode ser 0: "não vou pagar/receber esse mês" — resolve a ocorrência
+  // (some do "a pagar") sem deixar um valor estimado fantasma pesando na projeção.
   if (action === 'mark') {
-    if (!body.amountCents || body.amountCents <= 0) { res.status(400).json({ error: 'invalid_amount' }); return; }
+    if (body.amountCents == null || body.amountCents < 0) { res.status(400).json({ error: 'invalid_amount' }); return; }
     const result = await markOccurrence(
       bundle, walletId, rec, body.month, body.year, body.amountCents,
       body.memberId ?? null, userId, 'app', body.paidOnISO, body.shared, 'cleared', body.accountId ?? null,
@@ -67,7 +69,7 @@ async function occurrence(req: VercelRequest, res: VercelResponse, walletId: str
   }
 
   if (action === 'setAmount') {
-    if (!body.amountCents || body.amountCents <= 0) { res.status(400).json({ error: 'invalid_amount' }); return; }
+    if (body.amountCents == null || body.amountCents < 0) { res.status(400).json({ error: 'invalid_amount' }); return; }
     const result = await markOccurrence(
       bundle, walletId, rec, body.month, body.year, body.amountCents,
       null, userId, 'app', undefined, undefined, 'pending',

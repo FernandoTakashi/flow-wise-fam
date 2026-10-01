@@ -42,6 +42,9 @@ não corrige "de passagem" sem anotar o que era.
 - [ ] Fixo de valor variável — informar valor sem pagar, depois confirmar
 - [ ] Fixo parcelado — número da parcela e "faltam X" corretos
 - [ ] Chips (conta, categoria, valor variável, débito automático) não quebram feio no mobile
+- [ ] Dar baixa com valor R$0,00 (campo em branco) — resolve a ocorrência (some do "a pagar"), sem exigir valor > 0
+- [ ] Depois de zerar uma ocorrência, a Projeção não desconta mais aquele valor no mês nem nos meses seguintes
+- [ ] Mesmo teste do zero funciona em Dashboard (dialog "Confirmar pagamento/recebimento") e em Gastos fixos
 
 ## Cartões
 
@@ -69,6 +72,11 @@ não corrige "de passagem" sem anotar o que era.
 
 - [ ] Criar aplicação, editar, excluir
 - [ ] Rendimento estimado aparece certo no resumo
+
+## Projeção
+
+- [ ] Mês corrente (linha "atual") mostra Entradas/Saídas como o total do mês (realizado + ainda pendente), não só o que falta — não deve "zerar" conforme as coisas vão sendo recebidas/pagas ao longo do mês
+- [ ] Saldo projetado (gráfico + coluna Total) continua batendo: soma caixa de hoje + o que falta no mês corrente, e passa os meses seguintes certinho
 
 ## Fechamento de mês
 
