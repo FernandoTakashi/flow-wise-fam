@@ -1,7 +1,7 @@
 // Retrato imutável da carteira + tipos de leitura. Sem React, sem Supabase —
 // entrada de todos os seletores puros de `src/core`.
 import type {
-  Account, CardInvoice, Category, Investment, PeriodLock, Recurrence,
+  Account, CardInvoice, Category, CategoryBudget, Investment, PeriodLock, Recurrence,
   Transaction, WalletMember, WalletSettings, UUID, InvoiceStatus,
 } from '@/types';
 
@@ -12,6 +12,7 @@ export interface FinanceData {
   transactions: Transaction[];
   accounts: Account[];
   categories: Category[];
+  categoryBudgets: CategoryBudget[];
   recurrences: Recurrence[];
   invoices: CardInvoice[];
   investments: Investment[];

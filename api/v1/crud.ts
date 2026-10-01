@@ -1,5 +1,5 @@
 // POST/PATCH/DELETE /api/v1/crud   body: { resource, walletId, ... }
-// resource: 'transaction' | 'recurrence' | 'account' | 'category' | 'investment'
+// resource: 'transaction' | 'recurrence' | 'account' | 'category' | 'categoryBudget' | 'investment'
 //         | 'wallet' | 'member' | 'settings'
 //
 // Um único endpoint pro CRUD de todos os recursos da carteira — o plano
@@ -34,6 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'recurrence': await recurrence(req, res, db, walletId, body); return;
       case 'account': await account(req, res, db, walletId, body); return;
       case 'category': await category(req, res, db, walletId, body); return;
+      case 'categoryBudget': await categoryBudget(req, res, db, walletId, body); return;
       case 'investment': await investment(req, res, db, walletId, body); return;
       case 'wallet': await wallet(req, res, db, user.id, walletId, body); return;
       case 'member': await member(req, res, db, user.id, walletId, body); return;
@@ -208,6 +209,7 @@ async function category(req: VercelRequest, res: VercelResponse, db: any, wallet
     if (body.icon !== undefined) row.icon = body.icon;
     if (body.color !== undefined) row.color = body.color;
     if (body.archived !== undefined) row.archived = body.archived;
+    if (body.budgetGroup !== undefined) row.budget_group = body.budgetGroup;
     const { error } = await db.from('categories').update(row).eq('id', body.id);
     if (error) { res.status(400).json({ error: 'update_failed', detail: error.message }); return; }
     res.status(200).json({ ok: true });
@@ -222,6 +224,32 @@ async function category(req: VercelRequest, res: VercelResponse, db: any, wallet
     const { error } = (count ?? 0) > 0
       ? await db.from('categories').update({ archived: true }).eq('id', body.id)
       : await db.from('categories').delete().eq('id', body.id);
+    if (error) { res.status(400).json({ error: 'delete_failed', detail: error.message }); return; }
+    res.status(200).json({ ok: true });
+    return;
+  }
+  res.status(405).json({ error: 'method_not_allowed' });
+}
+
+// --- categoryBudget (Orçamento 50/30/20: valor destinado por categoria) ----
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function categoryBudget(req: VercelRequest, res: VercelResponse, db: any, walletId: string, body: Body) {
+  if (req.method === 'POST') {
+    if (!body.categoryId || !body.amountCents || body.amountCents <= 0) {
+      res.status(400).json({ error: 'invalid_category_budget' }); return;
+    }
+    if (!(await requireRowInWallet(db, res, 'categories', body.categoryId, walletId))) return;
+    const { error } = await db.from('category_budgets').upsert({
+      wallet_id: walletId, category_id: body.categoryId, amount_cents: body.amountCents, updated_at: new Date().toISOString(),
+    }, { onConflict: 'wallet_id,category_id' });
+    if (error) { res.status(400).json({ error: 'upsert_failed', detail: error.message }); return; }
+    res.status(200).json({ ok: true });
+    return;
+  }
+  if (req.method === 'DELETE') {
+    if (!body.categoryId) { res.status(400).json({ error: 'missing_category' }); return; }
+    const { error } = await db.from('category_budgets').delete()
+      .eq('wallet_id', walletId).eq('category_id', body.categoryId);
     if (error) { res.status(400).json({ error: 'delete_failed', detail: error.message }); return; }
     res.status(200).json({ ok: true });
     return;

@@ -9,6 +9,8 @@ export type AccountKind = 'cash' | 'checking' | 'card';
 export type TxKind = 'income' | 'expense' | 'transfer';
 export type TxStatus = 'pending' | 'cleared';
 export type CategoryKind = 'income' | 'expense';
+/** Classificação 50/30/20 de uma categoria de despesa pro Orçamento. */
+export type BudgetGroup = 'necessidade' | 'desejo';
 export type MemberRole = 'owner' | 'member';
 export type InvoiceStatus = 'open' | 'closed' | 'paid';
 export type TxSource = 'app' | 'telegram' | 'whatsapp' | 'import' | 'auto';
@@ -62,6 +64,18 @@ export interface Category {
   icon?: string | null;
   color?: string | null;
   archived: boolean;
+  /** Necessidade/Desejo pro Orçamento — null = ainda não classificada. Categoria
+   *  com recorrência fixa ativa vira Necessidade automaticamente (ver src/core/budget.ts),
+   *  independente do que estiver salvo aqui. */
+  budgetGroup?: BudgetGroup | null;
+}
+
+/** Valor mensal destinado a uma categoria no Orçamento — editável, substitui a sugestão automática. */
+export interface CategoryBudget {
+  id: UUID;
+  walletId: UUID;
+  categoryId: UUID;
+  amountCents: number;
 }
 
 export interface Recurrence {

@@ -3,6 +3,7 @@
 export type {
   FinanceData, OccurrenceView, InvoiceRow, InvoiceView, MemberSpend, MonthSummary, UUID,
 } from './types';
+export type { BudgetSummary, CategoryBudgetRow, EffectiveBudgetGroup } from './budget';
 
 export {
   accountBalance, cardCommitted, spendingAccounts, cards,
@@ -15,3 +16,4 @@ export { spendByMember, jointSpendCents, memberBalances, settlements } from './m
 export { totalInvestedCents, investmentMonthlyYieldCents } from './investments';
 export { isPeriodLocked, wouldOverdraw, wouldExceedLimit } from './guards';
 export { monthTxByDate, monthTxByRef } from './transactions';
+export { computeBudget, fixedIncomeCents, investedCents } from './budget';

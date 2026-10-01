@@ -9,12 +9,12 @@ import { apiFetch } from '@/lib/api';
 import * as core from '@/core';
 import { accountBalance, cardCommitted } from '@/core';
 import type {
-  FinanceData, OccurrenceView, InvoiceView, MemberSpend, MonthSummary,
+  FinanceData, OccurrenceView, InvoiceView, MemberSpend, MonthSummary, BudgetSummary,
 } from '@/core';
 import type {
-  Account, AccountKind, CardInvoice, Category, CategoryKind, InvoiceStatus, Investment, MemberBalance,
-  MonthlyFilter, PeriodLock, Profile, Recurrence, Settlement, Transaction, TxKind, TxStatus, UUID,
-  Wallet, WalletMember, WalletSettings,
+  Account, AccountKind, BudgetGroup, CardInvoice, Category, CategoryBudget, CategoryKind, InvoiceStatus,
+  Investment, MemberBalance, MonthlyFilter, PeriodLock, Profile, Recurrence, Settlement, Transaction, TxKind,
+  TxStatus, UUID, Wallet, WalletMember, WalletSettings,
 } from '@/types';
 
 const WALLET_KEY = 'financeapp.walletId';
@@ -41,6 +41,10 @@ const mapAccount = (r: any): Account => ({
 });
 const mapCategory = (r: any): Category => ({
   id: r.id, walletId: r.wallet_id, name: r.name, kind: r.kind, icon: r.icon, color: r.color, archived: !!r.archived,
+  budgetGroup: r.budget_group ?? null,
+});
+const mapCategoryBudget = (r: any): CategoryBudget => ({
+  id: r.id, walletId: r.wallet_id, categoryId: r.category_id, amountCents: Number(r.amount_cents),
 });
 const mapRecurrence = (r: any): Recurrence => ({
   id: r.id, walletId: r.wallet_id, description: r.description, kind: r.kind,
@@ -81,16 +85,17 @@ const mapLock = (r: any): PeriodLock => ({
 
 // --- snapshot da carteira (API própria com fallback pro Supabase direto) ---
 interface SnapshotRows {
-  members: unknown[]; accounts: unknown[]; categories: unknown[]; recurrences: unknown[];
+  members: unknown[]; accounts: unknown[]; categories: unknown[]; categoryBudgets: unknown[]; recurrences: unknown[];
   invoices: unknown[]; transactions: unknown[]; investments: unknown[];
   settings: unknown | null; periodLocks: unknown[]; locksError?: string;
 }
 
 async function fetchWalletSnapshotDirect(wid: string): Promise<SnapshotRows> {
-  const [m, a, c, rec, inv, tx, i, s, l] = await Promise.all([
+  const [m, a, c, cb, rec, inv, tx, i, s, l] = await Promise.all([
     supabase.from('wallet_members').select('wallet_id, user_id, role, profiles(id, name, email)').eq('wallet_id', wid),
     supabase.from('accounts').select('*').eq('wallet_id', wid).order('created_at'),
     supabase.from('categories').select('*').eq('wallet_id', wid).order('name'),
+    supabase.from('category_budgets').select('*').eq('wallet_id', wid),
     supabase.from('recurrences').select('*').eq('wallet_id', wid).order('day'),
     supabase.from('card_invoices').select('*').eq('wallet_id', wid),
     supabase.from('transactions').select('*, transaction_splits(*)').eq('wallet_id', wid).order('date', { ascending: false }),
@@ -98,9 +103,10 @@ async function fetchWalletSnapshotDirect(wid: string): Promise<SnapshotRows> {
     supabase.from('wallet_settings').select('*').eq('wallet_id', wid).maybeSingle(),
     supabase.from('period_locks').select('*').eq('wallet_id', wid),
   ]);
-  for (const res of [m, a, c, rec, inv, tx, i]) if (res.error) throw res.error;
+  for (const res of [m, a, c, cb, rec, inv, tx, i]) if (res.error) throw res.error;
   return {
-    members: m.data ?? [], accounts: a.data ?? [], categories: c.data ?? [], recurrences: rec.data ?? [],
+    members: m.data ?? [], accounts: a.data ?? [], categories: c.data ?? [], categoryBudgets: cb.data ?? [],
+    recurrences: rec.data ?? [],
     invoices: inv.data ?? [], transactions: tx.data ?? [], investments: i.data ?? [],
     settings: s.data ?? null, periodLocks: l.data ?? [], locksError: l.error?.message,
   };
@@ -187,6 +193,7 @@ interface FinanceApi {
   members: WalletMember[];
   accounts: Account[];
   categories: Category[];
+  categoryBudgets: CategoryBudget[];
   recurrences: Recurrence[];
   invoices: CardInvoice[];
   transactions: Transaction[];
@@ -223,6 +230,7 @@ interface FinanceApi {
   investmentMonthlyYieldCents(): number;
   memberBalances(): MemberBalance[];
   settlements(): Settlement[];
+  budgetSummary(month: number, year: number): BudgetSummary;
 
   updateProfile(patch: { name: string }): Promise<void>;
   /** Mescla `patch` em profile.onboarding (não substitui o objeto inteiro). */
@@ -238,8 +246,12 @@ interface FinanceApi {
   deleteAccount(id: UUID): Promise<void>;
 
   addCategory(c: { name: string; kind: CategoryKind; icon?: string; color?: string }): Promise<void>;
-  updateCategory(id: UUID, patch: Partial<{ name: string; icon: string; color: string; archived: boolean }>): Promise<void>;
+  updateCategory(id: UUID, patch: Partial<{ name: string; icon: string; color: string; archived: boolean; budgetGroup: BudgetGroup | null }>): Promise<void>;
   deleteCategory(id: UUID): Promise<void>;
+  /** Orçamento 50/30/20: valor mensal destinado a uma categoria (substitui a sugestão automática). */
+  setCategoryBudget(categoryId: UUID, amountCents: number): Promise<void>;
+  /** Remove o valor salvo — volta a usar a sugestão automática (média dos últimos 3 meses). */
+  clearCategoryBudget(categoryId: UUID): Promise<void>;
 
   addTransaction(input: NewTransaction): Promise<void>;
   updateTransaction(id: UUID, patch: Partial<NewTransaction>): Promise<void>;
@@ -291,6 +303,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   const [members, setMembers] = useState<WalletMember[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryBudgets, setCategoryBudgets] = useState<CategoryBudget[]>([]);
   const [recurrences, setRecurrences] = useState<Recurrence[]>([]);
   const [invoices, setInvoices] = useState<CardInvoice[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -309,9 +322,9 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
   // Retrato imutável da carteira — entrada de todos os seletores de `@/core`.
   const data: FinanceData = useMemo(() => ({
-    transactions, accounts, categories, recurrences, invoices, investments,
+    transactions, accounts, categories, categoryBudgets, recurrences, invoices, investments,
     members, periodLocks, settings, today,
-  }), [transactions, accounts, categories, recurrences, invoices, investments, members, periodLocks, settings, today]);
+  }), [transactions, accounts, categories, categoryBudgets, recurrences, invoices, investments, members, periodLocks, settings, today]);
 
   const serverNow = useCallback(() => new Date(Date.now() + skewRef.current), []);
   const computeToday = useCallback(() => setToday(spDateISO(new Date(Date.now() + skewRef.current))), []);
@@ -338,6 +351,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     setMembers(rows.members.map(mapMember));
     setAccounts(rows.accounts.map(mapAccount));
     setCategories(rows.categories.map(mapCategory));
+    setCategoryBudgets(rows.categoryBudgets.map(mapCategoryBudget));
     setRecurrences(rows.recurrences.map(mapRecurrence));
     setInvoices(rows.invoices.map(mapInvoice));
     setTransactions(rows.transactions.map(mapTransaction));
@@ -530,6 +544,21 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   const deleteCategory: FinanceApi['deleteCategory'] = async (id) => {
     const wid = requireWallet();
     await apiFetch('/crud', { method: 'DELETE', body: JSON.stringify({ resource: 'category', walletId: wid, id }) });
+    await reload();
+  };
+
+  const setCategoryBudget: FinanceApi['setCategoryBudget'] = async (categoryId, amountCents) => {
+    const wid = requireWallet();
+    await apiFetch('/crud', {
+      method: 'POST',
+      body: JSON.stringify({ resource: 'categoryBudget', walletId: wid, categoryId, amountCents }),
+    });
+    await reload();
+  };
+
+  const clearCategoryBudget: FinanceApi['clearCategoryBudget'] = async (categoryId) => {
+    const wid = requireWallet();
+    await apiFetch('/crud', { method: 'DELETE', body: JSON.stringify({ resource: 'categoryBudget', walletId: wid, categoryId }) });
     await reload();
   };
 
@@ -815,23 +844,26 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   const investmentMonthlyYieldCents = useCallback(() => core.investmentMonthlyYieldCents(data), [data]);
   const memberBalances = useCallback((): MemberBalance[] => core.memberBalances(data), [data]);
   const settlements = useCallback((): Settlement[] => core.settlements(data), [data]);
+  const budgetSummary = useCallback(
+    (month: number, year: number): BudgetSummary => core.computeBudget(data, month, year), [data],
+  );
 
   const wallet = wallets.find((w) => w.id === walletId) ?? null;
   const role = members.find((m) => m.userId === userId)?.role ?? null;
 
   const value: FinanceApi = {
     loading, userId, profile, today, wallets, walletId, wallet, role, members,
-    accounts, categories, recurrences, invoices, transactions, investments, settings, periodLocks, selectedMonth,
+    accounts, categories, categoryBudgets, recurrences, invoices, transactions, investments, settings, periodLocks, selectedMonth,
     setWallet, setSelectedMonth, reload,
     cards: cardsMemo, spendingAccounts: spendingAccountsMemo, activeCategories: activeCategoriesMemo,
     categoryName, memberName, accountName,
     accountBalanceCents, cashBalanceCents, cardCommittedCents, cardAvailableCents,
     invoiceView, monthTransactionsByDate, monthTransactionsByRef, monthSummary, recurrenceOccurrences,
     spendByMember, jointSpendCents, isPeriodLocked, wouldOverdraw, wouldExceedLimit,
-    totalInvestedCents, investmentMonthlyYieldCents, memberBalances, settlements,
+    totalInvestedCents, investmentMonthlyYieldCents, memberBalances, settlements, budgetSummary,
     updateProfile, updateOnboarding, createWallet, renameWallet, deleteWallet, addMemberByEmail, removeMember,
     addAccount, updateAccount, deleteAccount,
-    addCategory, updateCategory, deleteCategory,
+    addCategory, updateCategory, deleteCategory, setCategoryBudget, clearCategoryBudget,
     addTransaction, updateTransaction, deleteTransaction, setTransactionStatus,
     payCardInvoice, unpayCardInvoice, setInvoiceStatus,
     addRecurrence, updateRecurrence, deleteRecurrence,

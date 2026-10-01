@@ -20,11 +20,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!membership) { res.status(403).json({ error: 'not_a_member' }); return; }
 
   try {
-    const [members, accounts, categories, recurrences, invoices, transactions, investments, settingsRes, locks] =
+    const [members, accounts, categories, categoryBudgets, recurrences, invoices, transactions, investments, settingsRes, locks] =
       await Promise.all([
         db.from('wallet_members').select('wallet_id, user_id, role, profiles(id, name, email)').eq('wallet_id', walletId),
         db.from('accounts').select('*').eq('wallet_id', walletId).order('created_at'),
         db.from('categories').select('*').eq('wallet_id', walletId).order('name'),
+        db.from('category_budgets').select('*').eq('wallet_id', walletId),
         db.from('recurrences').select('*').eq('wallet_id', walletId).order('day'),
         db.from('card_invoices').select('*').eq('wallet_id', walletId),
         db.from('transactions').select('*, transaction_splits(*)').eq('wallet_id', walletId).order('date', { ascending: false }),
@@ -33,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         db.from('period_locks').select('*').eq('wallet_id', walletId),
       ]);
 
-    for (const r of [members, accounts, categories, recurrences, invoices, transactions, investments]) {
+    for (const r of [members, accounts, categories, categoryBudgets, recurrences, invoices, transactions, investments]) {
       if (r.error) { res.status(500).json({ error: 'db_error', detail: r.error.message }); return; }
     }
 
@@ -51,6 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       members: members.data ?? [],
       accounts: accounts.data ?? [],
       categories: categories.data ?? [],
+      categoryBudgets: categoryBudgets.data ?? [],
       recurrences: recurrences.data ?? [],
       invoices: invoices.data ?? [],
       transactions: transactions.data ?? [],

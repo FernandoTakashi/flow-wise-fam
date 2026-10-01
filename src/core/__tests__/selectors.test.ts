@@ -32,7 +32,7 @@ const inv = (o: Partial<CardInvoice>): CardInvoice => ({
 const member = (id: string): WalletMember => ({ walletId: 'w', userId: id, role: 'member' });
 
 const base = (o: Partial<FinanceData> = {}): FinanceData => ({
-  transactions: [], accounts: [], categories: [], recurrences: [], invoices: [],
+  transactions: [], accounts: [], categories: [], categoryBudgets: [], recurrences: [], invoices: [],
   investments: [], members: [], periodLocks: [], settings: null, today: '2026-06-20', ...o,
 });
 

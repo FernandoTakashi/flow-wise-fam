@@ -19,6 +19,7 @@ const Receitas = lazy(() => import('@/pages/Receitas'));
 const Recurrences = lazy(() => import('@/pages/Recurrences'));
 const Cards = lazy(() => import('@/pages/Cards'));
 const Investments = lazy(() => import('@/pages/Investments'));
+const Budget = lazy(() => import('@/pages/Budget'));
 const Projection = lazy(() => import('@/pages/Projection'));
 const Reports = lazy(() => import('@/pages/Reports'));
 const Settings = lazy(() => import('@/pages/Settings'));
@@ -131,6 +132,7 @@ const App = () => {
                   <Route path="/entradas" element={<Navigate to="/receitas" replace />} />
                   <Route path="/cartoes" element={<Cards />} />
                   <Route path="/investimentos" element={<Investments />} />
+                  <Route path="/orcamento" element={<Budget />} />
                   <Route path="/projecao" element={<Projection />} />
                   <Route path="/relatorios" element={<Reports />} />
                   <Route path="/ajustes" element={<Settings />} />

@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Repeat, CreditCard, PiggyBank,
-  TrendingUp, BarChart3, Settings, Plus, LogOut, Users2,
+  TrendingUp, BarChart3, Settings, Plus, LogOut, Users2, Target,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
@@ -32,6 +32,7 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: 'Patrimônio',
     items: [
+      { title: 'Orçamento', href: '/orcamento', icon: Target },
       { title: 'Investimentos', href: '/investimentos', icon: PiggyBank },
       { title: 'Projeção', href: '/projecao', icon: TrendingUp },
     ],

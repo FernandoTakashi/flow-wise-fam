@@ -53,6 +53,18 @@ não corrige "de passagem" sem anotar o que era.
 - [ ] Pagar sem editar o campo → comportamento igual a antes, sem ajuste nenhum
 - [ ] Mesmo fluxo testado em Dashboard e em Cartões (os dois têm o diálogo de pagar fatura)
 
+## Orçamento (50/30/20)
+
+- [ ] Categoria com recorrência fixa de saída vinculada aparece em Necessidade automaticamente, com badge "fixo", sem pedir classificação
+- [ ] Categoria só de lançamentos variáveis aparece no bloco "Classifique N categorias" até você marcar Necessidade ou Desejo
+- [ ] Renda fixa = só soma de recorrências de entrada ativas (não entra média de variável)
+- [ ] Meta de Poupança = 20% da renda fixa; "Investido esse mês" soma os Investimentos com data no mês corrente
+- [ ] Necessidade passando de 50% da renda → Desejo aperta (ou zera), Poupança não muda
+- [ ] Desejo zerado (Necessidade + Poupança > renda) → aparece o aviso de risco na meta de Poupança
+- [ ] Clicar numa categoria → abre valor destinado (editável) e, se não for fixa, o grupo (Necessidade/Desejo)
+- [ ] "Usar sugestão automática" remove o valor salvo e volta a usar a média dos últimos 3 meses
+- [ ] Barra de progresso por categoria e por bloco bate com o gasto real lançado no mês selecionado
+
 ## Investimentos
 
 - [ ] Criar aplicação, editar, excluir
