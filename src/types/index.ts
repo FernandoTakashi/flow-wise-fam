@@ -150,6 +150,8 @@ export interface Transaction {
   transferPeerId?: UUID | null;
   /** só relevante p/ kind='transfer': true = perna de destino (credita o saldo), false = origem (debita). */
   transferCredit?: boolean;
+  /** Orçamento 50/30/20: sobrescreve o grupo da categoria só pra este lançamento. null = usa o padrão da categoria. */
+  budgetGroup?: BudgetGroup | null;
   note?: string | null;
   /** gasto feito em conjunto pelos membros — marcador para o resumo, não divide contas */
   shared: boolean;

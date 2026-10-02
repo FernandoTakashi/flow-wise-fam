@@ -104,6 +104,8 @@ export interface EntryInput {
   /** competência manual (só para não-cartão). Omitido = derivado da data. */
   refMonth?: number | null;
   refYear?: number | null;
+  /** Orçamento 50/30/20: sobrescreve o grupo da categoria só pra este lançamento. */
+  budgetGroup?: 'necessidade' | 'desejo' | null;
 }
 
 /** Cria um lançamento (bot: avulso com parcelas/divisão opcionais; app: espelha addTransaction). */
@@ -143,6 +145,7 @@ export async function insertEntry(
       category_id: entry.categoryId, member_id: memberId, created_by: createdBy,
       card_invoice_id: invoiceId, note: entry.note, source, shared: isShared,
       installment_group: group, installment_no: n > 1 ? no : null, installment_of: n > 1 ? n : null,
+      budget_group: entry.budgetGroup ?? null,
     });
     if (error) throw error;
   }
@@ -257,6 +260,8 @@ export interface EntryPatch {
   accountId?: string;
   refMonth?: number;
   refYear?: number;
+  /** Orçamento 50/30/20: sobrescreve o grupo da categoria só pra este lançamento. */
+  budgetGroup?: 'necessidade' | 'desejo' | null;
 }
 
 /** Atualiza um lançamento avulso. Espelha updateTransaction do FinanceContext. */
@@ -276,6 +281,7 @@ export async function updateEntry(bundle: WalletBundle, walletId: string, id: st
   if (patch.status !== undefined) row.status = patch.status;
   if (patch.note !== undefined) row.note = patch.note;
   if (patch.shared !== undefined) row.shared = current.kind === 'income' ? false : patch.shared;
+  if (patch.budgetGroup !== undefined) row.budget_group = patch.budgetGroup;
 
   const nextDate = patch.dateISO ?? current.date;
   const nextAccountId = patch.accountId ?? current.account_id;

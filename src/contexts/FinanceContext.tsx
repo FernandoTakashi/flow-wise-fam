@@ -65,7 +65,7 @@ const mapTransaction = (r: any): Transaction => ({
   categoryId: r.category_id, memberId: r.member_id, cardInvoiceId: r.card_invoice_id, recurrenceId: r.recurrence_id,
   occMonth: r.occ_month ?? null, occYear: r.occ_year ?? null,
   installmentGroup: r.installment_group, installmentNo: r.installment_no, installmentOf: r.installment_of,
-  transferPeerId: r.transfer_peer_id, transferCredit: !!r.transfer_credit,
+  transferPeerId: r.transfer_peer_id, transferCredit: !!r.transfer_credit, budgetGroup: r.budget_group ?? null,
   note: r.note, shared: !!r.shared, createdBy: r.created_by, source: r.source ?? 'app',
   splits: (r.transaction_splits ?? []).map((s: any) => ({
     id: s.id, transactionId: s.transaction_id, memberId: s.member_id, shareCents: Number(s.share_cents),
@@ -168,6 +168,8 @@ export interface NewTransaction {
   refYear?: number;
   /** marca como gasto em conjunto (só expense) */
   shared?: boolean;
+  /** Orçamento 50/30/20: sobrescreve o grupo da categoria só pra este lançamento. */
+  budgetGroup?: BudgetGroup | null;
 }
 export interface NewRecurrence {
   description: string; kind: CategoryKind; amountCents: number;
@@ -611,6 +613,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
         status: input.status ?? 'cleared',
         refMonth: input.refMonth ?? null,
         refYear: input.refYear ?? null,
+        budgetGroup: input.budgetGroup ?? null,
       }),
     });
     await reload();

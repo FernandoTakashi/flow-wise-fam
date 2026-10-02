@@ -60,6 +60,7 @@ async function transaction(req: VercelRequest, res: VercelResponse, walletId: st
       installmentStart: body.installmentStart ?? null, shared: body.shared ?? null,
       memberId: body.memberId ?? null, status: body.status ?? 'cleared',
       refMonth: body.refMonth ?? null, refYear: body.refYear ?? null,
+      budgetGroup: body.budgetGroup ?? null,
     };
     const result = await insertEntry(bundle, walletId, userId, entry, 'app');
     res.status(200).json(result);

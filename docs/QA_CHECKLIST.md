@@ -76,6 +76,10 @@ não corrige "de passagem" sem anotar o que era.
 - [ ] Clicar numa categoria → abre valor destinado (editável) e, se não for fixa, o grupo (Necessidade/Desejo)
 - [ ] "Usar sugestão automática" remove o valor salvo e volta a usar a média dos últimos 3 meses
 - [ ] Barra de progresso por categoria e por bloco bate com o gasto real lançado no mês selecionado
+- [ ] Categoria com gasto raro (1 mês em 3) sugere o valor dividido por 3, não o valor cheio do mês em que aconteceu
+- [ ] Categoria fixa sugere o valor da recorrência, não a média do histórico (some um atraso/multa do histórico e a sugestão não muda)
+- [ ] Lançamento de categoria Necessidade com "Orçamento" marcado como Desejo (ou vice-versa) → conta no bloco certo (Desejo/Necessidade), mesmo a categoria sendo a outra
+- [ ] Badge do grupo sobrescrito aparece na lista de Lançamentos (desktop e mobile)
 
 ## Investimentos
 

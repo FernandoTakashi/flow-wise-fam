@@ -166,6 +166,24 @@ describe('computeBudget', () => {
     expect(b.categories[0].suggestedCents).toBe(100000); // 300000 / 3, não 300000 cheio
   });
 
+  it('lançamento com budgetGroup sobrescreve o padrão da categoria só pra ele', () => {
+    const d = base({
+      categories: [cat({ id: 'transporte', budgetGroup: 'necessidade' })],
+      transactions: [
+        // corrida pro trabalho: segue o padrão da categoria (necessidade)
+        tx({ categoryId: 'transporte', amountCents: 3000, refMonth: 6, refYear: 2026 }),
+        // corrida de balada: marcada como desejo, mesmo a categoria sendo necessidade
+        tx({ categoryId: 'transporte', amountCents: 5000, refMonth: 6, refYear: 2026, budgetGroup: 'desejo' }),
+      ],
+    });
+    const b = computeBudget(d, 5, 2026);
+    // o total da categoria continua somando tudo...
+    expect(b.categories[0].spentCents).toBe(8000);
+    // ...mas o gasto por grupo respeita a exceção
+    expect(b.necessidadeSpentCents).toBe(3000);
+    expect(b.desejoSpentCents).toBe(5000);
+  });
+
   it('categoria fixa usa o valor da recorrência como sugestão, não a média do histórico real', () => {
     const d = base({
       categories: [cat({ id: 'internet', budgetGroup: null })],

@@ -682,4 +682,10 @@ begin
 end;
 $$;
 
+-- 20261002000001 — Orçamento 50/30/20: cada lançamento pode sobrescrever o
+-- grupo da categoria (ex.: Uber pro trabalho = necessidade; Uber pra balada
+-- = desejo, mesma categoria "Transporte"). null = usa o padrão da categoria.
+alter table public.transactions
+  add column if not exists budget_group text check (budget_group in ('necessidade', 'desejo'));
+
 commit;

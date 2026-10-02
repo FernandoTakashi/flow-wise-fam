@@ -81,8 +81,10 @@ export default function Budget() {
       <PageHeader title="Orçamento" subtitle="Método 50/30/20 sobre sua renda fixa" />
 
       <OnboardingTip pageKey="orcamento" title="Necessidade manda, Poupança é protegida">
-        Necessidade é o que realmente é — fixo é fixo, mesmo passando de 50% da renda. A meta de Poupança (20%)
-        nunca encolhe por causa disso: quem aperta é o Desejo.
+        "Destinado" é quanto você separou por categoria (clique numa categoria pra ajustar). "Meta de referência" é só
+        uma régua de comparação: 50% da renda fixa pra Necessidade, e o que sobra depois de cobrir Necessidade e
+        Poupança (20%) pra Desejo — por isso Necessidade pode passar de 50% (fixo é fixo), e quem aperta é o Desejo,
+        nunca a Poupança.
       </OnboardingTip>
 
       {b.fixedIncomeCents === 0 ? (
@@ -119,12 +121,14 @@ export default function Budget() {
           <div className="grid gap-3.5 md:grid-cols-3">
             <GroupCard
               label="Necessidade" pctLabel="meta 50%" color="#2F8F8A"
-              targetCents={b.fixedIncomeCents * 0.5} budgetCents={b.necessidadeBudgetCents} spentCents={b.necessidadeSpentCents}
+              referenceLabel="50% da renda fixa" targetCents={b.fixedIncomeCents * 0.5}
+              budgetCents={b.necessidadeBudgetCents} spentCents={b.necessidadeSpentCents}
               overTarget={necessidadePct > 50}
             />
             <GroupCard
               label="Desejo" pctLabel="o que sobra" color="#C8862F"
-              targetCents={b.desejoTargetCents} budgetCents={b.desejoBudgetCents} spentCents={b.desejoSpentCents}
+              referenceLabel="Disponível após Necessidade + Poupança" targetCents={b.desejoTargetCents}
+              budgetCents={b.desejoBudgetCents} spentCents={b.desejoSpentCents}
               overTarget={b.desejoBudgetCents > b.desejoTargetCents}
             />
             <div className="rounded-[18px] border border-border bg-card px-5 py-4">
@@ -204,8 +208,8 @@ export default function Budget() {
   );
 }
 
-function GroupCard({ label, pctLabel, color, targetCents, budgetCents, spentCents, overTarget }: {
-  label: string; pctLabel: string; color: string;
+function GroupCard({ label, pctLabel, color, referenceLabel, targetCents, budgetCents, spentCents, overTarget }: {
+  label: string; pctLabel: string; color: string; referenceLabel: string;
   targetCents: number; budgetCents: number; spentCents: number; overTarget: boolean;
 }) {
   const pct = budgetCents > 0 ? Math.min((spentCents / budgetCents) * 100, 100) : 0;
@@ -219,7 +223,7 @@ function GroupCard({ label, pctLabel, color, targetCents, budgetCents, spentCent
         <span className="font-display text-[22px] font-bold tabular-nums text-foreground">{formatBRL(budgetCents)}</span>
         <span className="text-[12px] text-muted-foreground">destinado</span>
       </div>
-      <div className="text-[11.5px] text-muted-foreground">Meta de referência: {formatBRL(targetCents)}</div>
+      <div className="text-[11.5px] text-muted-foreground">{referenceLabel}: {formatBRL(targetCents)}</div>
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#F1E8E1]">
         <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
       </div>

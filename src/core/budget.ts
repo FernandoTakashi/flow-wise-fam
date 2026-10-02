@@ -105,9 +105,11 @@ export function computeBudget(d: FinanceData, month: number, year: number): Budg
   const budgetByCategory = new Map(d.categoryBudgets.map((b) => [b.categoryId, b.amountCents]));
 
   let unclassifiedCount = 0;
+  const categoryGroup = new Map<UUID, EffectiveBudgetGroup>();
   const categories: CategoryBudgetRow[] = expenseCategories.map((c) => {
     const fixed = hasActiveExpenseRecurrence(d, c.id, month, year);
     const group: EffectiveBudgetGroup = fixed ? 'necessidade' : (c.budgetGroup ?? null);
+    categoryGroup.set(c.id, group);
     if (!fixed && group == null) unclassifiedCount += 1;
     const suggestedCents = fixed ? fixedCategoryCents(d, c.id, month, year) : avgSpentCents(d, c.id, month, year);
     const budgetCents = budgetByCategory.get(c.id) ?? suggestedCents;
@@ -118,9 +120,19 @@ export function computeBudget(d: FinanceData, month: number, year: number): Budg
   });
 
   const necessidadeBudgetCents = categories.filter((c) => c.group === 'necessidade').reduce((s, c) => s + c.budgetCents, 0);
-  const necessidadeSpentCents = categories.filter((c) => c.group === 'necessidade').reduce((s, c) => s + c.spentCents, 0);
   const desejoBudgetCents = categories.filter((c) => c.group === 'desejo').reduce((s, c) => s + c.budgetCents, 0);
-  const desejoSpentCents = categories.filter((c) => c.group === 'desejo').reduce((s, c) => s + c.spentCents, 0);
+
+  // gasto real por grupo: respeita a exceção por lançamento (transaction.budgetGroup) —
+  // o mesmo "Transporte" pode contar como necessidade numa corrida e desejo noutra.
+  // Sem override, cai no padrão da categoria.
+  let necessidadeSpentCents = 0;
+  let desejoSpentCents = 0;
+  for (const t of d.transactions) {
+    if (t.kind !== 'expense' || !t.categoryId || t.refMonth !== month + 1 || t.refYear !== year) continue;
+    const effectiveGroup = t.budgetGroup ?? categoryGroup.get(t.categoryId) ?? null;
+    if (effectiveGroup === 'necessidade') necessidadeSpentCents += t.amountCents;
+    else if (effectiveGroup === 'desejo') desejoSpentCents += t.amountCents;
+  }
 
   const desejoRaw = income - necessidadeBudgetCents - poupancaTargetCents;
 

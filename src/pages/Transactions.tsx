@@ -33,6 +33,8 @@ interface FormState {
   installments: string;
   installmentStart: string;
   splitOn: boolean;
+  /** Orçamento 50/30/20: '' = usa o padrão da categoria. */
+  budgetGroup: '' | 'necessidade' | 'desejo';
 }
 
 const emptyForm = (dateISO: string): FormState => {
@@ -41,6 +43,7 @@ const emptyForm = (dateISO: string): FormState => {
     kind: 'expense', accountId: '', amountCents: 0, dateISO,
     refMonth: m + 1, refYear: y, refAuto: true,
     categoryId: '', memberId: '', description: '', installments: '1', installmentStart: '1', splitOn: false,
+    budgetGroup: '',
   };
 };
 
@@ -164,6 +167,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
       dateISO: t.date, refMonth: t.refMonth, refYear: t.refYear, refAuto: false,
       categoryId: t.categoryId ?? '', memberId: t.memberId ?? '', description: t.description,
       installments: '1', installmentStart: '1', splitOn: t.shared,
+      budgetGroup: t.budgetGroup ?? '',
     });
     setShowForm(true);
   };
@@ -184,7 +188,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
           accountId: form.accountId, amountCents: form.amountCents, dateISO: form.dateISO,
           refMonth: form.refMonth, refYear: form.refYear,
           categoryId: form.categoryId || null, memberId: form.memberId || null,
-          description: form.description, shared,
+          description: form.description, shared, budgetGroup: form.budgetGroup || null,
         });
         toast({ title: 'Lançamento atualizado' });
       } else {
@@ -193,6 +197,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
           refMonth: form.refAuto ? undefined : form.refMonth, refYear: form.refAuto ? undefined : form.refYear,
           categoryId: form.categoryId || null, memberId: form.memberId || null, description: form.description,
           installments: nInst, installmentStart: parseInt(form.installmentStart, 10) || 1, shared,
+          budgetGroup: form.budgetGroup || null,
         });
         toast({ title: 'Lançamento registrado' });
       }
@@ -343,6 +348,11 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                       <span className="shrink-0 rounded-full border border-[#E2D7CF] px-1.5 py-px text-[10.5px] font-bold text-[#7E6E66]">{t.installmentNo}/{t.installmentOf}</span>
                     )}
                     {t.shared && <Users className="h-[15px] w-[15px] shrink-0 text-accent" />}
+                    {t.budgetGroup && (
+                      <span className="shrink-0 rounded-full border border-[#E2D7CF] px-1.5 py-px text-[10px] font-bold uppercase text-[#7E6E66]" title="Orçamento 50/30/20: grupo sobrescrito só pra este lançamento">
+                        {t.budgetGroup}
+                      </span>
+                    )}
                     {t.status === 'pending' && (
                       <span className="shrink-0 rounded-full bg-[#F4EDE7] px-1.5 py-px text-[10.5px] font-bold text-[#8A6A57]">conta chegou</span>
                     )}
@@ -404,6 +414,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                       ? <><span>·</span><span>em conjunto</span></>
                       : t.memberId && <><span>·</span><span>{memberName(t.memberId).split(' ')[0]}</span></>}
                     {t.installmentOf && t.installmentOf > 1 && <span>· {t.installmentNo}/{t.installmentOf}</span>}
+                    {t.budgetGroup && <span>· {t.budgetGroup}</span>}
                     {t.shared && <Users className="h-3.5 w-3.5 text-accent" />}
                   </div>
                   {!locked && (
@@ -513,6 +524,24 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                 </Select>
               </div>
             </div>
+
+            {form.kind === 'expense' && form.categoryId && (
+              <div className="space-y-1.5">
+                <Label>Orçamento (50/30/20)</Label>
+                <Select value={form.budgetGroup || 'default'}
+                  onValueChange={(v) => setForm((f) => ({ ...f, budgetGroup: v === 'default' ? '' : v as 'necessidade' | 'desejo' }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Padrão da categoria</SelectItem>
+                    <SelectItem value="necessidade">Necessidade (só este lançamento)</SelectItem>
+                    <SelectItem value="desejo">Desejo (só este lançamento)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Pra quando a categoria varia — ex.: Uber pro trabalho é Necessidade, mas essa corrida foi Desejo.
+                </p>
+              </div>
+            )}
 
             {!editing && isCard && (
               <div className="space-y-1.5">
