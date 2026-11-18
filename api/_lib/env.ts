@@ -34,5 +34,8 @@ export const env = {
   },
   telegramBotUsername: () => optional('TELEGRAM_BOT_USERNAME'),
   cronSecret: () => optional('CRON_SECRET'),
+  // Open Finance (Pluggy / Meu Pluggy) — opcionais: sem elas, /api/v1/bank responde 503.
+  pluggyClientId: () => optional('PLUGGY_CLIENT_ID'),
+  pluggyClientSecret: () => optional('PLUGGY_CLIENT_SECRET'),
   publicAppUrl: () => optional('PUBLIC_APP_URL') ?? 'https://financeapp.vercel.app',
 };

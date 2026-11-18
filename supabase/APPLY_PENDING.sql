@@ -688,4 +688,53 @@ $$;
 alter table public.transactions
   add column if not exists budget_group text check (budget_group in ('necessidade', 'desejo'));
 
+-- 20261118000001 — Open Finance (Pluggy), Fase 1 só leitura: conexões
+-- (items) e contas do banco, que podem ser ligadas a uma conta da carteira
+-- pra conferir saldo. Escrita só pelo backend; o cliente só lê.
+create table if not exists public.bank_connections (
+  id                 uuid primary key default gen_random_uuid(),
+  wallet_id          uuid not null references public.wallets (id) on delete cascade,
+  provider           text not null default 'pluggy' check (provider in ('pluggy')),
+  external_item_id   text not null,
+  status             text,
+  execution_status   text,
+  consent_expires_at timestamptz,
+  last_synced_at     timestamptz,
+  error_code         text,
+  created_by         uuid references public.profiles (id) on delete set null,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now(),
+  unique (provider, external_item_id)
+);
+create index if not exists bank_connections_wallet_idx on public.bank_connections (wallet_id);
+
+create table if not exists public.bank_accounts (
+  id                  uuid primary key default gen_random_uuid(),
+  wallet_id           uuid not null references public.wallets (id) on delete cascade,
+  connection_id       uuid not null references public.bank_connections (id) on delete cascade,
+  external_account_id text not null unique,
+  name                text not null,
+  type                text not null check (type in ('BANK', 'CREDIT')),
+  subtype             text,
+  number              text,
+  balance_cents       bigint,
+  credit_limit_cents  bigint,
+  available_cents     bigint,
+  due_date            date,
+  account_id          uuid unique references public.accounts (id) on delete set null,
+  refreshed_at        timestamptz,
+  created_at          timestamptz not null default now()
+);
+create index if not exists bank_accounts_wallet_idx on public.bank_accounts (wallet_id);
+
+alter table public.bank_connections enable row level security;
+alter table public.bank_accounts enable row level security;
+
+drop policy if exists bank_connections_read on public.bank_connections;
+create policy bank_connections_read on public.bank_connections
+  for select using (public.is_wallet_member(wallet_id));
+drop policy if exists bank_accounts_read on public.bank_accounts;
+create policy bank_accounts_read on public.bank_accounts
+  for select using (public.is_wallet_member(wallet_id));
+
 commit;

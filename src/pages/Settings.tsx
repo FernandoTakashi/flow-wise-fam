@@ -7,6 +7,7 @@ import { PageHeader, EmptyState } from '@/components/PageHeader';
 import { MoneyInput } from '@/components/MoneyInput';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { TelegramIntegration } from '@/components/TelegramIntegration';
+import { BankConnections } from '@/components/BankConnections';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -50,7 +51,7 @@ export default function Settings() {
         <TabsContent value="categorias" className="mt-4"><CategoriesTab /></TabsContent>
         <TabsContent value="membros" className="mt-4"><MembersTab /></TabsContent>
         <TabsContent value="períodos" className="mt-4"><PeriodsTab /></TabsContent>
-        <TabsContent value="integrações" className="mt-4"><TelegramIntegration /></TabsContent>
+        <TabsContent value="integrações" className="mt-4 space-y-4"><TelegramIntegration /><BankConnections /></TabsContent>
       </Tabs>
     </div>
   );
