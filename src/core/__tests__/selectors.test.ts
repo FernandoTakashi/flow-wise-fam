@@ -248,3 +248,24 @@ describe('monthSummary', () => {
     expect(s.projectedBalanceCents).toBe(125000 + 0 - 19000);
   });
 });
+
+// --- Open Finance: estorno importado abate a fatura ------------------------
+describe('estorno importado no cartão', () => {
+  const card = acc({ id: 'card', kind: 'card', closingDay: 5, dueDay: 12, creditLimitCents: 100000 });
+  const txs = [
+    tx({ accountId: 'card', kind: 'expense', amountCents: 30000, cardInvoiceId: 'i', source: 'import' }),
+    tx({ accountId: 'card', kind: 'income', amountCents: 5000, cardInvoiceId: 'i', source: 'import' }),
+    // receita manual no cartão (ex.: "Ajuste de fatura") continua fora da soma
+    tx({ accountId: 'card', kind: 'income', amountCents: 999, cardInvoiceId: 'i', source: 'app' }),
+  ];
+
+  it('abate do total da fatura e aparece como linha negativa', () => {
+    const v = computeInvoiceView(base({ accounts: [card], invoices: [inv({})], transactions: txs }), 'card', 5, 2026);
+    expect(v.postedCents).toBe(25000);
+    expect(v.rows.some((r) => r.amountCents === -5000)).toBe(true);
+  });
+
+  it('abate do comprometido do cartão', () => {
+    expect(cardCommitted('card', txs, [inv({})])).toBe(25000);
+  });
+});

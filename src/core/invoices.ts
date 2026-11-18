@@ -1,5 +1,5 @@
 import { dayOfMonthISO, recurrenceDueISO, resolveInvoiceRef } from '@/lib/dates';
-import type { Recurrence } from '@/types';
+import type { Recurrence, Transaction } from '@/types';
 import type { FinanceData, InvoiceRow, InvoiceView } from './types';
 
 /** Fixos de cartão cuja competência cai nesta fatura e que ainda não viraram lançamento. */
@@ -34,8 +34,12 @@ export function projectedCardFixos(
 export function computeInvoiceView(d: FinanceData, cardId: string, month: number, year: number): InvoiceView {
   const refMonth = month + 1;
   const invoice = d.invoices.find((i) => i.accountId === cardId && i.refMonth === refMonth && i.refYear === year) ?? null;
+  // estorno/crédito que veio do banco abate a fatura (entra com valor negativo).
+  // Receita manual no cartão (ex.: "Ajuste de fatura") segue fora, como sempre.
   const posted = invoice
-    ? d.transactions.filter((t) => t.cardInvoiceId === invoice.id && t.kind === 'expense')
+    ? d.transactions
+      .filter((t) => t.cardInvoiceId === invoice.id && (t.kind === 'expense' || isImportedCardCredit(t)))
+      .map((t) => (t.kind === 'expense' ? t : { ...t, amountCents: -t.amountCents }))
     : [];
   const postedCents = posted.reduce((s, t) => s + t.amountCents, 0);
   const projected = projectedCardFixos(d, cardId, month, year);
@@ -57,3 +61,7 @@ export function computeInvoiceView(d: FinanceData, cardId: string, month: number
     rows,
   };
 }
+
+/** Estorno/crédito no cartão vindo do banco (Open Finance) — abate o total da fatura. */
+export const isImportedCardCredit = (t: Pick<Transaction, 'kind' | 'source'>): boolean =>
+  t.kind === 'income' && t.source === 'import';

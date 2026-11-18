@@ -54,7 +54,10 @@ interface BankState {
   accounts: BankAccount[];
 }
 
-interface ImportSummary { created: number; updated: number; deleted: number; errors: string[]; accounts: number }
+interface ImportSummary {
+  created: number; updated: number; deleted: number; errors: string[]; accounts: number;
+  fixosLinked?: number; invoicesPaid?: number;
+}
 
 const NONE = '__none__';
 const NEW = '__new__';
@@ -117,10 +120,15 @@ export function BankConnections() {
       });
       setState(r);
       await reload();
-      const { created, updated, deleted, errors } = r.import;
+      const { created, updated, deleted, errors, fixosLinked = 0, invoicesPaid = 0 } = r.import;
+      const extras = [
+        fixosLinked ? `${fixosLinked} fixo${fixosLinked > 1 ? 's' : ''} ligado${fixosLinked > 1 ? 's' : ''}` : '',
+        invoicesPaid ? `${invoicesPaid} fatura${invoicesPaid > 1 ? 's' : ''} paga${invoicesPaid > 1 ? 's' : ''}` : '',
+      ].filter(Boolean).join(', ');
       toast({
         title: 'Lançamentos do banco importados',
-        description: `${created} novos, ${updated} atualizados, ${deleted} removidos${errors.length ? ` · ${errors.length} com erro: ${errors[0]}` : ''}`,
+        description: `${created} novos, ${updated} atualizados, ${deleted} removidos${extras ? ` · ${extras}` : ''}`
+          + `${errors.length ? ` · ${errors.length} com erro: ${errors[0]}` : ''}`,
         variant: errors.length ? 'destructive' : undefined,
       });
     } catch (e) {

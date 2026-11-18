@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { admin } from './supabaseAdmin.js';
 import { bankManagedSince } from './bankImport.js';
+import { matchTextFrom } from './bankReconcile.js';
 import {
   addMonthsISO, invoiceDates, isoParts, recurrenceDueISO, resolveInvoiceRef, splitInstallments,
 } from './shared.js';
@@ -279,7 +280,7 @@ async function linkOccurrenceToImported(
   const from = addDaysISO(dueISO, -15);
   const to = addDaysISO(dueISO, 15);
   const { data, error } = await db.from('transactions')
-    .select('id, amount_cents, date, category_id')
+    .select('id, amount_cents, date, category_id, description')
     .eq('wallet_id', walletId).eq('account_id', account.id).eq('source', 'import').eq('kind', rec.kind)
     .is('recurrence_id', null).gte('date', from > managedSince ? from : managedSince).lte('date', to);
   if (error) throw error;
@@ -300,6 +301,12 @@ async function linkOccurrenceToImported(
     ...(pick.category_id ? {} : { category_id: rec.category_id }),
   }).eq('id', pick.id);
   if (upErr) throw upErr;
+
+  // aprende a regra na primeira ligação: os próximos meses a importação liga sozinha
+  const rule = matchTextFrom(String(pick.description ?? ''));
+  if (rule) {
+    await db.from('recurrences').update({ match_text: rule }).eq('id', rec.id).is('match_text', null);
+  }
 }
 
 const addDaysISO = (iso: string, days: number): string => {

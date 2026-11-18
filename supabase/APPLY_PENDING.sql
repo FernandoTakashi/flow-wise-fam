@@ -840,4 +840,9 @@ alter table public.pluggy_credentials enable row level security;
 alter table public.bank_connections
   add column if not exists credential_id uuid references public.pluggy_credentials (id) on delete set null;
 
+-- 20261118000004 — regra aprendida pra ligar lançamento do banco ao fixo
+-- (gravada na 1ª baixa manual; depois a importação liga sozinha)
+alter table public.recurrences
+  add column if not exists match_text text;
+
 commit;

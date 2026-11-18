@@ -9,6 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { listTransactions, type PluggyCreds, type PluggyTransaction } from './pluggy.js';
 import { credsForConnection } from './pluggyCreds.js';
 import { invoiceDates, isoParts, resolveInvoiceRef, spDateISO } from './shared.js';
+import { autoLinkRecurrences, markPaidInvoices } from './bankReconcile.js';
 
 const SOURCE = 'pluggy';
 const MATCH_WINDOW_DAYS = 3;
@@ -33,7 +34,11 @@ export interface ImportTarget {
   creds: PluggyCreds;
 }
 
-export interface ImportResult { created: number; updated: number; deleted: number; errors: string[] }
+export interface ImportResult {
+  created: number; updated: number; deleted: number; errors: string[];
+  /** só no importWallet: fixos ligados pela regra aprendida e faturas marcadas como pagas */
+  fixosLinked?: number; invoicesPaid?: number;
+}
 
 /** Linha de transação do app derivada de um lançamento da Pluggy (sem os campos de classificação). */
 export interface MappedTx {
@@ -240,6 +245,12 @@ export async function importWallet(db: SupabaseClient, walletId: string): Promis
       total.errors.push((e as Error).message);
     }
   }
+
+  // conciliação: fixos com regra aprendida e faturas pagas pelo pagamento importado
+  try { total.fixosLinked = await autoLinkRecurrences(db, walletId, spDateISO(new Date())); }
+  catch (e) { total.errors.push(`fixos: ${(e as Error).message}`); }
+  try { total.invoicesPaid = await markPaidInvoices(db, walletId); }
+  catch (e) { total.errors.push(`faturas: ${(e as Error).message}`); }
   return total;
 }
 

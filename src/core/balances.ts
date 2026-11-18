@@ -1,4 +1,5 @@
 import type { Account, CardInvoice, Transaction } from '@/types';
+import { isImportedCardCredit } from './invoices';
 import type { FinanceData } from './types';
 
 /** Saldo de uma conta = saldo inicial + Σ movimentos `cleared` até `uptoISO`. */
@@ -19,9 +20,9 @@ export function accountBalance(acc: Account, txs: Transaction[], uptoISO: string
 export function cardCommitted(cardId: string, txs: Transaction[], invs: CardInvoice[], excludeId?: string): number {
   const openIds = new Set(invs.filter((i) => i.accountId === cardId && i.status !== 'paid').map((i) => i.id));
   return txs
-    .filter((t) => t.id !== excludeId && t.accountId === cardId && t.kind === 'expense'
+    .filter((t) => t.id !== excludeId && t.accountId === cardId && (t.kind === 'expense' || isImportedCardCredit(t))
       && t.cardInvoiceId && openIds.has(t.cardInvoiceId))
-    .reduce((s, t) => s + t.amountCents, 0);
+    .reduce((s, t) => s + (t.kind === 'expense' ? t.amountCents : -t.amountCents), 0);
 }
 
 export const spendingAccounts = (d: FinanceData): Account[] =>
