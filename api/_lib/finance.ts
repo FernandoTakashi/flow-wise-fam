@@ -2,6 +2,7 @@
 // Espelha a lógica de FinanceContext.tsx (refFor / ensureInvoice / markRecurrence).
 import { randomUUID } from 'node:crypto';
 import { admin } from './supabaseAdmin.js';
+import { bankManagedSince } from './bankImport.js';
 import {
   addMonthsISO, invoiceDates, isoParts, recurrenceDueISO, resolveInvoiceRef, splitInstallments,
 } from './shared.js';
@@ -122,6 +123,13 @@ export async function insertEntry(
   if (entry.kind === 'income' && account?.kind === 'card') account = spending[0] ?? account;
   if (!account) throw new Error('Nenhuma conta disponível nesta carteira.');
 
+  // conta ligada ao banco (Open Finance): a partir do corte, o lançamento vem do banco
+  const managedSince = source !== 'import' ? await bankManagedSince(db, account.id) : null;
+  if (managedSince && entry.dateISO >= managedSince) {
+    throw new Error(`${account.name} está ligada ao banco: os lançamentos a partir de `
+      + `${managedSince.split('-').reverse().join('/')} chegam sozinhos (1x por dia). Use outra conta ou só classifique o que chegar.`);
+  }
+
   const onCard = account.kind === 'card';
   const n = onCard && entry.installments && entry.installments > 1 ? Math.min(entry.installments, 60) : 1;
   // parcela atual: só materializa da `start` até a `n` (parcelas já pagas ficam de fora)
@@ -178,6 +186,13 @@ export async function markOccurrence(
   const dueISO = recurrenceDueISO(year, month, rec.day);
   const chargeISO = paidOnISO ?? dueISO;                            // dia da baixa
 
+  // conta ligada ao banco: a baixa não cria lançamento — liga o fixo ao que veio do banco
+  const managedSince = await bankManagedSince(db, account.id);
+  if (managedSince && dueISO >= managedSince && status === 'cleared') {
+    await linkOccurrenceToImported(walletId, rec, month, year, account, dueISO, amountCents, shared, managedSince);
+    return { created: false, onCard };
+  }
+
   // âncora estável da ocorrência: recurrence_id + occ_month/occ_year
   const existing = await db.from('transactions').select('id, status')
     .eq('recurrence_id', rec.id).eq('occ_month', month + 1).eq('occ_year', year).maybeSingle();
@@ -233,10 +248,65 @@ export async function markOccurrence(
 /** Apaga a transação da ocorrência (recurrence_id + occ_month/occ_year), se houver. */
 export async function unmarkOccurrence(walletId: string, recurrenceId: string, month: number, year: number): Promise<void> {
   const db = admin();
+  // lançamento que veio do banco não some ao desfazer a baixa — só perde o vínculo com o fixo
+  const unlink = await db.from('transactions').update({ recurrence_id: null, occ_month: null, occ_year: null })
+    .eq('wallet_id', walletId).eq('recurrence_id', recurrenceId).eq('occ_month', month + 1).eq('occ_year', year)
+    .eq('source', 'import');
+  if (unlink.error) throw unlink.error;
   const { error } = await db.from('transactions').delete()
-    .eq('wallet_id', walletId).eq('recurrence_id', recurrenceId).eq('occ_month', month + 1).eq('occ_year', year);
+    .eq('wallet_id', walletId).eq('recurrence_id', recurrenceId).eq('occ_month', month + 1).eq('occ_year', year)
+    .neq('source', 'import');
   if (error) throw error;
 }
+
+/**
+ * Baixa de fixo numa conta ligada ao banco: em vez de criar lançamento, acha o
+ * lançamento importado que corresponde à ocorrência (mesma conta e tipo, ainda
+ * sem fixo, perto do vencimento) e liga os dois. Valor igual ganha; senão o
+ * mais próximo, até 30% de diferença (fixo de valor variável: luz, água…).
+ */
+async function linkOccurrenceToImported(
+  walletId: string, rec: RecurrenceRow, month: number, year: number, account: AccountRow,
+  dueISO: string, amountCents: number, shared: boolean | undefined, managedSince: string,
+): Promise<void> {
+  const db = admin();
+  const already = await db.from('transactions').select('id, source')
+    .eq('recurrence_id', rec.id).eq('occ_month', month + 1).eq('occ_year', year).maybeSingle();
+  if (already.data?.source === 'import') return;
+  // valor "previsto" informado antes (pendente, manual): dá lugar ao lançamento do banco
+  if (already.data) await db.from('transactions').delete().eq('id', already.data.id);
+
+  const from = addDaysISO(dueISO, -15);
+  const to = addDaysISO(dueISO, 15);
+  const { data, error } = await db.from('transactions')
+    .select('id, amount_cents, date, category_id')
+    .eq('wallet_id', walletId).eq('account_id', account.id).eq('source', 'import').eq('kind', rec.kind)
+    .is('recurrence_id', null).gte('date', from > managedSince ? from : managedSince).lte('date', to);
+  if (error) throw error;
+
+  const target = amountCents > 0 ? amountCents : Number(rec.amount_cents);
+  const ranked = (data ?? [])
+    .map((t) => ({ ...t, gap: Math.abs(Number(t.amount_cents) - target) }))
+    .filter((t) => t.gap <= target * 0.3)
+    .sort((a, b) => a.gap - b.gap || Math.abs(Date.parse(a.date) - Date.parse(dueISO)) - Math.abs(Date.parse(b.date) - Date.parse(dueISO)));
+  const pick = ranked[0];
+  if (!pick) {
+    throw new Error(`Ainda não chegou do banco um lançamento parecido com "${rec.description}" em ${account.name} `
+      + `perto do vencimento (${dueISO.split('-').reverse().join('/')}). O banco sincroniza 1x por dia.`);
+  }
+  const { error: upErr } = await db.from('transactions').update({
+    recurrence_id: rec.id, occ_month: month + 1, occ_year: year,
+    shared: rec.kind === 'expense' && (shared ?? rec.shared) === true,
+    ...(pick.category_id ? {} : { category_id: rec.category_id }),
+  }).eq('id', pick.id);
+  if (upErr) throw upErr;
+}
+
+const addDaysISO = (iso: string, days: number): string => {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
 
 /** Existe alguma transação (pendente ou não) para a ocorrência deste mês? */
 export async function occurrenceTx(
@@ -268,10 +338,15 @@ export interface EntryPatch {
 export async function updateEntry(bundle: WalletBundle, walletId: string, id: string, patch: EntryPatch): Promise<void> {
   const db = admin();
   const { data: current, error: curErr } = await db.from('transactions')
-    .select('id, kind, date, account_id, recurrence_id, occ_month, occ_year')
+    .select('id, kind, date, account_id, recurrence_id, occ_month, occ_year, source')
     .eq('id', id).eq('wallet_id', walletId).maybeSingle();
   if (curErr) throw curErr;
   if (!current) throw new Error('Lançamento não encontrado.');
+  // veio do banco: valor, data, conta e situação são do banco — só a classificação é editável
+  if (current.source === 'import' && (patch.amountCents !== undefined || patch.dateISO !== undefined
+    || patch.accountId !== undefined || patch.status !== undefined || patch.refMonth !== undefined)) {
+    throw new Error('Esse lançamento veio do banco: dá pra mudar categoria, responsável, descrição e nota, mas não valor, data ou conta.');
+  }
 
   const row: Record<string, unknown> = {};
   if (patch.description !== undefined) row.description = patch.description;
@@ -320,8 +395,11 @@ export async function updateEntry(bundle: WalletBundle, walletId: string, id: st
 /** Apaga um lançamento; se for perna de pagamento de fatura, reabre a fatura e apaga o par. */
 export async function deleteEntry(walletId: string, id: string): Promise<void> {
   const db = admin();
-  const { data: tx } = await db.from('transactions').select('id, transfer_peer_id')
+  const { data: tx } = await db.from('transactions').select('id, transfer_peer_id, source')
     .eq('id', id).eq('wallet_id', walletId).maybeSingle();
+  if (tx?.source === 'import') {
+    throw new Error('Esse lançamento veio do banco e volta na próxima sincronização — não dá pra apagar.');
+  }
   if (tx?.transfer_peer_id) {
     const { data: inv } = await db.from('card_invoices').select('id')
       .eq('wallet_id', walletId).in('paid_transaction_id', [id, tx.transfer_peer_id]).maybeSingle();
@@ -345,6 +423,11 @@ export async function payInvoice(
   realAmountCents?: number | null,
 ): Promise<void> {
   const db = admin();
+  const managedSince = await bankManagedSince(db, fromAccountId);
+  if (managedSince && dateISO >= managedSince) {
+    throw new Error('Essa conta está ligada ao banco: o pagamento da fatura chega sozinho do banco. '
+      + 'Se quiser só registrar que a fatura foi paga, use "marcar como paga".');
+  }
   const refMonth = month + 1;
   const { data: invoice, error: invErr } = await db.from('card_invoices').select('id, status')
     .eq('wallet_id', walletId).eq('account_id', cardId).eq('ref_month', refMonth).eq('ref_year', year).maybeSingle();
@@ -415,6 +498,12 @@ export async function createTransfer(
   if (!from || !to) throw new Error('Conta inválida.');
   if (from.kind === 'card' || to.kind === 'card') throw new Error('Pra cartão, use "Pagar fatura".');
   if (from.archived || to.archived) throw new Error('Reative a conta arquivada antes de transferir.');
+  for (const id of [fromAccountId, toAccountId]) {
+    const since = await bankManagedSince(db, id);
+    if (since && dateISO >= since) {
+      throw new Error('Uma das contas está ligada ao banco: a transferência chega sozinha do banco.');
+    }
+  }
 
   const { y, m } = isoParts(dateISO);
   const label = (description ?? '').trim() || 'Transferência entre contas';

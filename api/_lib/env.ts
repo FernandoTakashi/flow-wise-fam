@@ -37,5 +37,7 @@ export const env = {
   // Open Finance (Pluggy / Meu Pluggy) — opcionais: sem elas, /api/v1/bank responde 503.
   pluggyClientId: () => optional('PLUGGY_CLIENT_ID'),
   pluggyClientSecret: () => optional('PLUGGY_CLIENT_SECRET'),
+  // 32 bytes em base64 — cifra as credenciais da Pluggy que cada membro cadastra
+  pluggyCredentialsKey: () => optional('PLUGGY_CREDENTIALS_KEY'),
   publicAppUrl: () => optional('PUBLIC_APP_URL') ?? 'https://financeapp.vercel.app',
 };

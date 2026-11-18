@@ -3,11 +3,14 @@
 // Reaproveitável pelo endpoint /api/v1/bank e, depois, pelo cron.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getItem, listAccounts, pluggyCents } from './pluggy.js';
+import { credsForConnection } from './pluggyCreds.js';
 
 export interface BankConnectionRow {
   id: string;
   wallet_id: string;
   external_item_id: string;
+  /** credencial da Pluggy da pessoa que conectou (null = a do servidor) */
+  credential_id?: string | null;
 }
 
 /** Só os 4 últimos dígitos — o app não precisa (nem deve guardar) o número inteiro. */
@@ -18,7 +21,8 @@ const last4 = (n: string | null | undefined): string | null => {
 
 /** Relê o item e as contas na Pluggy e grava status/saldos. */
 export async function syncConnection(db: SupabaseClient, conn: BankConnectionRow): Promise<void> {
-  const [item, accounts] = await Promise.all([getItem(conn.external_item_id), listAccounts(conn.external_item_id)]);
+  const creds = await credsForConnection(db, conn.credential_id);
+  const [item, accounts] = await Promise.all([getItem(creds, conn.external_item_id), listAccounts(creds, conn.external_item_id)]);
   const now = new Date().toISOString();
 
   const upd = await db.from('bank_connections').update({

@@ -15,7 +15,7 @@ import { formatBRL, splitInstallments } from '@/lib/money';
 import { formatDayMonth, isoParts, MONTHS_PT, resolveInvoiceRef } from '@/lib/dates';
 import { cn, SHEET_DIALOG_CLASS } from '@/lib/utils';
 import type { Transaction } from '@/types';
-import { Plus, Pencil, Trash2, ArrowLeftRight, ArrowRightLeft, Users, AlertTriangle, Lock, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, ArrowLeftRight, ArrowRightLeft, Users, AlertTriangle, Lock, Search, Landmark } from 'lucide-react';
 
 type Kind = 'income' | 'expense';
 
@@ -354,8 +354,11 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                       </span>
                     )}
                     {t.status === 'pending' && (
-                      <span className="shrink-0 rounded-full bg-[#F4EDE7] px-1.5 py-px text-[10.5px] font-bold text-[#8A6A57]">conta chegou</span>
+                      <span className="shrink-0 rounded-full bg-[#F4EDE7] px-1.5 py-px text-[10.5px] font-bold text-[#8A6A57]">
+                        {t.source === 'import' ? 'previsto no banco' : 'conta chegou'}
+                      </span>
                     )}
+                    <ImportBadges t={t} />
                   </span>
                   <span className="text-[13px] tabular-nums text-[#5C4C45]">{formatDayMonth(t.date)}</span>
                   <span className="truncate text-[12.5px] text-[#5C4C45]">
@@ -403,6 +406,7 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
                     <span className="flex min-w-0 items-center gap-2">
                       <i className={cn('h-2 w-2 shrink-0 rounded-full', dot)} />
                       <span className="truncate text-[14px] font-semibold text-foreground">{desc}</span>
+                      <ImportBadges t={t} />
                     </span>
                     <span className={cn('shrink-0 text-[14px] font-bold tabular-nums', valClass)}>{sign}{formatBRL(t.amountCents)}</span>
                   </div>
@@ -688,5 +692,18 @@ function Tile({ label, value, valueClass, dark }: { label: string; value: string
       <p className={cn('text-[11.5px] font-semibold', dark ? 'text-[#9C8A80]' : 'text-[#7E6E66]')}>{label}</p>
       <p className={cn('text-[22px] font-bold tabular-nums', dark ? 'text-on-ink' : 'text-foreground', valueClass)}>{value}</p>
     </div>
+  );
+}
+
+/** Marcadores de lançamento que veio do banco (Open Finance) e ainda sem categoria. */
+function ImportBadges({ t }: { t: Transaction }) {
+  if (t.source !== 'import') return null;
+  return (
+    <>
+      <Landmark className="h-[14px] w-[14px] shrink-0 text-[#7E6E66]" aria-label="Veio do banco" />
+      {!t.categoryId && t.kind !== 'transfer' && (
+        <span className="shrink-0 rounded-full bg-[#FBF3E6] px-1.5 py-px text-[10.5px] font-bold text-[#8A5A12]">a classificar</span>
+      )}
+    </>
   );
 }
