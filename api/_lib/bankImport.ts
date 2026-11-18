@@ -58,7 +58,9 @@ export interface MappedTx {
 }
 
 /** Pura — testável sem rede nem banco. */
-export function mapPluggyTx(p: PluggyTransaction, account: Pick<CardAccount, 'kind' | 'closing_day'>): MappedTx {
+export function mapPluggyTx(
+  p: PluggyTransaction, account: Pick<CardAccount, 'kind' | 'closing_day'>, todayISO = spDateISO(new Date()),
+): MappedTx {
   const isCard = account.kind === 'card';
   const date = spDateISO(new Date(p.date));
   const cents = Math.round(Math.abs(p.amount) * 100);
@@ -93,7 +95,9 @@ export function mapPluggyTx(p: PluggyTransaction, account: Pick<CardAccount, 'ki
     kind,
     amount_cents: cents,
     date,
-    status: p.status === 'PENDING' ? 'pending' : 'cleared',
+    // cartão: "PENDING" na Pluggy inclui compra já feita em fatura aberta — pra você
+    // é lançamento de verdade. Só a parcela com data futura fica "prevista".
+    status: isCard ? (date > todayISO ? 'pending' : 'cleared') : (p.status === 'PENDING' ? 'pending' : 'cleared'),
     description: desc,
     transfer_credit: transferCredit,
     ref_month: ref.refMonth,

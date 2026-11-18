@@ -49,3 +49,14 @@ describe('mapPluggyTx', () => {
     expect(mapPluggyTx(tx({ amount: -30, type: 'CREDIT', description: 'ESTORNO LOJA X' }), card).kind).toBe('income');
   });
 });
+
+describe('mapPluggyTx — situação no cartão', () => {
+  it('compra já feita em fatura aberta (PENDING na Pluggy) conta como lançamento', () => {
+    const m = mapPluggyTx(tx({ amount: 87.5, status: 'PENDING', date: '2026-11-10T15:00:00.000Z' }), card, '2026-11-18');
+    expect(m.status).toBe('cleared');
+  });
+  it('parcela com data futura fica prevista', () => {
+    const m = mapPluggyTx(tx({ amount: 650.2, status: 'PENDING', date: '2026-12-26T03:00:00.000Z' }), card, '2026-11-18');
+    expect(m.status).toBe('pending');
+  });
+});

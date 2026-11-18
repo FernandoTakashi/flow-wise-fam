@@ -15,5 +15,5 @@ export { monthSummary } from './summary';
 export { spendByMember, jointSpendCents, memberBalances, settlements } from './members';
 export { totalInvestedCents, investmentMonthlyYieldCents } from './investments';
 export { isPeriodLocked, wouldOverdraw, wouldExceedLimit } from './guards';
-export { monthTxByDate, monthTxByRef } from './transactions';
+export { monthTxByDate, monthTxByRef, monthTxForList, listMonthOf } from './transactions';
 export { computeBudget, fixedIncomeCents, investedCents } from './budget';

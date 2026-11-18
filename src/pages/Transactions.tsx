@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useFinance } from '@/contexts/FinanceContext';
+import { monthTxForList } from '@/core';
 import { PageHeader, EmptyState } from '@/components/PageHeader';
 import { OnboardingTip } from '@/components/OnboardingTip';
 import { MoneyInput } from '@/components/MoneyInput';
@@ -80,10 +81,12 @@ export default function Transactions({ kind = 'expense', embedded = false }: { k
   // Empate na mesma data: mantém a ordem em que foram lançados (o back já manda
   // nessa ordem — ver snapshot.ts), não reordena por outro critério. O comparador
   // precisa devolver 0 no empate pro sort (estável) preservar essa ordem.
+  // Compra no cartão aparece no mês da compra; parcelas seguintes, no mês da
+  // fatura (ver listMonthOf em src/core/transactions.ts).
   const monthTx = useMemo(
-    () => transactions.filter((t) => t.refMonth === month + 1 && t.refYear === year)
+    () => monthTxForList(transactions, accounts, month, year)
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
-    [transactions, month, year],
+    [transactions, accounts, month, year],
   );
   // transferência (pagamento de fatura ou entre contas) gera duas transações
   // ligadas (origem débito + destino crédito). Mostra só a perna de origem,

@@ -4,7 +4,7 @@ import type { FinanceData } from '@/core';
 import {
   accountBalance, cardCommitted, cardAvailableCents, computeInvoiceView, recurrenceOccurrences,
   monthSummary, spendByMember, jointSpendCents, settlements, memberBalances,
-  wouldOverdraw, wouldExceedLimit, isPeriodLocked,
+  wouldOverdraw, wouldExceedLimit, isPeriodLocked, monthTxForList,
 } from '@/core';
 
 // --- factories -------------------------------------------------------------
@@ -267,5 +267,25 @@ describe('estorno importado no cartão', () => {
 
   it('abate do comprometido do cartão', () => {
     expect(cardCommitted('card', txs, [inv({})])).toBe(25000);
+  });
+});
+
+// --- lista de Lançamentos: mês da compra no cartão ---------------------------
+describe('monthTxForList', () => {
+  const accounts = [{ id: 'card', kind: 'card' as const }, { id: 'c', kind: 'checking' as const }];
+  // compra em 10/11 cai na fatura de dezembro
+  const compra = tx({ accountId: 'card', date: '2026-11-10', refMonth: 12, refYear: 2026 });
+  // parcela 3/10 com data em janeiro, na fatura de fevereiro
+  const parcela = tx({ accountId: 'card', date: '2027-01-10', refMonth: 2, refYear: 2027, installmentNo: 3, installmentOf: 10 });
+  // conta corrente: competência, como sempre
+  const conta = tx({ accountId: 'c', date: '2026-11-30', refMonth: 12, refYear: 2026 });
+  const all = [compra, parcela, conta];
+
+  it('compra do cartão aparece no mês da compra', () => {
+    expect(monthTxForList(all, accounts, 10, 2026)).toEqual([compra]);
+  });
+  it('parcela seguinte aparece no mês da fatura; conta segue a competência', () => {
+    expect(monthTxForList(all, accounts, 1, 2027)).toEqual([parcela]);
+    expect(monthTxForList(all, accounts, 11, 2026)).toEqual([conta]);
   });
 });
